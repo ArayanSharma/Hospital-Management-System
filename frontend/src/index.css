@@ -1,0 +1,120 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #0076FF;
+  --color-primary-hover: #0066DD;
+  --color-accent: #0076FF;
+  --color-accent-hover: #0066DD;
+  --color-bg-base: #FFFFFF;
+  --color-bg-alt: #F8FAFC;
+  --color-text-main: #5B6470;
+  --color-text-heading: #06152D;
+  --color-success: #22C55E;
+  --color-emergency: #0076FF;
+  
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-heading: 'Manrope', system-ui, -apple-system, sans-serif;
+}
+
+:root {
+  --text: #5B6470; /* Medium gray body text */
+  --text-h: #06152D; /* Dark navy/slate headings */
+  --bg: #FFFFFF;
+  --border: #E2E8F0;
+  --code-bg: #F8FAFC;
+  --accent: #0076FF;
+  --accent-bg: rgba(0, 118, 255, 0.1);
+  --accent-border: rgba(0, 118, 255, 0.5);
+  --social-bg: rgba(241, 245, 249, 0.8);
+  --shadow:
+    rgba(0, 118, 255, 0.05) 0 10px 15px -3px, rgba(0, 118, 255, 0.03) 0 4px 6px -2px;
+
+  --sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --heading: 'Manrope', system-ui, -apple-system, sans-serif;
+
+  font: 18px/145% var(--sans);
+  font-weight: 500; /* Medium weight body text for refinement */
+  letter-spacing: 0.18px;
+  color-scheme: light dark;
+  color: var(--text);
+  background: var(--bg);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  @media (max-width: 1024px) {
+    font-size: 16px;
+  }
+}
+
+/* Light theme only as per mockup design */
+
+body {
+  margin: 0;
+   
+}
+
+#root {
+  width: 100%;
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+}
+
+.content-container {
+  width: 1126px;
+  max-width: 100%;
+  margin: 0 auto;
+  text-align: center;
+  border-inline: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+}
+
+h1,
+h2 {
+  font-family: var(--heading);
+  font-weight: 700; /* Bold/SemiBold for headings */
+  color: var(--text-h);
+}
+
+h1 {
+  font-size: 56px;
+  letter-spacing: -0.02em; /* Tighter letter-spacing on big headings */
+  margin: 32px 0;
+  @media (max-width: 1024px) {
+    font-size: 36px;
+    margin: 20px 0;
+  }
+}
+h2 {
+  font-size: 24px;
+  line-height: 118%;
+  letter-spacing: -0.02em; /* Tighter letter-spacing */
+  margin: 0 0 8px;
+  @media (max-width: 1024px) {
+    font-size: 20px;
+  }
+}
+p {
+  margin: 0;
+}
+
+code,
+.counter {
+  font-family: var(--mono);
+  display: inline-flex;
+  border-radius: 4px;
+  color: var(--text-h);
+}
+
+code {
+  font-size: 15px;
+  line-height: 135%;
+  padding: 4px 8px;
+  background: var(--code-bg);
+}
