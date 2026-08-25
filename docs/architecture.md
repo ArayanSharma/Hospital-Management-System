@@ -19,7 +19,7 @@ backend/
 │
 ├── src/
 │   │
-│   ├── features/
+│   ├── modules/
 │   │
 │   │   ├── auth/
 │   │   │   ├── auth.controller.js
@@ -84,7 +84,7 @@ backend/
 │   ├── core/
 │   │   ├── errors/
 │   │   │   ├── AppError.js
-│   │   │   └── errorCodes.js
+│   │   │   └──  
 │   │   ├── responses/
 │   │   │   └── apiResponse.js
 │   │   └── constants/
