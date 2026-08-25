@@ -1,0 +1,42 @@
+export const RESOURCES = {
+  USER: "user",
+  ROLE: "role",
+  PERMISSION: "permission",
+  PATIENT: "patient",
+  DOCTOR: "doctor",
+  STAFF: "staff",
+  DEPARTMENT: "department",
+  APPOINTMENT: "appointment",
+  OPD: "opd",
+  ADMISSION: "admission",
+  WARD: "ward",
+  BED: "bed",
+  PRESCRIPTION: "prescription",
+  MEDICAL_RECORD: "medical_record",
+  LAB_TEST: "lab_test",
+  LAB_REPORT: "lab_report",
+  RADIOLOGY_TEST: "radiology_test",
+  RADIOLOGY_REPORT: "radiology_report",
+  MEDICINE: "medicine",
+  PHARMACY_SALE: "pharmacy_sale",
+  INVENTORY: "inventory",
+  SUPPLIER: "supplier",
+  INVOICE: "invoice",
+  PAYMENT: "payment",
+  INSURANCE: "insurance",
+  NOTIFICATION: "notification",
+  AUDIT_LOG: "audit_log",
+  SETTING: "setting",
+  REPORT: "report",
+  DASHBOARD: "dashboard",
+};
+
+export const ACTIONS = {
+  CREATE: "create",
+  READ: "read",
+  UPDATE: "update",
+  DELETE: "delete",
+  MANAGE: "manage",
+};
+
+export const buildPermission = (resource, action) => `${resource}:${action}`;   
