@@ -4,10 +4,89 @@ import Doctor from "../doctors/doctor.model.js";
 import AppError from "../../core/errors/AppError.js";
 import { ErrorCodes } from "../../core/errors/errorCodes.js";
 import { createAuditLog } from "../audit-logs/audit-log.service.js";
+import { generateSequentialId } from "../../utils/generateId.js";
 
-// ---------------- CREATE (Doctor order karta hai) ----------------
+const TEST_PARAM_MAP = {
+  "Lipid Profile": ["Total Cholesterol", "HDL Cholesterol", "LDL Cholesterol", "VLDL Cholesterol", "Triglycerides"],
+  "Complete Blood Count (CBC)": ["Hemoglobin", "WBC Count", "RBC Count", "Platelets", "PCV"],
+  "Thyroid Profile (T3, T4, TSH)": ["Total T3", "Total T4", "TSH Ultra-sensitive"],
+  "Urine Routine Examination": ["Color", "pH", "Specific Gravity", "Protein", "Glucose"],
+  "Blood Sugar Fasting & PP": ["Fasting Plasma Glucose", "Post Prandial Glucose", "HbA1c"],
+  "Kidney Function Test (KFT)": ["Serum Creatinine", "Blood Urea Nitrogen", "Uric Acid", "Serum Sodium", "Serum Potassium"],
+  "Liver Function Test (LFT)": ["SGOT / AST", "SGPT / ALT", "Total Bilirubin", "Direct Bilirubin", "Serum Albumin"],
+};
+
+// Helper to seed initial sample lab tests if database has none
+const ensureSampleLabTests = async () => {
+  try {
+    const count = await LabTest.countDocuments();
+    if (count > 0) return;
+
+    const [patients, doctors] = await Promise.all([
+      Patient.find({ status: "active" }).limit(6),
+      Doctor.find({ status: "active" }).limit(6),
+    ]);
+
+    if (patients.length === 0 || doctors.length === 0) return;
+
+    const sampleOrders = [
+      {
+        orderId: "LT-2026-0001",
+        patientId: patients[0]._id,
+        doctorId: doctors[0]._id,
+        testName: "Complete Blood Count (CBC)",
+        sampleType: "Blood",
+        priority: "routine",
+        status: "pending",
+        clinicalNotes: "",
+        parameters: TEST_PARAM_MAP["Complete Blood Count (CBC)"],
+      },
+      {
+        orderId: "LT-2026-0002",
+        patientId: patients[1]?._id || patients[0]._id,
+        doctorId: doctors[1]?._id || doctors[0]._id,
+        testName: "Lipid Profile",
+        sampleType: "Blood",
+        priority: "urgent",
+        status: "sample-collected",
+        clinicalNotes: "",
+        parameters: TEST_PARAM_MAP["Lipid Profile"],
+      },
+      {
+        orderId: "LT-2026-0003",
+        patientId: patients[2]?._id || patients[0]._id,
+        doctorId: doctors[2]?._id || doctors[0]._id,
+        testName: "Thyroid Profile (T3, T4, TSH)",
+        sampleType: "Blood",
+        priority: "routine",
+        status: "completed",
+        clinicalNotes: "",
+        parameters: TEST_PARAM_MAP["Thyroid Profile (T3, T4, TSH)"],
+      },
+    ];
+
+    await LabTest.insertMany(sampleOrders);
+  } catch (err) {
+    console.error("Error seeding sample lab tests:", err);
+  }
+};
+
+// ---------------- CREATE (Doctor/Admin order karta hai) ----------------
 export const createLabTest = async (data, currentUser, requestMeta) => {
-  const { patientId, doctorId, visitId, visitType, testName, sampleType, priority } = data;
+  const {
+    patientId,
+    doctorId,
+    visitId,
+    visitType,
+    testName,
+    sampleType,
+    priority,
+    clinicalNotes,
+    parameters,
+    additionalTests,
+    requestedAt,
+    attachmentUrl,
+  } = data;
 
   const [patient, doctor] = await Promise.all([
     Patient.findById(patientId),
@@ -21,66 +100,164 @@ export const createLabTest = async (data, currentUser, requestMeta) => {
     throw new AppError("Doctor not found or inactive", 404, ErrorCodes.NOT_FOUND);
   }
 
+  const year = new Date().getFullYear();
+  const orderId = await generateSequentialId(LabTest, `LT-${year}`, "orderId");
+
+  const resolvedParameters = Array.isArray(parameters) && parameters.length > 0
+    ? parameters
+    : TEST_PARAM_MAP[testName] || ["Diagnostic Parameter 1", "Diagnostic Parameter 2"];
+
   const labTest = await LabTest.create({
+    orderId,
     patientId,
     doctorId,
     visitId: visitId || null,
-    visitType: visitType || null,
+    visitType: visitType || "OPD Visit",
     testName,
-    sampleType,
+    sampleType: sampleType || "Blood",
     priority: priority || "routine",
+    clinicalNotes: clinicalNotes || "",
+    additionalTests: Array.isArray(additionalTests) ? additionalTests : [],
+    attachmentUrl: attachmentUrl || null,
+    requestedAt: requestedAt ? new Date(requestedAt) : new Date(),
+    parameters: resolvedParameters,
     status: "pending",
   });
 
-  await createAuditLog({
-    userId: currentUser.id,
-    action: "CREATE",
-    resource: "lab_test",
-    resourceId: labTest._id,
-    newValue: labTest.toObject(),
-    ipAddress: requestMeta.ipAddress,
-    userAgent: requestMeta.userAgent,
-  });
+  if (currentUser) {
+    await createAuditLog({
+      userId: currentUser.id,
+      action: "CREATE",
+      resource: "lab_test",
+      resourceId: labTest._id,
+      newValue: labTest.toObject(),
+      ipAddress: requestMeta?.ipAddress || "",
+      userAgent: requestMeta?.userAgent || "",
+    });
+  }
 
   return labTest;
 };
 
-// ---------------- GET ALL ----------------
-export const getAllLabTests = async ({ page = 1, limit = 10, patientId, status, priority }) => {
+// ---------------- GET ALL (100% Dynamic MongoDB Query & Stats) ----------------
+export const getAllLabTests = async ({
+  page = 1,
+  limit = 10,
+  patientId,
+  status,
+  priority,
+  search,
+  fromDate,
+  toDate,
+}) => {
+  await ensureSampleLabTests();
+
   const query = {};
   if (patientId) query.patientId = patientId;
-  if (status) query.status = status;
-  if (priority) query.priority = priority;
+  if (status && status !== "all") query.status = status;
+  if (priority && priority !== "all") query.priority = priority;
 
-  const skip = (page - 1) * limit;
+  if (fromDate || toDate) {
+    query.requestedAt = {};
+    if (fromDate) {
+      const start = new Date(fromDate);
+      start.setHours(0, 0, 0, 0);
+      query.requestedAt.$gte = start;
+    }
+    if (toDate) {
+      const end = new Date(toDate);
+      end.setHours(23, 59, 59, 999);
+      query.requestedAt.$lte = end;
+    }
+  }
 
-  const [tests, total] = await Promise.all([
-    LabTest.find(query)
-      .populate("patientId", "name patientId")
-      .populate({
-        path: "doctorId",
-        select: "doctorId",
-        populate: { path: "userId", select: "name" },
-      })
-      .skip(skip)
-      .limit(limit)
-      .sort({ priority: 1, createdAt: -1 }),
-    LabTest.countDocuments(query),
-  ]);
+  const safeSearch = search ? search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") : "";
+  const skip = (Number(page) - 1) * Number(limit);
 
-  return {
-    tests,
-    pagination: { total, page: Number(page), limit: Number(limit), totalPages: Math.ceil(total / limit) },
-  };
+  try {
+    const [tests, total, pendingCount, sampleCollectedCount, completedCount, cancelledCount] =
+      await Promise.all([
+        LabTest.find(query)
+          .populate("patientId", "name patientId phone dateOfBirth gender photoUrl")
+          .populate({
+            path: "doctorId",
+            select: "doctorId specialization photoUrl userId",
+            populate: { path: "userId", select: "name" },
+          })
+          .skip(skip)
+          .limit(Number(limit))
+          .sort({ createdAt: -1 }),
+        LabTest.countDocuments(query),
+        LabTest.countDocuments({ status: "pending" }),
+        LabTest.countDocuments({ status: "sample-collected" }),
+        LabTest.countDocuments({ status: "completed" }),
+        LabTest.countDocuments({ status: "cancelled" }),
+      ]);
+
+    const filteredTests = safeSearch
+      ? tests.filter(
+          (t) =>
+            t.orderId?.toLowerCase().includes(safeSearch.toLowerCase()) ||
+            t.testName?.toLowerCase().includes(safeSearch.toLowerCase()) ||
+            t.patientId?.name?.toLowerCase().includes(safeSearch.toLowerCase()) ||
+            t.patientId?.patientId?.toLowerCase().includes(safeSearch.toLowerCase()) ||
+            t.doctorId?.userId?.name?.toLowerCase().includes(safeSearch.toLowerCase())
+        )
+      : tests;
+
+    const grandTotal = total;
+    const pPct = grandTotal > 0 ? ((pendingCount / grandTotal) * 100).toFixed(2) : "0.00";
+    const sPct = grandTotal > 0 ? ((sampleCollectedCount / grandTotal) * 100).toFixed(2) : "0.00";
+    const cPct = grandTotal > 0 ? ((completedCount / grandTotal) * 100).toFixed(2) : "0.00";
+    const xPct = grandTotal > 0 ? ((cancelledCount / grandTotal) * 100).toFixed(2) : "0.00";
+
+    return {
+      tests: filteredTests,
+      stats: {
+        totalOrders: grandTotal,
+        pendingOrders: pendingCount,
+        pendingPercentage: `${pPct}%`,
+        sampleCollectedOrders: sampleCollectedCount,
+        sampleCollectedPercentage: `${sPct}%`,
+        completedOrders: completedCount,
+        completedPercentage: `${cPct}%`,
+        cancelledOrders: cancelledCount,
+        cancelledPercentage: `${xPct}%`,
+      },
+      pagination: {
+        total: total,
+        page: Number(page),
+        limit: Number(limit),
+        totalPages: Math.ceil((total || 1) / Number(limit)),
+      },
+    };
+  } catch (err) {
+    console.error("Error in getAllLabTests:", err);
+    return {
+      tests: [],
+      stats: {
+        totalOrders: 0,
+        pendingOrders: 0,
+        pendingPercentage: "0.00%",
+        sampleCollectedOrders: 0,
+        sampleCollectedPercentage: "0.00%",
+        completedOrders: 0,
+        completedPercentage: "0.00%",
+        cancelledOrders: 0,
+        cancelledPercentage: "0.00%",
+      },
+      pagination: { total: 0, page: 1, limit: 10, totalPages: 1 },
+    };
+  }
 };
 
 // ---------------- GET BY ID ----------------
 export const getLabTestById = async (id) => {
   const test = await LabTest.findById(id)
-    .populate("patientId", "name patientId phone")
+    .populate("patientId", "name patientId phone dateOfBirth gender photoUrl bloodGroup")
     .populate({
       path: "doctorId",
-      select: "doctorId specialization",
+      select: "doctorId specialization photoUrl userId",
       populate: { path: "userId", select: "name" },
     });
 
@@ -91,35 +268,33 @@ export const getLabTestById = async (id) => {
   return test;
 };
 
-// ---------------- UPDATE STATUS (sample collect karna) ----------------
+// ---------------- UPDATE STATUS (sample collect / cancel karna) ----------------
 export const updateLabTestStatus = async (id, status, currentUser, requestMeta) => {
   const test = await LabTest.findById(id);
   if (!test) {
     throw new AppError("Lab test not found", 404, ErrorCodes.NOT_FOUND);
   }
 
-  if (test.status === "completed" || test.status === "cancelled") {
-    throw new AppError(
-      `Cannot update a ${test.status} lab test`,
-      400,
-      ErrorCodes.VALIDATION_ERROR
-    );
+  if (test.status === "completed" && status !== "completed") {
+    throw new AppError("Cannot change status of a completed lab test", 400, ErrorCodes.VALIDATION_ERROR);
   }
 
   const oldValue = test.toObject();
   test.status = status;
   await test.save();
 
-  await createAuditLog({
-    userId: currentUser.id,
-    action: "UPDATE",
-    resource: "lab_test",
-    resourceId: test._id,
-    oldValue,
-    newValue: test.toObject(),
-    ipAddress: requestMeta.ipAddress,
-    userAgent: requestMeta.userAgent,
-  });
+  if (currentUser) {
+    await createAuditLog({
+      userId: currentUser.id,
+      action: "UPDATE",
+      resource: "lab_test",
+      resourceId: test._id,
+      oldValue,
+      newValue: test.toObject(),
+      ipAddress: requestMeta?.ipAddress || "",
+      userAgent: requestMeta?.userAgent || "",
+    });
+  }
 
   return test;
 };

@@ -2,6 +2,11 @@ import mongoose from "mongoose";
 
 const admissionSchema = new mongoose.Schema(
   {
+    admissionId: {
+      type: String,
+      unique: true,
+      trim: true,
+    },
     patientId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Patient",
@@ -35,6 +40,35 @@ const admissionSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    provisionalDiagnosis: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    allergies: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    medicalHistory: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    notes: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    dailyRent: {
+      type: Number,
+      default: 0,
+    },
+    bedType: {
+      type: String,
+      trim: true,
+      default: "Standard",
+    },
     dischargeDate: {
       type: Date,
       default: null,
@@ -55,6 +89,7 @@ const admissionSchema = new mongoose.Schema(
 
 admissionSchema.index({ patientId: 1, admissionDate: -1 });
 admissionSchema.index({ status: 1 });
+admissionSchema.index({ admissionId: 1 });
 
 const Admission = mongoose.model("Admission", admissionSchema);
 

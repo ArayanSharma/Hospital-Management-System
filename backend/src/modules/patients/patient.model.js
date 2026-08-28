@@ -7,7 +7,6 @@ const patientSchema = new mongoose.Schema(
       required: true,
       unique: true,
       trim: true,
-      // Example: "PAT-0001"
     },
     name: {
       type: String,
@@ -43,6 +42,26 @@ const patientSchema = new mongoose.Schema(
       enum: ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-", null],
       default: null,
     },
+    maritalStatus: {
+      type: String,
+      enum: ["single", "married", "divorced", "widowed", null],
+      default: null,
+    },
+    occupation: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+    nationality: {
+      type: String,
+      trim: true,
+      default: "Indian",
+    },
+    notes: {
+      type: String,
+      trim: true,
+      default: null,
+    },
     emergencyContact: {
       name: { type: String, trim: true },
       phone: { type: String, trim: true },
@@ -54,10 +73,26 @@ const patientSchema = new mongoose.Schema(
       default: "active",
     },
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
+  }
 );
 
-patientSchema.index({ name: "text", phone: "text" }); // search ke liye
+patientSchema.virtual("age").get(function () {
+  if (!this.dateOfBirth) return null;
+  const today = new Date();
+  const birthDate = new Date(this.dateOfBirth);
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const m = today.getMonth() - birthDate.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+    age--;
+  }
+  return age;
+});
+
+patientSchema.index({ name: "text", phone: "text" });
 
 const Patient = mongoose.model("Patient", patientSchema);
 

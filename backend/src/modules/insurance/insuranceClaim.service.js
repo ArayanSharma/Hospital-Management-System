@@ -106,7 +106,7 @@ export const getClaimById = async (id) => {
 };
 
 const ALLOWED_TRANSITIONS = {
-  submitted: ["under-review", "rejected"],
+  submitted: ["under-review", "approved", "rejected"],
   "under-review": ["approved", "rejected"],
   approved: ["settled"],
   rejected: [],

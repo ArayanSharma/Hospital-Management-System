@@ -1,5 +1,6 @@
 import {
   createInsurancePolicy,
+  getPolicies,
   getPoliciesByPatient,
   getPolicyById,
   updateInsurancePolicy,
@@ -12,6 +13,11 @@ export const create = asyncHandler(async (req, res) => {
   const meta = getRequestMeta(req);
   const policy = await createInsurancePolicy(req.body, req.user, meta);
   return successResponse(res, 201, "Insurance policy created successfully", policy);
+});
+
+export const getAll = asyncHandler(async (req, res) => {
+  const policies = await getPolicies(req.query);
+  return successResponse(res, 200, "Insurance policies fetched successfully", policies);
 });
 
 export const getByPatient = asyncHandler(async (req, res) => {

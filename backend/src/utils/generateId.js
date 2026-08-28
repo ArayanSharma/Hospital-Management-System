@@ -5,8 +5,11 @@ export const generateSequentialId = async (Model, prefix, field = "doctorId") =>
 
   let nextNumber = 1;
   if (lastDoc && lastDoc[field]) {
-    const lastNumber = parseInt(lastDoc[field].split("-")[1], 10);
-    nextNumber = lastNumber + 1;
+    const parts = String(lastDoc[field]).split("-");
+    const lastNumber = parseInt(parts[1] || parts[0], 10);
+    if (!isNaN(lastNumber)) {
+      nextNumber = lastNumber + 1;
+    }
   }
 
   return `${prefix}-${String(nextNumber).padStart(4, "0")}`;

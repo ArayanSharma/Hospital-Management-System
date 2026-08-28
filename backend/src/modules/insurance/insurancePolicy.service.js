@@ -43,8 +43,14 @@ export const createInsurancePolicy = async (data, currentUser, requestMeta) => {
   return policy;
 };
 
+export const getPolicies = async (query = {}) => {
+  const filter = {};
+  if (query.patientId) filter.patientId = query.patientId;
+  return InsurancePolicy.find(filter).populate("patientId", "name patientId").sort({ createdAt: -1 });
+};
+
 export const getPoliciesByPatient = async (patientId) => {
-  return InsurancePolicy.find({ patientId }).sort({ createdAt: -1 });
+  return InsurancePolicy.find({ patientId }).populate("patientId", "name patientId").sort({ createdAt: -1 });
 };
 
 export const getPolicyById = async (id) => {

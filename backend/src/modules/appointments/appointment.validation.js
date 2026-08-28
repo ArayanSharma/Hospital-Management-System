@@ -1,7 +1,5 @@
 import { z } from "zod";
 
-const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/; // "HH:MM" 24hr format
-
 export const createAppointmentSchema = z.object({
   body: z.object({
     patientId: z.string().min(1, "Patient is required"),
@@ -9,25 +7,28 @@ export const createAppointmentSchema = z.object({
     appointmentDate: z.string().refine((val) => !isNaN(Date.parse(val)), {
       message: "Invalid date format",
     }),
-    startTime: z.string().regex(timeRegex, "Invalid time format (HH:MM)"),
-    endTime: z.string().regex(timeRegex, "Invalid time format (HH:MM)"),
+    startTime: z.string().min(1, "Start time is required"),
+    endTime: z.string().min(1, "End time is required"),
     reason: z.string().trim().optional(),
+    notes: z.string().trim().optional(),
+    sendNotification: z.boolean().optional(),
   }),
 });
 
 export const updateAppointmentSchema = z.object({
   body: z.object({
     appointmentDate: z.string().optional(),
-    startTime: z.string().regex(timeRegex).optional(),
-    endTime: z.string().regex(timeRegex).optional(),
+    startTime: z.string().optional(),
+    endTime: z.string().optional(),
     reason: z.string().trim().optional(),
     notes: z.string().trim().optional(),
+    sendNotification: z.boolean().optional(),
   }),
 });
 
 export const changeStatusSchema = z.object({
   body: z.object({
-    status: z.enum(["completed", "cancelled", "no-show"]),
+    status: z.enum(["completed", "cancelled", "no-show", "scheduled"]),
     cancelledReason: z.string().trim().optional(),
   }),
 });

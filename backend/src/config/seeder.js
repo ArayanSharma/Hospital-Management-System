@@ -6,6 +6,7 @@ import { ROLES } from "../core/constants/roles.js";
 import Permission from "../modules/permissions/permission.model.js";
 import Role from "../modules/roles/role.model.js";
 import User from "../modules/users/user.model.js";
+import Department from "../modules/departments/department.model.js";
 
 dotenv.config();
 
@@ -104,6 +105,28 @@ const seedDatabase = async () => {
       await superAdminUser.save();
       console.log(`Super Admin user updated successfully! (${superAdminEmail})`);
     }
+
+    // 5. Seed Initial Departments
+    console.log("Seeding initial departments...");
+    const initialDepartments = [
+      { name: "Cardiology", code: "CARD", description: "Heart & Cardiovascular Care" },
+      { name: "Neurology", code: "NEUR", description: "Brain & Nervous System Care" },
+      { name: "Orthopedics", code: "ORTH", description: "Bone & Joint Healthcare" },
+      { name: "Pediatrics", code: "PEDI", description: "Child & Infant Healthcare" },
+      { name: "General Medicine", code: "GENM", description: "General & Primary Care" },
+      { name: "Emergency Medicine", code: "EMER", description: "24/7 Emergency Care" },
+      { name: "Dermatology", code: "DERM", description: "Skin & Cosmetology" },
+      { name: "Radiology", code: "RADI", description: "Diagnostic Imaging & Radiology" },
+    ];
+
+    for (const dept of initialDepartments) {
+      await Department.findOneAndUpdate(
+        { code: dept.code },
+        { ...dept, status: "active" },
+        { upsert: true }
+      );
+    }
+    console.log("Initial departments seeded.");
 
     console.log("Database seeding completed successfully! 🌱");
     process.exit(0);

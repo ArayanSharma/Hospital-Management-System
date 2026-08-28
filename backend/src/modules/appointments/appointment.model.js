@@ -2,6 +2,10 @@ import mongoose from "mongoose";
 
 const appointmentSchema = new mongoose.Schema(
   {
+    appointmentId: {
+      type: String,
+      trim: true,
+    },
     patientId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Patient",
@@ -24,7 +28,6 @@ const appointmentSchema = new mongoose.Schema(
     startTime: {
       type: String,
       required: [true, "Start time is required"],
-      // Format: "09:00" (24hr)
     },
     endTime: {
       type: String,
@@ -48,11 +51,14 @@ const appointmentSchema = new mongoose.Schema(
       trim: true,
       default: null,
     },
+    sendNotification: {
+      type: Boolean,
+      default: true,
+    },
   },
   { timestamps: true }
 );
 
-// Query performance — doctor ki schedule check karna sabse common operation hoga
 appointmentSchema.index({ doctorId: 1, appointmentDate: 1 });
 appointmentSchema.index({ patientId: 1, appointmentDate: -1 });
 

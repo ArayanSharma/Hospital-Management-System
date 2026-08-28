@@ -4,17 +4,21 @@ export const createLabTestSchema = z.object({
   body: z.object({
     patientId: z.string().min(1, "Patient is required"),
     doctorId: z.string().min(1, "Doctor is required"),
-    visitId: z.string().optional(),
-    visitType: z.enum(["OPDVisit", "Admission"]).optional(),
+    visitId: z.string().optional().nullable(),
+    visitType: z.string().optional().nullable(),
     testName: z.string().trim().min(2, "Test name is required"),
     sampleType: z.string().trim().min(2, "Sample type is required"),
     priority: z.enum(["routine", "urgent", "emergency"]).optional(),
+    additionalTests: z.array(z.string()).optional(),
+    clinicalNotes: z.string().trim().optional(),
+    requestedAt: z.string().optional().nullable(),
+    attachmentUrl: z.string().trim().optional().nullable(),
   }),
 });
 
 export const updateLabTestStatusSchema = z.object({
   body: z.object({
-    status: z.enum(["sample-collected", "cancelled"]),
+    status: z.enum(["pending", "sample-collected", "completed", "cancelled"]),
   }),
 });
 

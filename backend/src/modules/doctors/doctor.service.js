@@ -8,7 +8,7 @@ import { ErrorCodes } from "../../core/errors/errorCodes.js";
 import { createAuditLog } from "../audit-logs/audit-log.service.js";
 import { generateSequentialId } from "../../utils/generateId.js";
 
-// ---------------- CREATE (User + Doctor dono ek saath) ----------------
+// ---------------- CREATE (User + Doctor atomic creation with transaction safety) ----------------
 export const createDoctor = async (data, currentUser, requestMeta) => {
   const {
     name,
@@ -21,45 +21,35 @@ export const createDoctor = async (data, currentUser, requestMeta) => {
     experience,
     consultationFee,
     availability,
+    photoUrl,
+    additionalInfo,
   } = data;
 
-  // 1. Duplicate email check
-  const existingUser = await User.findOne({ email });
+  const existingUser = await User.findOne({ email: email.toLowerCase() });
   if (existingUser) {
-    throw new AppError(
-      "User with this email already exists",
-      409,
-      ErrorCodes.USER_ALREADY_EXISTS
-    );
+    throw new AppError("User with this email already exists", 409, ErrorCodes.USER_ALREADY_EXISTS);
   }
 
-  // 2. Department valid hai ya nahi
   const department = await Department.findById(departmentId);
   if (!department) {
     throw new AppError("Invalid departmentId provided", 400, ErrorCodes.NOT_FOUND);
   }
 
-  // 3. DOCTOR role dhoondo (system role, already seeded honi chahiye)
-  const doctorRole = await Role.findOne({ name: "DOCTOR" });
+  let doctorRole = await Role.findOne({ name: "DOCTOR" });
   if (!doctorRole) {
-    throw new AppError(
-      "DOCTOR role not found. Please create it first.",
-      500,
-      ErrorCodes.NOT_FOUND
-    );
+    doctorRole = await Role.create({ name: "DOCTOR", permissions: [] });
   }
 
   const session = await mongoose.startSession();
   session.startTransaction();
 
   try {
-    // 4. User create karo (transaction ke andar)
     const user = await User.create(
       [
         {
           name,
-          email,
-          password,
+          email: email.toLowerCase(),
+          password: password || "Doctor@123",
           roleId: doctorRole._id,
           phone,
           status: "active",
@@ -68,10 +58,8 @@ export const createDoctor = async (data, currentUser, requestMeta) => {
       { session }
     );
 
-    // 5. doctorId generate karo
-    const doctorId = await generateSequentialId(Doctor, "DOC");
+    const doctorId = await generateSequentialId(Doctor, "DOC", "doctorId");
 
-    // 6. Doctor profile create karo (transaction ke andar)
     const doctor = await Doctor.create(
       [
         {
@@ -79,17 +67,18 @@ export const createDoctor = async (data, currentUser, requestMeta) => {
           doctorId,
           departmentId,
           specialization,
-          qualification,
-          experience,
-          consultationFee,
-          availability,
+          qualification: qualification || "MBBS",
+          experience: experience || 0,
+          consultationFee: consultationFee || 500,
+          availability: availability || [{ day: "Mon - Sat", startTime: "09:00 AM", endTime: "05:00 PM" }],
+          photoUrl: photoUrl || null,
+          additionalInfo: additionalInfo || null,
         },
       ],
       { session }
     );
 
     await session.commitTransaction();
-    session.endSession();
 
     await createAuditLog({
       userId: currentUser.id,
@@ -104,45 +93,64 @@ export const createDoctor = async (data, currentUser, requestMeta) => {
     return doctor[0];
   } catch (err) {
     await session.abortTransaction();
-    session.endSession();
     throw err;
+  } finally {
+    session.endSession();
   }
 };
 
-// ---------------- GET ALL ----------------
-export const getAllDoctors = async ({ page = 1, limit = 10, departmentId, status, search }) => {
+// ---------------- GET ALL (100% Dynamic MongoDB Stats + RegEx Safe Filtering) ----------------
+export const getAllDoctors = async ({ page = 1, limit = 10, departmentId, status, search, specialization }) => {
   const query = {};
-  if (departmentId) query.departmentId = departmentId;
-  if (status) query.status = status;
+  if (departmentId && departmentId !== "all") query.departmentId = departmentId;
+  if (status && status !== "all") query.status = status;
+  if (specialization && specialization !== "all") query.specialization = specialization;
 
   const skip = (page - 1) * limit;
+  const safeSearch = search ? search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") : "";
 
-  let doctorQuery = Doctor.find(query)
-    .populate("userId", "name email phone")
-    .populate("departmentId", "name code")
-    .skip(skip)
-    .limit(limit)
-    .sort({ createdAt: -1 });
-
-  const [doctors, total] = await Promise.all([
-    doctorQuery,
+  const [doctors, total, activeCount, inactiveCount, totalDeptsCount, feeAgg] = await Promise.all([
+    Doctor.find(query)
+      .populate("userId", "name email phone")
+      .populate("departmentId", "name code")
+      .skip(skip)
+      .limit(limit)
+      .sort({ createdAt: -1 }),
     Doctor.countDocuments(query),
+    Doctor.countDocuments({ status: "active" }),
+    Doctor.countDocuments({ status: "inactive" }),
+    Department.countDocuments(),
+    Doctor.aggregate([
+      { $group: { _id: null, avgFee: { $avg: "$consultationFee" } } },
+    ]),
   ]);
 
-  // Search by name — User collection mein hai, isliye post-filter (chhota dataset ke liye theek hai)
-  const filteredDoctors = search
+  const filteredDoctors = safeSearch
     ? doctors.filter((d) =>
-        d.userId?.name?.toLowerCase().includes(search.toLowerCase())
+        d.userId?.name?.toLowerCase().includes(safeSearch.toLowerCase()) ||
+        d.specialization?.toLowerCase().includes(safeSearch.toLowerCase()) ||
+        d.doctorId?.toLowerCase().includes(safeSearch.toLowerCase())
       )
     : doctors;
 
+  const avgFeeValue = Math.round(feeAgg[0]?.avgFee || 0);
+
   return {
     doctors: filteredDoctors,
+    stats: {
+      totalDoctors: total,
+      activeDoctors: activeCount,
+      inactiveDoctors: inactiveCount,
+      totalDepartments: totalDeptsCount,
+      avgConsultationFee: avgFeeValue,
+      activePercentage: total > 0 ? ((activeCount / total) * 100).toFixed(2) : "0.00",
+      inactivePercentage: total > 0 ? ((inactiveCount / total) * 100).toFixed(2) : "0.00",
+    },
     pagination: {
       total,
       page: Number(page),
       limit: Number(limit),
-      totalPages: Math.ceil(total / limit),
+      totalPages: Math.ceil((total || 1) / limit),
     },
   };
 };
@@ -160,7 +168,7 @@ export const getDoctorById = async (id) => {
   return doctor;
 };
 
-// ---------------- UPDATE (sirf professional details — User info alag se) ----------------
+// ---------------- UPDATE ----------------
 export const updateDoctor = async (id, data, currentUser, requestMeta) => {
   const doctor = await Doctor.findById(id);
   if (!doctor) {
@@ -175,6 +183,8 @@ export const updateDoctor = async (id, data, currentUser, requestMeta) => {
     experience,
     consultationFee,
     availability,
+    photoUrl,
+    additionalInfo,
     status,
   } = data;
 
@@ -191,6 +201,8 @@ export const updateDoctor = async (id, data, currentUser, requestMeta) => {
   if (experience !== undefined) doctor.experience = experience;
   if (consultationFee !== undefined) doctor.consultationFee = consultationFee;
   if (availability !== undefined) doctor.availability = availability;
+  if (photoUrl !== undefined) doctor.photoUrl = photoUrl;
+  if (additionalInfo !== undefined) doctor.additionalInfo = additionalInfo;
   if (status !== undefined) doctor.status = status;
 
   await doctor.save();
@@ -209,7 +221,7 @@ export const updateDoctor = async (id, data, currentUser, requestMeta) => {
   return doctor;
 };
 
-// ---------------- DELETE (soft — Doctor + User dono deactivate) ----------------
+// ---------------- DELETE (soft) ----------------
 export const deleteDoctor = async (id, currentUser, requestMeta) => {
   const doctor = await Doctor.findById(id);
   if (!doctor) {
@@ -221,8 +233,9 @@ export const deleteDoctor = async (id, currentUser, requestMeta) => {
   doctor.status = "inactive";
   await doctor.save();
 
-  // Corresponding User bhi deactivate karo — doctor login na kar sake
-  await User.findByIdAndUpdate(doctor.userId, { status: "inactive" });
+  if (doctor.userId) {
+    await User.findByIdAndUpdate(doctor.userId, { status: "inactive" });
+  }
 
   await createAuditLog({
     userId: currentUser.id,

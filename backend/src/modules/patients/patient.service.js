@@ -4,7 +4,7 @@ import { ErrorCodes } from "../../core/errors/errorCodes.js";
 import { createAuditLog } from "../audit-logs/audit-log.service.js";
 import { generateSequentialId } from "../../utils/generateId.js";
 
-// ---------------- CREATE ----------------
+// ---------------- CREATE PATIENT ----------------
 export const createPatient = async (data, currentUser, requestMeta) => {
   const {
     name,
@@ -14,6 +14,10 @@ export const createPatient = async (data, currentUser, requestMeta) => {
     email,
     address,
     bloodGroup,
+    maritalStatus,
+    occupation,
+    nationality,
+    notes,
     emergencyContact,
   } = data;
 
@@ -25,9 +29,13 @@ export const createPatient = async (data, currentUser, requestMeta) => {
     dateOfBirth,
     gender,
     phone,
-    email,
+    email: email ? email.toLowerCase() : null,
     address,
     bloodGroup,
+    maritalStatus,
+    occupation,
+    nationality,
+    notes,
     emergencyContact,
   });
 
@@ -44,33 +52,49 @@ export const createPatient = async (data, currentUser, requestMeta) => {
   return patient;
 };
 
-// ---------------- GET ALL (pagination + search) ----------------
-export const getAllPatients = async ({ page = 1, limit = 10, search, status, gender }) => {
+// ---------------- GET ALL (100% Dynamic MongoDB Query) ----------------
+export const getAllPatients = async ({ page = 1, limit = 10, search, status, gender, bloodGroup }) => {
   const query = {};
-  if (status) query.status = status;
-  if (gender) query.gender = gender;
-  if (search) {
+  if (status && status !== "all") query.status = status;
+  if (gender && gender !== "all") query.gender = gender;
+  if (bloodGroup && bloodGroup !== "all") query.bloodGroup = bloodGroup;
+
+  const safeSearch = search ? search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") : "";
+  if (safeSearch) {
     query.$or = [
-      { name: { $regex: search, $options: "i" } },
-      { phone: { $regex: search, $options: "i" } },
-      { patientId: { $regex: search, $options: "i" } },
+      { name: { $regex: safeSearch, $options: "i" } },
+      { phone: { $regex: safeSearch, $options: "i" } },
+      { patientId: { $regex: safeSearch, $options: "i" } },
     ];
   }
 
   const skip = (page - 1) * limit;
 
-  const [patients, total] = await Promise.all([
+  const firstDayOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+
+  const [patients, total, activeCount, inactiveCount, newThisMonthCount] = await Promise.all([
     Patient.find(query).skip(skip).limit(limit).sort({ createdAt: -1 }),
     Patient.countDocuments(query),
+    Patient.countDocuments({ status: "active" }),
+    Patient.countDocuments({ status: "inactive" }),
+    Patient.countDocuments({ createdAt: { $gte: firstDayOfMonth } }),
   ]);
 
   return {
     patients,
+    stats: {
+      totalPatients: total,
+      activePatients: activeCount,
+      inactivePatients: inactiveCount,
+      newThisMonth: newThisMonthCount,
+      activePercentage: total > 0 ? ((activeCount / total) * 100).toFixed(2) : "0.00",
+      inactivePercentage: total > 0 ? ((inactiveCount / total) * 100).toFixed(2) : "0.00",
+    },
     pagination: {
       total,
       page: Number(page),
       limit: Number(limit),
-      totalPages: Math.ceil(total / limit),
+      totalPages: Math.ceil((total || 1) / limit),
     },
   };
 };
@@ -98,16 +122,29 @@ export const updatePatient = async (id, data, currentUser, requestMeta) => {
     email,
     address,
     bloodGroup,
+    maritalStatus,
+    occupation,
+    nationality,
+    notes,
     emergencyContact,
     status,
   } = data;
 
   if (name !== undefined) patient.name = name;
   if (phone !== undefined) patient.phone = phone;
-  if (email !== undefined) patient.email = email;
+  if (email !== undefined) patient.email = email ? email.toLowerCase() : null;
   if (address !== undefined) patient.address = address;
   if (bloodGroup !== undefined) patient.bloodGroup = bloodGroup;
-  if (emergencyContact !== undefined) patient.emergencyContact = emergencyContact;
+  if (maritalStatus !== undefined) patient.maritalStatus = maritalStatus;
+  if (occupation !== undefined) patient.occupation = occupation;
+  if (nationality !== undefined) patient.nationality = nationality;
+  if (notes !== undefined) patient.notes = notes;
+  if (emergencyContact !== undefined) {
+    patient.emergencyContact = {
+      ...patient.emergencyContact,
+      ...emergencyContact,
+    };
+  }
   if (status !== undefined) patient.status = status;
 
   await patient.save();
@@ -135,7 +172,6 @@ export const deletePatient = async (id, currentUser, requestMeta) => {
 
   const oldValue = patient.toObject();
 
-  // Hard delete NAHI — healthcare records legally retain karne padte hain
   patient.status = "inactive";
   await patient.save();
 

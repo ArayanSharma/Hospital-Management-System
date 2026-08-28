@@ -2,6 +2,11 @@ import mongoose from "mongoose";
 
 const labTestSchema = new mongoose.Schema(
   {
+    orderId: {
+      type: String,
+      unique: true,
+      trim: true,
+    },
     patientId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Patient",
@@ -18,20 +23,19 @@ const labTestSchema = new mongoose.Schema(
     },
     visitType: {
       type: String,
-      enum: ["OPDVisit", "Admission", null],
-      default: null,
+      enum: ["OPD Visit", "IPD Admission", "OPDVisit", "Admission", null],
+      default: "OPD Visit",
     },
     testName: {
       type: String,
       required: [true, "Test name is required"],
       trim: true,
-      // Example: "Complete Blood Count", "Lipid Profile"
     },
     sampleType: {
       type: String,
       required: [true, "Sample type is required"],
       trim: true,
-      // Example: "Blood", "Urine", "Stool"
+      default: "Blood",
     },
     priority: {
       type: String,
@@ -43,6 +47,28 @@ const labTestSchema = new mongoose.Schema(
       enum: ["pending", "sample-collected", "completed", "cancelled"],
       default: "pending",
     },
+    additionalTests: {
+      type: [String],
+      default: [],
+    },
+    clinicalNotes: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    attachmentUrl: {
+      type: String,
+      default: null,
+    },
+    parameters: {
+      type: [String],
+      default: [],
+    },
+    checkedBy: {
+      type: String,
+      trim: true,
+      default: "",
+    },
     requestedAt: {
       type: Date,
       default: Date.now,
@@ -53,6 +79,7 @@ const labTestSchema = new mongoose.Schema(
 
 labTestSchema.index({ patientId: 1, createdAt: -1 });
 labTestSchema.index({ status: 1 });
+labTestSchema.index({ orderId: 1 });
 
 const LabTest = mongoose.model("LabTest", labTestSchema);
 

@@ -5,14 +5,23 @@ import Payment from "../payments/payment.model.js";
 import PharmacySale from "../pharmacy/pharmacySale.model.js";
 import Admission from "../ipd/admission.model.js";
 
-// ---------------- Patient Registration Report ----------------
-export const getPatientRegistrationReport = async ({ startDate, endDate }) => {
+const parseDateRange = (startDate, endDate) => {
   const query = {};
   if (startDate || endDate) {
-    query.createdAt = {};
-    if (startDate) query.createdAt.$gte = new Date(startDate);
-    if (endDate) query.createdAt.$lte = new Date(endDate);
+    query.$gte = startDate ? new Date(startDate) : undefined;
+    if (endDate) {
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+      query.$lte = end;
+    }
   }
+  return query;
+};
+
+// ---------------- Patient Registration Report ----------------
+export const getPatientRegistrationReport = async ({ startDate, endDate }) => {
+  const dateQuery = parseDateRange(startDate, endDate);
+  const query = Object.keys(dateQuery).length ? { createdAt: dateQuery } : {};
 
   const totalPatients = await Patient.countDocuments(query);
 
@@ -33,12 +42,8 @@ export const getPatientRegistrationReport = async ({ startDate, endDate }) => {
 
 // ---------------- Appointment Report ----------------
 export const getAppointmentReport = async ({ startDate, endDate }) => {
-  const query = {};
-  if (startDate || endDate) {
-    query.appointmentDate = {};
-    if (startDate) query.appointmentDate.$gte = new Date(startDate);
-    if (endDate) query.appointmentDate.$lte = new Date(endDate);
-  }
+  const dateQuery = parseDateRange(startDate, endDate);
+  const query = Object.keys(dateQuery).length ? { appointmentDate: dateQuery } : {};
 
   const statusBreakdown = await Appointment.aggregate([
     { $match: query },
@@ -52,11 +57,10 @@ export const getAppointmentReport = async ({ startDate, endDate }) => {
 
 // ---------------- Revenue Report ----------------
 export const getRevenueReport = async ({ startDate, endDate }) => {
+  const dateQuery = parseDateRange(startDate, endDate);
   const query = { status: "success" };
-  if (startDate || endDate) {
-    query.paidAt = {};
-    if (startDate) query.paidAt.$gte = new Date(startDate);
-    if (endDate) query.paidAt.$lte = new Date(endDate);
+  if (Object.keys(dateQuery).length) {
+    query.paidAt = dateQuery;
   }
 
   const totalRevenue = await Payment.aggregate([
@@ -83,12 +87,8 @@ export const getRevenueReport = async ({ startDate, endDate }) => {
 
 // ---------------- Pharmacy Sales Report ----------------
 export const getPharmacySalesReport = async ({ startDate, endDate }) => {
-  const query = {};
-  if (startDate || endDate) {
-    query.createdAt = {};
-    if (startDate) query.createdAt.$gte = new Date(startDate);
-    if (endDate) query.createdAt.$lte = new Date(endDate);
-  }
+  const dateQuery = parseDateRange(startDate, endDate);
+  const query = Object.keys(dateQuery).length ? { createdAt: dateQuery } : {};
 
   const totalSales = await PharmacySale.aggregate([
     { $match: query },

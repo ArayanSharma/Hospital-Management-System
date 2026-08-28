@@ -18,7 +18,17 @@ export const createPatientSchema = z.object({
     address: z.string().trim().optional(),
     bloodGroup: z
       .enum(["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"])
-      .optional(),
+      .optional()
+      .or(z.literal(""))
+      .nullable(),
+    maritalStatus: z
+      .enum(["single", "married", "divorced", "widowed"])
+      .optional()
+      .or(z.literal(""))
+      .nullable(),
+    occupation: z.string().trim().optional(),
+    nationality: z.string().trim().optional(),
+    notes: z.string().trim().optional(),
     emergencyContact: emergencyContactSchema.optional(),
   }),
 });
@@ -31,7 +41,17 @@ export const updatePatientSchema = z.object({
     address: z.string().trim().optional(),
     bloodGroup: z
       .enum(["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"])
-      .optional(),
+      .optional()
+      .or(z.literal(""))
+      .nullable(),
+    maritalStatus: z
+      .enum(["single", "married", "divorced", "widowed"])
+      .optional()
+      .or(z.literal(""))
+      .nullable(),
+    occupation: z.string().trim().optional(),
+    nationality: z.string().trim().optional(),
+    notes: z.string().trim().optional(),
     emergencyContact: emergencyContactSchema.optional(),
     status: z.enum(["active", "inactive"]).optional(),
   }),

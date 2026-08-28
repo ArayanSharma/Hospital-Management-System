@@ -31,7 +31,31 @@ export const getAllWards = async ({ status, type }) => {
   const query = {};
   if (status) query.status = status;
   if (type) query.type = type;
-  return Ward.find(query).sort({ name: 1 });
+
+  const wards = await Ward.find(query).sort({ name: 1 });
+
+  const wardsWithBeds = await Promise.all(
+    wards.map(async (ward) => {
+      const beds = await Bed.find({ wardId: ward._id })
+        .populate("currentPatientId", "name patientId")
+        .sort({ bedNumber: 1 });
+
+      const available = beds.filter((b) => b.status === "available").length;
+      const occupied = beds.filter((b) => b.status === "occupied").length;
+      const maintenance = beds.filter((b) => b.status === "maintenance").length;
+
+      return {
+        ...ward.toObject(),
+        beds,
+        total: beds.length || ward.capacity || 10,
+        available,
+        occupied,
+        maintenance,
+      };
+    })
+  );
+
+  return wardsWithBeds;
 };
 
 export const getWardById = async (id) => {
@@ -40,8 +64,9 @@ export const getWardById = async (id) => {
     throw new AppError("Ward not found", 404, ErrorCodes.NOT_FOUND);
   }
 
-  // Ward ke saath uske beds bhi return karo — frontend ke liye useful
-  const beds = await Bed.find({ wardId: id }).sort({ bedNumber: 1 });
+  const beds = await Bed.find({ wardId: id })
+    .populate("currentPatientId", "name patientId")
+    .sort({ bedNumber: 1 });
 
   return { ...ward.toObject(), beds };
 };
@@ -83,7 +108,6 @@ export const deleteWard = async (id, currentUser, requestMeta) => {
     throw new AppError("Ward not found", 404, ErrorCodes.NOT_FOUND);
   }
 
-  // Check karo ki koi occupied bed to nahi hai is ward mein
   const occupiedBeds = await Bed.countDocuments({ wardId: id, status: "occupied" });
   if (occupiedBeds > 0) {
     throw new AppError(

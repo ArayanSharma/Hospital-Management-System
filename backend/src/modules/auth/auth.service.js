@@ -27,7 +27,9 @@ export const registerUser = async (data) => {
     );
   }
 
-  // NOTE: password yahan plain jaa raha hai — pre-save hook isse hash karega
+  // NOTE: password plain jaa raha hai — user.model.js ka pre-save hook
+  // isse automatically hash karega. Yahan bcrypt.hash() manually mat karna,
+  // warna double-hashing ho jayegi aur login kabhi match nahi karega.
   const user = await User.create({
     name,
     email,
@@ -42,12 +44,13 @@ export const registerUser = async (data) => {
 
 // ---------------- LOGIN ----------------
 export const loginUser = async (email, password) => {
-  const cleanEmail = email?.trim().toLowerCase();
-  const cleanPassword = password?.trim();
-
-  const user = await User.findOne({ email: cleanEmail })
+  const user = await User.findOne({ email })
     .select("+password")
-    .populate("roleId", "name permissionIds");
+    .populate({
+      path: "roleId",
+      select: "name permissionIds",
+      populate: { path: "permissionIds", select: "name" },
+    });
 
   if (!user) {
     throw new AppError(
@@ -57,7 +60,7 @@ export const loginUser = async (email, password) => {
     );
   }
 
-  if (user.status?.toLowerCase() !== "active") {
+  if (user.status !== "active") {
     throw new AppError(
       "Account is inactive. Contact admin.",
       403,
@@ -66,7 +69,7 @@ export const loginUser = async (email, password) => {
   }
 
   // Model ka instance method use ho raha hai — manual bcrypt.compare nahi
-  const isMatch = await user.isPasswordMatch(cleanPassword);
+  const isMatch = await user.isPasswordMatch(password);
   if (!isMatch) {
     throw new AppError(
       "Invalid email or password",
@@ -151,10 +154,11 @@ export const logoutUser = async (userId) => {
 
 // ---------------- GET CURRENT USER (me) ----------------
 export const getCurrentUser = async (userId) => {
-  const user = await User.findById(userId).populate(
-    "roleId",
-    "name permissionIds"
-  );
+  const user = await User.findById(userId).populate({
+    path: "roleId",
+    select: "name permissionIds",
+    populate: { path: "permissionIds", select: "name" },
+  });
 
   if (!user) {
     throw new AppError("User not found", 404, ErrorCodes.USER_NOT_FOUND);

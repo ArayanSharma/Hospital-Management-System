@@ -2,6 +2,10 @@ import mongoose from "mongoose";
 
 const opdVisitSchema = new mongoose.Schema(
   {
+    visitId: {
+      type: String,
+      trim: true,
+    },
     patientId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Patient",
@@ -16,7 +20,11 @@ const opdVisitSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Appointment",
       default: null,
-      // Optional — walk-in patients ke liye null ho sakta hai
+    },
+    visitType: {
+      type: String,
+      enum: ["appointment", "walk-in"],
+      default: "appointment",
     },
     symptoms: {
       type: String,
@@ -31,19 +39,34 @@ const opdVisitSchema = new mongoose.Schema(
       trim: true,
     },
     vitals: {
-      temperature: { type: Number, default: null },
-      bloodPressure: { type: String, default: null }, // "120/80"
-      pulse: { type: Number, default: null },
-      weight: { type: Number, default: null },
-      height: { type: Number, default: null },
+      temperature: { type: Number, default: 98.6 },
+      bloodPressure: { type: String, default: "120/80" },
+      pulse: { type: Number, default: 78 },
+      weight: { type: Number, default: 65.2 },
+      height: { type: Number, default: 165 },
+      spO2: { type: Number, default: 98 },
     },
+    clinicalNotes: {
+      examinationFindings: { type: String, default: "" },
+      clinicalAssessment: { type: String, default: "" },
+      additionalNotes: { type: String, default: "" },
+    },
+    prescription: [
+      {
+        medicineName: { type: String },
+        dosage: { type: String },
+        frequency: { type: String },
+        duration: { type: String },
+        instructions: { type: String },
+      },
+    ],
     visitDate: {
       type: Date,
       default: Date.now,
     },
     status: {
       type: String,
-      enum: ["in-progress", "completed"],
+      enum: ["in-progress", "completed", "walk-in", "cancelled"],
       default: "in-progress",
     },
   },

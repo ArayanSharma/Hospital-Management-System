@@ -14,7 +14,7 @@ export const checkPermission = (requiredPermission) => {
         throw new AppError("Access denied", 403, ErrorCodes.FORBIDDEN_PERMISSION);
       }
 
-      const userPermissions = user.roleId.permissionIds.map((p) => p.name);
+      const userPermissions = user.roleId.permissionIds.map((p) => p.name || p.toString());
 
       if (!userPermissions.includes(requiredPermission)) {
         throw new AppError(

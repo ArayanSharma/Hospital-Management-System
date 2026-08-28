@@ -1,5 +1,6 @@
 import Bed from "./bed.model.js";
 import Ward from "../wards/ward.model.js";
+import Admission from "../ipd/admission.model.js";
 import AppError from "../../core/errors/AppError.js";
 import { ErrorCodes } from "../../core/errors/errorCodes.js";
 import { createAuditLog } from "../audit-logs/audit-log.service.js";
@@ -12,7 +13,6 @@ export const createBed = async (data, currentUser, requestMeta) => {
     throw new AppError("Ward not found", 404, ErrorCodes.NOT_FOUND);
   }
 
-  // Ward ki capacity se zyada beds na banein
   const existingBedCount = await Bed.countDocuments({ wardId });
   if (existingBedCount >= ward.capacity) {
     throw new AppError(
@@ -52,25 +52,38 @@ export const getAllBeds = async ({ wardId, status }) => {
   if (status) query.status = status;
 
   return Bed.find(query)
-    .populate("wardId", "name type")
-    .populate("currentPatientId", "name patientId")
+    .populate("wardId", "name type floor")
+    .populate("currentPatientId", "name patientId phone gender")
     .sort({ bedNumber: 1 });
 };
 
 export const getAvailableBeds = async (wardId) => {
   const query = { status: "available" };
   if (wardId) query.wardId = wardId;
-  return Bed.find(query).populate("wardId", "name type");
+  return Bed.find(query).populate("wardId", "name type floor");
 };
 
 export const getBedById = async (id) => {
   const bed = await Bed.findById(id)
-    .populate("wardId", "name type")
-    .populate("currentPatientId", "name patientId");
+    .populate("wardId", "name type floor")
+    .populate("currentPatientId", "name patientId phone gender");
+
   if (!bed) {
     throw new AppError("Bed not found", 404, ErrorCodes.NOT_FOUND);
   }
-  return bed;
+
+  let activeAdmission = null;
+  if (bed.status === "occupied") {
+    activeAdmission = await Admission.findOne({ bedId: id, status: "admitted" })
+      .populate("patientId", "name patientId phone gender")
+      .populate({
+        path: "doctorId",
+        select: "doctorId specialization",
+        populate: { path: "userId", select: "name" },
+      });
+  }
+
+  return { ...bed.toObject(), activeAdmission };
 };
 
 export const updateBedStatus = async (id, status, maintenanceReason, currentUser, requestMeta) => {
