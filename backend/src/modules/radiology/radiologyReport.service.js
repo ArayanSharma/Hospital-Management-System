@@ -7,7 +7,27 @@ import { createNotification } from "../notifications/notification.service.js";
 import Doctor from "../doctors/doctor.model.js";
 
 export const createRadiologyReport = async (data, currentUser, requestMeta) => {
-  const { testId, findings, impression, images, reportFile } = data;
+  const {
+    testId,
+    findings,
+    technique,
+    impression,
+    recommendations,
+    additionalNotes,
+    technicianName,
+    checkedByName,
+    studyReviewed,
+    clinicalIndication,
+    relevantHistory,
+    examinationTechnique,
+    bodyPart,
+    views,
+    contrast,
+    imageQuality,
+    images,
+    reportFile,
+    status = "draft",
+  } = data;
 
   const test = await RadiologyTest.findById(testId);
   if (!test) {
@@ -39,11 +59,39 @@ export const createRadiologyReport = async (data, currentUser, requestMeta) => {
     patientId: test.patientId,
     radiologistId: currentUser.id,
     findings,
+    technique,
     impression,
+    recommendations,
+    additionalNotes,
+    technicianName,
+    checkedByName,
+    studyReviewed,
+    clinicalIndication,
+    relevantHistory,
+    examinationTechnique,
+    bodyPart,
+    views,
+    contrast,
+    imageQuality,
     images,
     reportFile,
-    status: "draft",
+    status,
   });
+
+  // If created directly in finalized status, mark RadiologyTest as completed & send notification
+  if (status === "finalized") {
+    await RadiologyTest.findByIdAndUpdate(test._id, { status: "completed" });
+    const doctor = await Doctor.findById(test.doctorId);
+    if (doctor) {
+      await createNotification({
+        userId: doctor.userId,
+        type: "lab_result",
+        title: "Radiology Report Ready",
+        message: `Radiology report for "${test.testType}" is now available`,
+        metadata: { testId: test._id, reportId: report._id },
+      });
+    }
+  }
 
   await createAuditLog({
     userId: currentUser.id,
@@ -64,8 +112,9 @@ export const finalizeRadiologyReport = async (id, currentUser, requestMeta) => {
     throw new AppError("Radiology report not found", 404, ErrorCodes.NOT_FOUND);
   }
 
+  // Idempotent check: if already finalized, return report gracefully
   if (report.status === "finalized") {
-    throw new AppError("Report is already finalized", 400, ErrorCodes.VALIDATION_ERROR);
+    return report;
   }
 
   const oldValue = report.toObject();
@@ -90,15 +139,17 @@ export const finalizeRadiologyReport = async (id, currentUser, requestMeta) => {
   });
 
   // ---------------- NOTIFICATION ----------------
-  const doctor = await Doctor.findById(test.doctorId);
-  if (doctor) {
-    await createNotification({
-      userId: doctor.userId,
-      type: "lab_result",
-      title: "Radiology Report Ready",
-      message: `Radiology report for "${test.testType}" is now available`,
-      metadata: { testId: test._id, reportId: report._id },
-    });
+  if (test) {
+    const doctor = await Doctor.findById(test.doctorId);
+    if (doctor) {
+      await createNotification({
+        userId: doctor.userId,
+        type: "lab_result",
+        title: "Radiology Report Ready",
+        message: `Radiology report for "${test.testType}" is now available`,
+        metadata: { testId: test._id, reportId: report._id },
+      });
+    }
   }
 
   return report;
@@ -127,12 +178,32 @@ export const updateRadiologyReport = async (id, data, currentUser, requestMeta) 
   }
 
   const oldValue = report.toObject();
-  const { findings, impression, images, reportFile } = data;
+  const allowedFields = [
+    "findings",
+    "technique",
+    "impression",
+    "recommendations",
+    "additionalNotes",
+    "technicianName",
+    "checkedByName",
+    "studyReviewed",
+    "clinicalIndication",
+    "relevantHistory",
+    "examinationTechnique",
+    "bodyPart",
+    "views",
+    "contrast",
+    "imageQuality",
+    "images",
+    "reportFile",
+    "status",
+  ];
 
-  if (findings !== undefined) report.findings = findings;
-  if (impression !== undefined) report.impression = impression;
-  if (images !== undefined) report.images = images;
-  if (reportFile !== undefined) report.reportFile = reportFile;
+  allowedFields.forEach((field) => {
+    if (data[field] !== undefined) {
+      report[field] = data[field];
+    }
+  });
 
   await report.save();
 

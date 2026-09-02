@@ -1,3 +1,4 @@
+import React, { useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { Plus, Headset, ChevronDown } from "lucide-react";
 import { navigationItems } from "../../config/navigation.js";
@@ -39,6 +40,20 @@ export default function Sidebar() {
   const location = useLocation();
   const { hasPermission } = usePermission();
 
+  // Keep track of which submenus are expanded
+  const [openSubMenus, setOpenSubMenus] = useState({
+    "/pharmacy": true,
+  });
+
+  const toggleSubMenu = (path, e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setOpenSubMenus((prev) => ({
+      ...prev,
+      [path]: !prev[path],
+    }));
+  };
+
   const visibleItemsMap = new Map(
     navigationItems
       .filter((item) => !item.permission || hasPermission(item.permission))
@@ -76,56 +91,107 @@ export default function Sidebar() {
               <p className="px-3 text-[10px] font-extrabold uppercase tracking-wider text-slate-400 mb-1.5">
                 {section.title}
               </p>
-              {sectionItems.map((item) => (
-                <NavLink
-                  key={item.path}
-                  to={item.path}
-                  end={item.path === "/"}
-                  className={({ isActive }) => {
-                    const isCustomActive =
-                      isActive || (item.path === "/" && location.pathname === "/dashboard");
-                    return `group relative flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-medium transition-all duration-150 ${
-                      isCustomActive
-                        ? "bg-blue-600 text-white shadow-sm shadow-blue-500/25 font-semibold"
-                        : "text-slate-600 hover:bg-slate-100/80 hover:text-slate-900"
-                    }`;
-                  }}
-                >
-                  {({ isActive }) => {
-                    const isCustomActive =
-                      isActive || (item.path === "/" && location.pathname === "/dashboard");
-                    return (
-                      <>
-                        <div className="flex items-center gap-3 min-w-0">
-                          <item.icon
-                            className={`w-4 h-4 shrink-0 transition-colors ${
-                              isCustomActive
-                                ? "text-white"
-                                : "text-slate-400 group-hover:text-slate-700"
-                            }`}
-                          />
-                          <span className="truncate">{item.label}</span>
-                        </div>
+              {sectionItems.map((item) => {
+                const isParentActive =
+                  location.pathname === item.path ||
+                  (item.path !== "/" && location.pathname.startsWith(item.path));
+                const isSubMenuOpen = openSubMenus[item.path] ?? isParentActive;
 
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          {item.hasSub && (
-                            <ChevronDown
-                              className={`w-3.5 h-3.5 ${
-                                isCustomActive ? "text-white/80" : "text-slate-400"
+                return (
+                  <div key={item.path} className="space-y-1">
+                    <NavLink
+                      to={item.path}
+                      end={item.path === "/"}
+                      className={({ isActive }) => {
+                        const isCustomActive =
+                          isActive || (item.path === "/" && location.pathname === "/dashboard");
+                        return `group relative flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-medium transition-all duration-150 ${
+                          isCustomActive
+                            ? "bg-blue-600 text-white shadow-sm shadow-blue-500/25 font-semibold"
+                            : isParentActive
+                            ? "bg-blue-50 text-blue-600 font-semibold"
+                            : "text-slate-600 hover:bg-slate-100/80 hover:text-slate-900"
+                        }`;
+                      }}
+                    >
+                      {({ isActive }) => {
+                        const isCustomActive =
+                          isActive || (item.path === "/" && location.pathname === "/dashboard");
+                        return (
+                          <>
+                            <div className="flex items-center gap-3 min-w-0">
+                              <item.icon
+                                className={`w-4 h-4 shrink-0 transition-colors ${
+                                  isCustomActive
+                                    ? "text-white"
+                                    : isParentActive
+                                    ? "text-blue-600"
+                                    : "text-slate-400 group-hover:text-slate-700"
+                                }`}
+                              />
+                              <span className="truncate">{item.label}</span>
+                            </div>
+
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              {item.hasSub && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => toggleSubMenu(item.path, e)}
+                                  className="p-0.5 hover:bg-black/5 rounded transition-colors"
+                                >
+                                  <ChevronDown
+                                    className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                                      isSubMenuOpen ? "rotate-180" : ""
+                                    } ${isCustomActive ? "text-white/90" : "text-slate-400"}`}
+                                  />
+                                </button>
+                              )}
+                              {item.badge && (
+                                <span className="px-2 py-0.5 text-[11px] font-bold rounded-full bg-rose-500 text-white shadow-xs">
+                                  {item.badge}
+                                </span>
+                              )}
+                            </div>
+                          </>
+                        );
+                      }}
+                    </NavLink>
+
+                    {/* Sub-items rendering */}
+                    {item.hasSub && item.subItems && isSubMenuOpen && (
+                      <div className="pl-6 space-y-1 pt-0.5">
+                        {item.subItems.map((sub) => {
+                          const SubIcon = sub.icon;
+                          const isSubActive =
+                            sub.path === "/pharmacy"
+                              ? location.pathname === "/pharmacy" || location.pathname === "/pharmacy/overview"
+                              : location.pathname.startsWith(sub.path);
+
+                          return (
+                            <NavLink
+                              key={sub.path}
+                              to={sub.path}
+                              end={sub.path === "/pharmacy"}
+                              className={`flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-[11.5px] font-medium transition-all duration-150 ${
+                                isSubActive
+                                  ? "bg-blue-50 text-blue-600 font-semibold"
+                                  : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
                               }`}
-                            />
-                          )}
-                          {item.badge && (
-                            <span className="px-2 py-0.5 text-[11px] font-bold rounded-full bg-rose-500 text-white shadow-xs">
-                              {item.badge}
-                            </span>
-                          )}
-                        </div>
-                      </>
-                    );
-                  }}
-                </NavLink>
-              ))}
+                            >
+                              <SubIcon
+                                className={`w-3.5 h-3.5 shrink-0 ${
+                                  isSubActive ? "text-blue-600" : "text-slate-400"
+                                }`}
+                              />
+                              <span>{sub.label}</span>
+                            </NavLink>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           );
         })}

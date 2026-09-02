@@ -11,7 +11,12 @@ export const createRoleSchema = z.object({
       .max(50, "Role name cannot exceed 50 characters")
       .toUpperCase(),
 
+    roleCode: z.string().trim().optional(),
+    roleType: z.enum(["System", "Custom"]).optional(),
+    status: z.enum(["active", "inactive"]).optional(),
     description: z.string().trim().max(255, "Description cannot exceed 255 characters").optional(),
+    parentRole: z.string().optional(),
+    maxUsers: z.number().nullable().optional(),
 
     permissionIds: z
       .array(
@@ -19,6 +24,15 @@ export const createRoleSchema = z.object({
         { invalid_type_error: "permissionIds must be an array of IDs" }
       )
       .optional(),
+
+    modulePermissions: z.record(z.string()).optional(),
+    actionPermissions: z.record(z.object({
+      create: z.boolean().optional(),
+      read: z.boolean().optional(),
+      update: z.boolean().optional(),
+      delete: z.boolean().optional(),
+      manage: z.boolean().optional(),
+    })).optional(),
   }),
 });
 
@@ -29,10 +43,22 @@ export const updateRolePermissionsSchema = z.object({
       .regex(objectIdRegex, "Invalid Role ObjectId format"),
   }),
   body: z.object({
-    permissionIds: z.array(
-      z.string().regex(objectIdRegex, "Invalid permission ObjectId format"),
-      { required_error: "permissionIds array is required" }
-    ),
+    name: z.string().optional(),
+    roleCode: z.string().optional(),
+    roleType: z.enum(["System", "Custom"]).optional(),
+    status: z.enum(["active", "inactive"]).optional(),
+    description: z.string().optional(),
+    parentRole: z.string().optional(),
+    maxUsers: z.number().nullable().optional(),
+    permissionIds: z.array(z.string()).optional(),
+    modulePermissions: z.record(z.string()).optional(),
+    actionPermissions: z.record(z.object({
+      create: z.boolean().optional(),
+      read: z.boolean().optional(),
+      update: z.boolean().optional(),
+      delete: z.boolean().optional(),
+      manage: z.boolean().optional(),
+    })).optional(),
   }),
 });
 

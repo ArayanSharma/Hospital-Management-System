@@ -5,19 +5,15 @@ import { useDebounce } from "./useDebounce.js";
 export const usePatientSearch = (searchTerm) => {
   const [patients, setPatients] = useState([]);
   const [loading, setLoading] = useState(false);
-  const debouncedSearch = useDebounce(searchTerm, 400);
+  const debouncedSearch = useDebounce(searchTerm, 300);
 
   useEffect(() => {
-    if (!debouncedSearch || debouncedSearch.length < 2) {
-      setPatients([]);
-      return;
-    }
-
-    const fetch = async () => {
+    const fetchPatients = async () => {
       setLoading(true);
       try {
-        const { data } = await getPatientsApi({ search: debouncedSearch, limit: 10 });
-        setPatients(data.data?.patients || []);
+        const { data } = await getPatientsApi({ search: debouncedSearch || "", limit: 15 });
+        const fetched = data?.data?.patients || data?.patients || [];
+        setPatients(fetched);
       } catch (err) {
         console.error("Failed to search patients:", err);
         setPatients([]);
@@ -25,7 +21,8 @@ export const usePatientSearch = (searchTerm) => {
         setLoading(false);
       }
     };
-    fetch();
+
+    fetchPatients();
   }, [debouncedSearch]);
 
   return { patients, loading };

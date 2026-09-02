@@ -6,7 +6,20 @@ const invoiceItemSchema = new mongoose.Schema(
       type: String,
       required: true,
       trim: true,
-      // Example: "Consultation Fee - Dr. Sharma", "CBC Test", "Paracetamol x10"
+    },
+    code: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    sourceReference: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    department: {
+      type: String,
+      default: "Other",
     },
     sourceType: {
       type: String,
@@ -16,7 +29,6 @@ const invoiceItemSchema = new mongoose.Schema(
     sourceId: {
       type: mongoose.Schema.Types.ObjectId,
       default: null,
-      // Reference to Appointment/LabTest/PharmacySale/Admission etc.
     },
     quantity: {
       type: Number,
@@ -26,6 +38,16 @@ const invoiceItemSchema = new mongoose.Schema(
     unitPrice: {
       type: Number,
       required: true,
+      min: 0,
+    },
+    discount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    taxPercent: {
+      type: Number,
+      default: 12,
       min: 0,
     },
     amount: {
@@ -44,12 +66,47 @@ const invoiceSchema = new mongoose.Schema(
       required: true,
       unique: true,
       trim: true,
-      // Example: "INV-0001"
     },
     patientId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Patient",
       required: true,
+    },
+    patientName: {
+      type: String,
+      trim: true,
+    },
+    patientPhone: {
+      type: String,
+      trim: true,
+    },
+    uhid: {
+      type: String,
+      trim: true,
+    },
+    visitEncounter: {
+      type: String,
+      trim: true,
+      default: "VIS-2026-04568",
+    },
+    visitType: {
+      type: String,
+      trim: true,
+      default: "OPD",
+    },
+    referredBy: {
+      type: String,
+      trim: true,
+      default: "Dr. Vikram Patel",
+    },
+    paymentTerms: {
+      type: String,
+      enum: ["Immediate", "7 Days", "15 Days", "30 Days", "Custom"],
+      default: "Immediate",
+    },
+    departments: {
+      type: [String],
+      default: ["OPD"],
     },
     items: {
       type: [invoiceItemSchema],
@@ -68,6 +125,20 @@ const invoiceSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
+    taxableAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    gstAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    roundOff: {
+      type: Number,
+      default: 0,
+    },
     tax: {
       type: Number,
       default: 0,
@@ -82,12 +153,21 @@ const invoiceSchema = new mongoose.Schema(
       type: Number,
       default: 0,
       min: 0,
-      // Payments module se update hota hai
+    },
+    dueAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
     },
     status: {
       type: String,
       enum: ["unpaid", "partially-paid", "paid", "cancelled"],
       default: "unpaid",
+    },
+    notes: {
+      type: String,
+      trim: true,
+      default: "",
     },
     dueDate: {
       type: Date,
@@ -99,6 +179,7 @@ const invoiceSchema = new mongoose.Schema(
 
 invoiceSchema.index({ patientId: 1, createdAt: -1 });
 invoiceSchema.index({ status: 1 });
+invoiceSchema.index({ invoiceNumber: 1 });
 
 const Invoice = mongoose.model("Invoice", invoiceSchema);
 

@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { create, getAll, getById, updatePermissions, remove } from "./role.controller.js";
+import { create, getAll, getById, update, updatePermissions, remove } from "./role.controller.js";
 import { authenticate } from "../../middleware/auth.middleware.js";
 import { checkPermission } from "../../middleware/permission.middleware.js";
 import { validate } from "../../middleware/validation.middleware.js";
@@ -25,6 +25,13 @@ router.get(
   checkPermission("role:read"),
   validate(roleIdParamSchema),
   getById
+);
+router.patch(
+  "/:id",
+  authenticate,
+  checkPermission("role:update"),
+  validate(updateRolePermissionsSchema),
+  update
 );
 router.patch(
   "/:id/permissions",

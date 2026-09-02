@@ -2,6 +2,11 @@ import mongoose from "mongoose";
 
 const paymentSchema = new mongoose.Schema(
   {
+    receiptNumber: {
+      type: String,
+      unique: true,
+      trim: true,
+    },
     invoiceId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Invoice",
@@ -20,13 +25,17 @@ const paymentSchema = new mongoose.Schema(
     method: {
       type: String,
       required: [true, "Payment method is required"],
-      enum: ["cash", "card", "upi", "net-banking", "insurance"],
+      enum: ["cash", "card", "upi", "net-banking", "cheque", "bank-transfer", "insurance", "other"],
     },
     transactionId: {
       type: String,
       trim: true,
       default: null,
-      // Digital payments ke liye reference number
+    },
+    notes: {
+      type: String,
+      trim: true,
+      default: "",
     },
     status: {
       type: String,
@@ -48,6 +57,7 @@ const paymentSchema = new mongoose.Schema(
 
 paymentSchema.index({ invoiceId: 1 });
 paymentSchema.index({ patientId: 1, createdAt: -1 });
+paymentSchema.index({ receiptNumber: 1 });
 
 const Payment = mongoose.model("Payment", paymentSchema);
 

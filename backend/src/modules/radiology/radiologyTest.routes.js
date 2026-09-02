@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { create, getAll, getById, updateStatus } from "./radiologyTest.controller.js";
+import { create, getAll, getById, updateStatus, remove } from "./radiologyTest.controller.js";
 import { authenticate } from "../../middleware/auth.middleware.js";
 import { checkPermission } from "../../middleware/permission.middleware.js";
 import { validate } from "../../middleware/validation.middleware.js";
@@ -23,5 +23,6 @@ router.patch(
   validate(updateRadiologyTestStatusSchema),
   updateStatus
 );
+router.delete("/:id", authenticate, checkPermission("radiology_test:delete"), remove);
 
 export default router;

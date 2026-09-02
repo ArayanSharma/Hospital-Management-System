@@ -1,4 +1,4 @@
-import { createBrowserRouter } from "react-router-dom";
+import { createBrowserRouter, Navigate } from "react-router-dom";
 import Login from "../features/auth/pages/Login.jsx";
 import ProtectedRoute from "./ProtectedRoute.jsx";
 import DashboardLayout from "../layouts/DashboardLayout.jsx";
@@ -18,6 +18,7 @@ import Settings from "../features/settings/pages/Settings.jsx";
 import DepartmentList from "../features/departments/pages/DepartmentList.jsx";
 import PermissionList from "../features/permissions/pages/PermissionList.jsx";
 import PharmacyLayout from "../features/pharmacy/pages/PharmacyLayout.jsx";
+import PharmacyDashboard from "../features/pharmacy/pages/PharmacyDashboard.jsx";
 import MedicineList from "../features/pharmacy/pages/MedicineList.jsx";
 import InventoryList from "../features/pharmacy/pages/InventoryList.jsx";
 import SaleList from "../features/pharmacy/pages/SaleList.jsx";
@@ -61,12 +62,13 @@ export const router = createBrowserRouter([
           { path: "users", element: <UserList /> },
           { path: "settings", element: <Settings /> },
           { path: "departments", element: <DepartmentList /> },
-          { path: "permissions", element: <PermissionList /> },
+          { path: "permissions", element: <Navigate to="/roles?tab=matrix" replace /> },
           {
             path: "pharmacy",
             element: <PharmacyLayout />,
             children: [
-              { index: true, element: <MedicineList /> },
+              { index: true, element: <PharmacyDashboard /> },
+              { path: "overview", element: <PharmacyDashboard /> },
               { path: "medicines", element: <MedicineList /> },
               { path: "inventory", element: <InventoryList /> },
               { path: "sales", element: <SaleList /> },

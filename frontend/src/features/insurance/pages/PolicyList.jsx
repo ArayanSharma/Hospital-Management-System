@@ -1,136 +1,152 @@
-import { useState, useEffect, useCallback } from "react";
-import { Plus, Shield, User } from "lucide-react";
-import { getPoliciesApi, createPolicyApi } from "../services/insurancePolicy.api.js";
-import PatientAutocomplete from "../../../components/common/PatientAutocomplete.jsx";
-import Badge from "../../../components/ui/Badge.jsx";
-import Button from "../../../components/ui/Button.jsx";
-import Modal from "../../../components/ui/Modal.jsx";
-import PolicyForm from "../components/PolicyForm.jsx";
-import Loading from "../../../components/common/Loading.jsx";
+import React from "react";
+import InsuranceHeader from "../components/InsuranceHeader.jsx";
+import PolicyTable from "../components/PolicyTable.jsx";
+import ClaimTable from "../components/ClaimTable.jsx";
+import InsuranceSidebarWidgets from "../components/InsuranceSidebarWidgets.jsx";
+
+import AddPolicyModal from "../components/modals/AddPolicyModal.jsx";
+import PolicyDetailsModal from "../components/modals/PolicyDetailsModal.jsx";
+import SubmitClaimModal from "../components/modals/SubmitClaimModal.jsx";
+import ClaimDetailsModal from "../components/modals/ClaimDetailsModal.jsx";
+
+import { useInsurance } from "../hooks/useInsurance.js";
 
 export default function PolicyList() {
-  const [selectedPatientId, setSelectedPatientId] = useState("");
-  const [policies, setPolicies] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [modalOpen, setModalOpen] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+  const {
+    activeTab,
+    setActiveTab,
 
-  const fetchPolicies = useCallback(async (patientId) => {
-    setLoading(true);
-    try {
-      const params = patientId ? { patientId } : {};
-      const { data } = await getPoliciesApi(params);
-      setPolicies(data.data || []);
-    } catch (err) {
-      console.error(err);
-      setPolicies([]);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+    policies,
+    policyStatusFilter,
+    setPolicyStatusFilter,
+    policySearch,
+    setPolicySearch,
+    policiesLoading,
 
-  useEffect(() => {
-    fetchPolicies(selectedPatientId);
-  }, [selectedPatientId, fetchPolicies]);
+    claims,
+    claimStatusFilter,
+    setClaimStatusFilter,
+    claimSearch,
+    setClaimSearch,
+    claimsLoading,
 
-  const handleCreate = async (formData) => {
-    setSubmitting(true);
-    try {
-      await createPolicyApi(formData);
-      setModalOpen(false);
-      setSelectedPatientId(formData.patientId);
-      fetchPolicies(formData.patientId);
-    } catch (err) {
-      alert(err.response?.data?.message || "Something went wrong");
-    } finally {
-      setSubmitting(false);
-    }
-  };
+    addPolicyOpen,
+    setAddPolicyOpen,
+    selectedPolicy,
+    setSelectedPolicy,
+    policyDetailsOpen,
+    setPolicyDetailsOpen,
 
-  const statusColors = { active: "completed", expired: "cancelled", inactive: "pending" };
+    submitClaimOpen,
+    setSubmitClaimOpen,
+    selectedClaim,
+    setSelectedClaim,
+    claimDetailsOpen,
+    setClaimDetailsOpen,
+
+    handleAddPolicySubmit,
+    handleDeactivatePolicy,
+    handleSubmitClaimSubmit,
+    handleUpdateClaimStatus,
+  } = useInsurance();
+
+  const isPoliciesTab = activeTab.toLowerCase().includes("polic") || activeTab === "all";
+  const isClaimsTab = activeTab.toLowerCase().includes("claim");
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-gray-900">Insurance Policies</h1>
-          <p className="text-sm text-gray-500">View all policies or filter by patient</p>
+    <div className="space-y-6 min-h-screen flex flex-col justify-between">
+      <div className="space-y-5">
+        {/* Top Header Title & Navigation Tabs */}
+        <InsuranceHeader activeTab={activeTab} onTabChange={setActiveTab} />
+
+        {/* 2-Column Split Layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+          {/* LEFT MAIN COLUMN: Active Tab Table */}
+          <div className="lg:col-span-8 space-y-5">
+            {/* Show Policy Table ONLY when Insurance Policies tab is active */}
+            {isPoliciesTab && (
+              <PolicyTable
+                policies={policies}
+                statusFilter={policyStatusFilter}
+                onStatusFilterChange={setPolicyStatusFilter}
+                searchQuery={policySearch}
+                onSearchChange={setPolicySearch}
+                onOpenAddPolicy={() => setAddPolicyOpen(true)}
+                onViewPolicy={(pol) => {
+                  setSelectedPolicy(pol);
+                  setPolicyDetailsOpen(true);
+                }}
+                onEditPolicy={(pol) => {
+                  setSelectedPolicy(pol);
+                  setAddPolicyOpen(true);
+                }}
+                onDeletePolicy={handleDeactivatePolicy}
+                loading={policiesLoading}
+              />
+            )}
+
+            {/* Show Claim Table ONLY when Insurance Claims tab is active */}
+            {isClaimsTab && (
+              <ClaimTable
+                claims={claims}
+                statusFilter={claimStatusFilter}
+                onStatusFilterChange={setClaimStatusFilter}
+                searchQuery={claimSearch}
+                onSearchChange={setClaimSearch}
+                onOpenSubmitClaim={() => setSubmitClaimOpen(true)}
+                onViewClaim={(clm) => {
+                  setSelectedClaim(clm);
+                  setClaimDetailsOpen(true);
+                }}
+                onUpdateStatus={handleUpdateClaimStatus}
+                loading={claimsLoading}
+              />
+            )}
+          </div>
+
+          {/* RIGHT SIDEBAR COLUMN: Widgets */}
+          <div className="lg:col-span-4">
+            <InsuranceSidebarWidgets
+              onOpenAddPolicy={() => setAddPolicyOpen(true)}
+              onOpenSubmitClaim={() => setSubmitClaimOpen(true)}
+              onOpenUploadDoc={() => alert("Select a claim or policy to upload documents.")}
+              onOpenReport={() => alert("Insurance Analytics Report generated.")}
+            />
+          </div>
         </div>
-        <Button onClick={() => setModalOpen(true)}>
-          <span className="flex items-center gap-1.5"><Plus className="w-4 h-4" /> Add Policy</span>
-        </Button>
       </div>
 
-      <div className="flex items-center gap-3">
-        <div className="w-80">
-          <PatientAutocomplete
-            value={selectedPatientId}
-            onChange={(id) => setSelectedPatientId(id)}
-          />
-        </div>
-        {selectedPatientId && (
-          <button
-            onClick={() => setSelectedPatientId("")}
-            className="text-xs text-indigo-600 hover:text-indigo-800 font-medium cursor-pointer"
-          >
-            Clear Patient Filter
-          </button>
-        )}
+      {/* Modals */}
+      <AddPolicyModal
+        isOpen={addPolicyOpen}
+        onClose={() => setAddPolicyOpen(false)}
+        onSubmit={handleAddPolicySubmit}
+      />
+
+      <PolicyDetailsModal
+        isOpen={policyDetailsOpen}
+        onClose={() => setPolicyDetailsOpen(false)}
+        policy={selectedPolicy}
+      />
+
+      <SubmitClaimModal
+        isOpen={submitClaimOpen}
+        onClose={() => setSubmitClaimOpen(false)}
+        onSubmit={handleSubmitClaimSubmit}
+        policies={policies}
+      />
+
+      <ClaimDetailsModal
+        isOpen={claimDetailsOpen}
+        onClose={() => setClaimDetailsOpen(false)}
+        claim={selectedClaim}
+        onUpdateStatus={handleUpdateClaimStatus}
+      />
+
+      {/* Footer matching screenshot */}
+      <div className="pt-6 border-t border-slate-200/80 text-center text-xs text-slate-400 font-medium">
+        © 2025 CityCare Hospital Management System. All rights reserved.
       </div>
-
-      {loading && <Loading message="Loading insurance policies..." />}
-
-      {!loading && policies.length === 0 && (
-        <div className="text-center py-12 text-sm text-gray-400 border border-gray-200 rounded-lg bg-white">
-          {selectedPatientId ? "No policies found for this patient" : "No insurance policies found"}
-        </div>
-      )}
-
-      {!loading && policies.length > 0 && (
-        <div className="grid gap-3">
-          {policies.map((policy) => (
-            <div key={policy._id} className="bg-white border border-gray-200 rounded-xl p-5">
-              <div className="flex items-start justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-teal-50 flex items-center justify-center">
-                    <Shield className="w-5 h-5 text-teal-600" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-gray-900">{policy.providerName}</p>
-                    <p className="text-xs text-gray-500">
-                      Policy #{policy.policyNumber} · <span className="font-mono text-[10px] text-gray-400">ID: {policy._id}</span>
-                    </p>
-                    {policy.patientId && (
-                      <p className="text-xs text-indigo-600 font-medium mt-0.5 flex items-center gap-1">
-                        <User className="w-3 h-3" /> {policy.patientId.name}
-                      </p>
-                    )}
-                  </div>
-                </div>
-                <Badge status={statusColors[policy.status] || "pending"} label={policy.status} />
-              </div>
-              <div className="grid grid-cols-3 gap-4 mt-4 pt-4 border-t border-gray-100 text-sm">
-                <div>
-                  <p className="text-xs text-gray-400">Coverage</p>
-                  <p className="font-medium text-gray-900">₹{policy.coverageAmount?.toLocaleString()}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-400">Valid From</p>
-                  <p className="text-gray-700">{policy.validFrom ? new Date(policy.validFrom).toLocaleDateString() : "-"}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-400">Valid Until</p>
-                  <p className="text-gray-700">{policy.validUntil ? new Date(policy.validUntil).toLocaleDateString() : "-"}</p>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)} title="Add Insurance Policy">
-        <PolicyForm onSubmit={handleCreate} onCancel={() => setModalOpen(false)} submitting={submitting} />
-      </Modal>
     </div>
   );
 }

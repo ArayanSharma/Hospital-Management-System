@@ -2,6 +2,7 @@ import {
   createRole,
   getAllRoles,
   getRoleById,
+  updateRole,
   updateRolePermissions,
   deleteRole,
 } from "./role.service.js";
@@ -14,13 +15,18 @@ export const create = asyncHandler(async (req, res) => {
 });
 
 export const getAll = asyncHandler(async (req, res) => {
-  const roles = await getAllRoles();
+  const roles = await getAllRoles(req.query);
   return successResponse(res, 200, "Roles fetched successfully", roles);
 });
 
 export const getById = asyncHandler(async (req, res) => {
   const role = await getRoleById(req.params.id);
   return successResponse(res, 200, "Role fetched successfully", role);
+});
+
+export const update = asyncHandler(async (req, res) => {
+  const role = await updateRole(req.params.id, req.body);
+  return successResponse(res, 200, "Role updated successfully", role);
 });
 
 export const updatePermissions = asyncHandler(async (req, res) => {

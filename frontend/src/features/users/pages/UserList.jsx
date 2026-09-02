@@ -1,137 +1,410 @@
-import { useState, useEffect, useCallback } from "react";
-import { Plus } from "lucide-react";
-import { getUsersApi, createUserApi, updateUserApi, deleteUserApi } from "../services/user.api.js";
-import { useDebounce } from "../../../hooks/useDebounce.js";
-import Table from "../../../components/ui/Table.jsx";
-import Pagination from "../../../components/ui/Pagination.jsx";
-import SearchInput from "../../../components/common/SearchInput.jsx";
-import Badge from "../../../components/ui/Badge.jsx";
-import Button from "../../../components/ui/Button.jsx";
-import Modal from "../../../components/ui/Modal.jsx";
-import UserForm from "../components/UserForm.jsx";
-import Loading from "../../../components/common/Loading.jsx";
-import ErrorState from "../../../components/common/ErrorState.jsx";
+import React, { useState, useRef, useEffect } from "react";
+import { Plus, Search, RotateCcw, SlidersHorizontal, Shield, FileText, Lock, RefreshCw, ChevronDown, Check } from "lucide-react";
+import { useUserManagement } from "../hooks/useUserManagement.js";
+import { USER_ROLES, USER_STATUSES, USER_DEPARTMENTS } from "../constants/user.constants.js";
+import UserTable from "../components/UserTable.jsx";
+import UserSidebarWidgets from "../components/UserSidebarWidgets.jsx";
+import AddUserModal from "../components/modals/AddUserModal.jsx";
 
-export default function UserList() {
-  const [users, setUsers] = useState([]);
-  const [pagination, setPagination] = useState({});
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [page, setPage] = useState(1);
-  const [search, setSearch] = useState("");
-  const debouncedSearch = useDebounce(search, 400);
+// Custom UI Dropdown with smooth Chevron 180deg rotation & opening animation
+function CustomFilterDropdown({ value, options, onChange, minWidth = "140px" }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const ref = useRef(null);
 
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editingUser, setEditingUser] = useState(null);
-  const [submitting, setSubmitting] = useState(false);
-
-  const fetchUsers = useCallback(async () => {
-    setLoading(true);
-    try {
-      const { data } = await getUsersApi({ page, limit: 10, search: debouncedSearch || undefined });
-      setUsers(data.data.users);
-      setPagination(data.data.pagination);
-    } catch (err) {
-      setError(err.response?.data?.message || "Failed to load users");
-    } finally {
-      setLoading(false);
-    }
-  }, [page, debouncedSearch]);
-
-  useEffect(() => { fetchUsers(); }, [fetchUsers]);
-  useEffect(() => { setPage(1); }, [debouncedSearch]);
-
-  const openCreateModal = () => {
-    setEditingUser(null);
-    setModalOpen(true);
-  };
-
-  const openEditModal = (user) => {
-    setEditingUser({
-      _id: user._id,
-      name: user.name,
-      roleId: user.roleId?._id,
-      status: user.status,
-    });
-    setModalOpen(true);
-  };
-
-  const handleSubmit = async (formData) => {
-    setSubmitting(true);
-    try {
-      if (editingUser) {
-        const { _id, ...updateData } = formData;
-        await updateUserApi(editingUser._id, updateData);
-      } else {
-        await createUserApi(formData);
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) {
+        setIsOpen(false);
       }
-      setModalOpen(false);
-      fetchUsers();
-    } catch (err) {
-      alert(err.response?.data?.message || "Something went wrong");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleDelete = async (user) => {
-    if (!confirm(`Deactivate ${user.name}?`)) return;
-    try {
-      await deleteUserApi(user._id);
-      fetchUsers();
-    } catch (err) {
-      alert(err.response?.data?.message || "Failed to delete user");
-    }
-  };
-
-  const columns = [
-    { key: "name", label: "Name" },
-    { key: "email", label: "Email" },
-    { key: "role", label: "Role", render: (row) => row.roleId?.name || "—" },
-    { key: "status", label: "Status", render: (row) => <Badge status={row.status} /> },
-    {
-      key: "actions", label: "",
-      render: (row) => (
-        <div className="flex gap-2">
-          <button onClick={() => openEditModal(row)} className="text-sm text-blue-600 hover:underline">Edit</button>
-          <button onClick={() => handleDelete(row)} className="text-sm text-red-600 hover:underline">Deactivate</button>
-        </div>
-      ),
-    },
-  ];
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-gray-900">Users</h1>
-          <p className="text-sm text-gray-500">Manage staff accounts</p>
-        </div>
-        <Button onClick={openCreateModal}>
-          <span className="flex items-center gap-1.5"><Plus className="w-4 h-4" /> Add User</span>
-        </Button>
-      </div>
-
-      <div className="w-72">
-        <SearchInput value={search} onChange={setSearch} placeholder="Search by name or email..." />
-      </div>
-
-      {loading ? <Loading /> : error ? <ErrorState message={error} /> : (
-        <>
-          <Table columns={columns} data={users} emptyMessage="No users found" />
-          <Pagination {...pagination} page={page} onPageChange={setPage} />
-        </>
-      )}
-
-      <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)} title={editingUser ? "Edit User" : "Add User"}>
-        <UserForm
-          defaultValues={editingUser}
-          isEdit={!!editingUser}
-          onSubmit={handleSubmit}
-          onCancel={() => setModalOpen(false)}
-          submitting={submitting}
+    <div className="relative inline-block text-left" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        style={{ minWidth }}
+        className={`flex items-center justify-between gap-2 px-3 py-1.5 bg-slate-50 hover:bg-slate-100/90 border rounded-xl text-xs font-bold text-slate-700 transition-all duration-200 cursor-pointer shadow-2xs ${
+          isOpen ? "border-blue-500 ring-2 ring-blue-500/10 bg-white" : "border-slate-200/90"
+        }`}
+      >
+        <span className="truncate">{value}</span>
+        <ChevronDown
+          className={`w-3.5 h-3.5 shrink-0 transition-transform duration-200 ease-in-out ${
+            isOpen ? "rotate-180 text-blue-600" : "rotate-0 text-slate-400"
+          }`}
         />
-      </Modal>
+      </button>
+
+      {isOpen && (
+        <div className="absolute left-0 mt-1.5 w-full min-w-[150px] bg-white border border-slate-200/90 rounded-xl shadow-xl z-40 p-1 text-xs space-y-0.5 animate-in fade-in zoom-in-95 duration-150 ease-out origin-top-left">
+          {options.map((opt) => {
+            const isSelected = value === opt;
+            return (
+              <button
+                key={opt}
+                type="button"
+                onClick={() => {
+                  onChange(opt);
+                  setIsOpen(false);
+                }}
+                className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-left font-bold transition-colors duration-150 cursor-pointer ${
+                  isSelected
+                    ? "bg-blue-50 text-blue-700"
+                    : "text-slate-700 hover:bg-slate-50 hover:text-slate-900"
+                }`}
+              >
+                <span className="truncate">{opt}</span>
+                {isSelected && <Check className="w-3.5 h-3.5 text-blue-600 shrink-0" />}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function UserList() {
+  const {
+    users,
+    pagination,
+    counts,
+    roleDistribution,
+    loading,
+    error,
+    page,
+    setPage,
+
+    activeTab,
+    handleTabChange,
+
+    roleFilter,
+    setRoleFilter,
+    statusFilter,
+    setStatusFilter,
+    departmentFilter,
+    setDepartmentFilter,
+    search,
+    setSearch,
+    handleResetFilters,
+
+    addUserOpen,
+    setAddUserOpen,
+    selectedUser,
+    setSelectedUser,
+
+    handleAddUserSubmit,
+    handleUpdateStatus,
+    handleDeleteUser,
+  } = useUserManagement();
+
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+
+  return (
+    <div className="space-y-6 min-h-screen flex flex-col justify-between">
+      <div className="space-y-5">
+        {/* Page Header Bar */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-xl font-bold text-slate-900 tracking-tight">User Management</h1>
+            <p className="text-xs text-slate-500 font-medium">
+              Manage hospital staff, users and their access permissions.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedUser(null);
+              setAddUserOpen(true);
+            }}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer self-start sm:self-auto"
+          >
+            <Plus className="w-4 h-4" />
+            <span>+ Add New User</span>
+          </button>
+        </div>
+
+        {/* Search + Filter Panel Box */}
+        <div className="bg-white border border-slate-200/90 rounded-2xl p-4 shadow-2xs space-y-3">
+          <div className="relative">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search users by name, email or phone..."
+              className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500"
+            />
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-2.5">
+              {/* All Roles Dropdown */}
+              <CustomFilterDropdown
+                value={roleFilter}
+                options={USER_ROLES}
+                onChange={setRoleFilter}
+                minWidth="140px"
+              />
+
+              {/* All Status Dropdown */}
+              <CustomFilterDropdown
+                value={statusFilter}
+                options={USER_STATUSES}
+                onChange={setStatusFilter}
+                minWidth="130px"
+              />
+
+              {/* All Departments Dropdown */}
+              <CustomFilterDropdown
+                value={departmentFilter}
+                options={USER_DEPARTMENTS}
+                onChange={setDepartmentFilter}
+                minWidth="160px"
+              />
+            </div>
+
+            <div className="flex items-center gap-2">
+              {/* Reset Button with smooth spin icon animation */}
+              <button
+                type="button"
+                onClick={() => {
+                  handleResetFilters();
+                  setShowAdvancedFilters(false);
+                }}
+                className="group flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-all duration-150 cursor-pointer shadow-2xs active:scale-95"
+                title="Reset all filters"
+              >
+                <RotateCcw className="w-3.5 h-3.5 text-slate-500 group-hover:-rotate-180 transition-transform duration-300 ease-out" />
+                <span>Reset</span>
+              </button>
+
+              {/* Filters Toggle Button with Active Badge */}
+              <button
+                type="button"
+                onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+                className={`group flex items-center gap-1.5 px-3 py-1.5 border font-bold text-xs rounded-xl transition-all duration-150 cursor-pointer shadow-2xs active:scale-95 ${
+                  showAdvancedFilters || (roleFilter !== "All Roles" || statusFilter !== "All Status" || departmentFilter !== "All Departments" || search)
+                    ? "bg-blue-600 border-blue-600 text-white shadow-blue-500/20"
+                    : "bg-blue-50 hover:bg-blue-100 border-blue-200 text-blue-700"
+                }`}
+              >
+                <SlidersHorizontal className={`w-3.5 h-3.5 transition-transform duration-200 ${showAdvancedFilters ? "rotate-90" : "group-hover:scale-110"}`} />
+                <span>Filters</span>
+                {(roleFilter !== "All Roles" || statusFilter !== "All Status" || departmentFilter !== "All Departments" || search) && (
+                  <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse ml-0.5"></span>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* Expandable Advanced Quick Filter Chips Bar */}
+          {showAdvancedFilters && (
+            <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center gap-2 animate-in fade-in slide-in-from-top-1 duration-200">
+              <span className="text-[11px] font-bold text-slate-500 mr-1">Active Filters:</span>
+              
+              {roleFilter !== "All Roles" && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                  Role: {roleFilter}
+                  <button type="button" onClick={() => setRoleFilter("All Roles")} className="hover:text-blue-900 font-black">×</button>
+                </span>
+              )}
+
+              {statusFilter !== "All Status" && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[11px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
+                  Status: {statusFilter}
+                  <button type="button" onClick={() => setStatusFilter("All Status")} className="hover:text-purple-900 font-black">×</button>
+                </span>
+              )}
+
+              {departmentFilter !== "All Departments" && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                  Dept: {departmentFilter}
+                  <button type="button" onClick={() => setDepartmentFilter("All Departments")} className="hover:text-amber-900 font-black">×</button>
+                </span>
+              )}
+
+              {search && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                  Search: "{search}"
+                  <button type="button" onClick={() => setSearch("")} className="hover:text-emerald-900 font-black">×</button>
+                </span>
+              )}
+
+              {roleFilter === "All Roles" && statusFilter === "All Status" && departmentFilter === "All Departments" && !search && (
+                <span className="text-[11px] text-slate-400 italic font-medium">No filters active. Use dropdowns above to filter users.</span>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* 2-Column Main Layout Split */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+          {/* LEFT COLUMN: Status Tabs + User Table */}
+          <div className="lg:col-span-8 space-y-4">
+            {/* 5 Status Tabs Bar */}
+            <div className="flex items-center gap-6 border-b border-slate-200/80 px-2 text-xs font-bold overflow-x-auto">
+              <button
+                type="button"
+                onClick={() => handleTabChange("all")}
+                className={`py-2.5 transition relative cursor-pointer ${
+                  activeTab === "all" ? "text-blue-600 font-black" : "text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                <span>All Users ({counts.total ?? 0})</span>
+                {activeTab === "all" && (
+                  <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 rounded-full"></span>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleTabChange("active")}
+                className={`py-2.5 transition relative cursor-pointer ${
+                  activeTab === "active" ? "text-blue-600 font-black" : "text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                <span>Active ({counts.active ?? 0})</span>
+                {activeTab === "active" && (
+                  <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 rounded-full"></span>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleTabChange("inactive")}
+                className={`py-2.5 transition relative cursor-pointer ${
+                  activeTab === "inactive" ? "text-blue-600 font-black" : "text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                <span>Inactive ({counts.inactive ?? 0})</span>
+                {activeTab === "inactive" && (
+                  <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 rounded-full"></span>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleTabChange("suspended")}
+                className={`py-2.5 transition relative cursor-pointer ${
+                  activeTab === "suspended" ? "text-blue-600 font-black" : "text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                <span>Suspended ({counts.suspended ?? 0})</span>
+                {activeTab === "suspended" && (
+                  <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 rounded-full"></span>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleTabChange("blocked")}
+                className={`py-2.5 transition relative cursor-pointer ${
+                  activeTab === "blocked" ? "text-blue-600 font-black" : "text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                <span>Blocked ({counts.blocked ?? 0})</span>
+                {activeTab === "blocked" && (
+                  <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 rounded-full"></span>
+                )}
+              </button>
+            </div>
+
+            {/* 8-Column User Table */}
+            <UserTable
+              users={users}
+              loading={loading}
+              pagination={pagination}
+              page={page}
+              onPageChange={setPage}
+              onViewUser={(u) => alert(`Viewing details for ${u.name}`)}
+              onEditUser={(u) => {
+                setSelectedUser(u);
+                setAddUserOpen(true);
+              }}
+              onUpdateStatus={handleUpdateStatus}
+              onDeleteUser={handleDeleteUser}
+            />
+
+            {/* Bottom Security Info Card */}
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 bg-white border border-slate-200/90 rounded-2xl p-4 shadow-2xs text-xs">
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 border border-blue-200">
+                  <Shield className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="font-extrabold text-slate-900">Secure Access</h4>
+                  <p className="text-[10px] text-slate-500 font-medium leading-tight">
+                    Role-based access control ensures data security
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 border border-blue-200">
+                  <FileText className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="font-extrabold text-slate-900">Audit Ready</h4>
+                  <p className="text-[10px] text-slate-500 font-medium leading-tight">
+                    All changes are logged in audit trail
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 border border-blue-200">
+                  <Lock className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="font-extrabold text-slate-900">Password Security</h4>
+                  <p className="text-[10px] text-slate-500 font-medium leading-tight">
+                    Strong password encryption keeps accounts safe
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 border border-blue-200">
+                  <RefreshCw className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="font-extrabold text-slate-900">Session Management</h4>
+                  <p className="text-[10px] text-slate-500 font-medium leading-tight">
+                    JWT based sessions with automatic timeout
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* RIGHT SIDEBAR COLUMN: 3 Widgets */}
+          <div className="lg:col-span-4">
+            <UserSidebarWidgets
+              counts={counts}
+              roleDistribution={roleDistribution}
+              users={users}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Modal Dialog */}
+      <AddUserModal
+        isOpen={addUserOpen}
+        onClose={() => setAddUserOpen(false)}
+        onSubmit={handleAddUserSubmit}
+        editingUser={selectedUser}
+      />
+
+      <div className="pt-6 border-t border-slate-200/80 text-center text-xs text-slate-400 font-medium">
+        © 2025 CityCare Hospital Management System. All rights reserved.
+      </div>
     </div>
   );
 }

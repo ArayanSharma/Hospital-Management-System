@@ -22,6 +22,8 @@ import supplierRoutes from "../modules/suppliers/supplier.routes.js";
 import inventoryItemRoutes from "../modules/inventory/inventoryItem.routes.js";
 import medicineRoutes from "../modules/pharmacy/medicine.routes.js";
 import pharmacySaleRoutes from "../modules/pharmacy/pharmacySale.routes.js";
+import pharmacyDashboardRoutes from "../modules/pharmacy/pharmacyDashboard.routes.js";
+import stockInRoutes from "../modules/pharmacy/stockIn.routes.js";
 
 import invoiceRoutes from "../modules/billing/invoice.routes.js";
 import paymentRoutes from "../modules/payments/payment.routes.js";
@@ -60,6 +62,10 @@ router.use("/suppliers", supplierRoutes);
 router.use("/inventory", inventoryItemRoutes);
 router.use("/medicines", medicineRoutes);
 router.use("/pharmacy-sales", pharmacySaleRoutes);
+router.use("/pharmacy/stock-in", stockInRoutes);
+router.use("/stock-in", stockInRoutes);
+router.use("/pharmacy", pharmacyDashboardRoutes);
+
 
 router.use("/invoices", invoiceRoutes);
 router.use("/payments", paymentRoutes);

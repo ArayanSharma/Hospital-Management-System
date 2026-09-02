@@ -3,6 +3,7 @@ import {
   getAllRadiologyTests,
   getRadiologyTestById,
   updateRadiologyTestStatus,
+  deleteRadiologyTest,
 } from "./radiologyTest.service.js";
 import { successResponse } from "../../core/responses/apiResponse.js";
 import { asyncHandler } from "../../utils/asyncHandler.js";
@@ -29,4 +30,10 @@ export const updateStatus = asyncHandler(async (req, res) => {
   const { status, scheduledAt } = req.body;
   const test = await updateRadiologyTestStatus(req.params.id, status, scheduledAt, req.user, meta);
   return successResponse(res, 200, "Radiology test status updated successfully", test);
+});
+
+export const remove = asyncHandler(async (req, res) => {
+  const meta = getRequestMeta(req);
+  await deleteRadiologyTest(req.params.id, req.user, meta);
+  return successResponse(res, 200, "Radiology test deleted successfully", null);
 });

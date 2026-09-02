@@ -1,90 +1,125 @@
-import { useState, useEffect, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
-import { Plus } from "lucide-react";
-import { getRadiologyTestsApi, createRadiologyTestApi } from "../services/radiologyTest.api.js";
-import Table from "../../../components/ui/Table.jsx";
-import Pagination from "../../../components/ui/Pagination.jsx";
-import Badge from "../../../components/ui/Badge.jsx";
-import Button from "../../../components/ui/Button.jsx";
-import Modal from "../../../components/ui/Modal.jsx";
-import RadiologyTestForm from "../components/RadiologyTestForm.jsx";
-import Loading from "../../../components/common/Loading.jsx";
-import ErrorState from "../../../components/common/ErrorState.jsx";
+import React, { useState } from "react";
+import { useRadiologyOrders } from "../hooks/useRadiologyOrders.js";
+import { calculateRadiologyStats } from "../helpers/radiologyCalculations.js";
+import RadiologyHeader from "../components/RadiologyHeader.jsx";
+import RadiologyStatCards from "../components/RadiologyStatCards.jsx";
+import RadiologyFiltersBar from "../components/RadiologyFiltersBar.jsx";
+import RadiologyOrderTabs from "../components/RadiologyOrderTabs.jsx";
+import RadiologyOrdersTable from "../components/RadiologyOrdersTable.jsx";
+import RadiologyModalityDistributionCard from "../components/RadiologyModalityDistributionCard.jsx";
+import RadiologyStatusWorkflowCard from "../components/RadiologyStatusWorkflowCard.jsx";
+import RadiologyTodayScheduleCard from "../components/RadiologyTodayScheduleCard.jsx";
+import RadiologyTestOrderModal from "../components/RadiologyTestOrderModal.jsx";
+import RadiologyReportSection from "../components/RadiologyReportSection.jsx";
 
 export default function RadiologyTestList() {
-  const navigate = useNavigate();
-  const [tests, setTests] = useState([]);
-  const [pagination, setPagination] = useState({});
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [page, setPage] = useState(1);
   const [modalOpen, setModalOpen] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
 
-  const fetchTests = useCallback(async () => {
-    setLoading(true);
-    try {
-      const { data } = await getRadiologyTestsApi({ page, limit: 10 });
-      setTests(data.data.tests || []);
-      setPagination(data.data.pagination || {});
-    } catch (err) {
-      setError(err.response?.data?.message || "Failed to load tests");
-    } finally {
-      setLoading(false);
-    }
-  }, [page]);
+  const {
+    orders,
+    filteredOrders,
+    stats,
+    loading,
+    selectedOrder,
+    setSelectedOrder,
+    fetchOrders,
+    updateOrderStatus,
+    deleteOrder,
+    filters,
+  } = useRadiologyOrders();
 
-  useEffect(() => { fetchTests(); }, [fetchTests]);
+  const dynamicCounts = calculateRadiologyStats(orders, stats);
 
-  const handleCreate = async (formData) => {
-    setSubmitting(true);
-    try {
-      const { data } = await createRadiologyTestApi(formData);
-      setModalOpen(false);
-      navigate(`/radiology/${data.data._id}`);
-    } catch (err) {
-      alert(err.response?.data?.message || "Something went wrong");
-    } finally {
-      setSubmitting(false);
+  const handleSelectOrder = (row) => {
+    setSelectedOrder(row);
+    const reportElem = document.getElementById("radiology-report-entry-section");
+    if (reportElem) {
+      reportElem.scrollIntoView({ behavior: "smooth" });
     }
   };
 
-  const statusMap = { pending: "pending", scheduled: "pending", completed: "completed", cancelled: "cancelled" };
-
-  const columns = [
-    { key: "patient", label: "Patient", render: (row) => row.patientId?.name },
-    { key: "test", label: "Test", render: (row) => `${row.testType} ${row.bodyPart ? `· ${row.bodyPart}` : ""}` },
-    { key: "status", label: "Status", render: (row) => <Badge status={statusMap[row.status]} label={row.status} /> },
-    {
-      key: "actions", label: "",
-      render: (row) => (
-        <button onClick={() => navigate(`/radiology/${row._id}`)} className="text-sm text-blue-600 hover:underline cursor-pointer">View</button>
-      ),
-    },
-  ];
-
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-gray-900">Radiology</h1>
-          <p className="text-sm text-gray-500">Imaging test orders and reports</p>
+      {/* 1. Page Title & Top Header Actions */}
+      <RadiologyHeader
+        onOrderTest={() => setModalOpen(true)}
+        onExport={() => alert("Exporting Radiology Orders list...")}
+      />
+
+      {/* 2. Dynamic Medical KPI Statistics Cards */}
+      <RadiologyStatCards orders={orders} backendStats={stats} />
+
+      {/* 3. Main Content 2-Column Split Layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+        {/* LEFT / CENTER: Search/Filters, Order Tabs, Main Radiology Orders Table */}
+        <div className="lg:col-span-8 xl:col-span-9 space-y-4">
+          {/* 4. Search and Filters Bar */}
+          <RadiologyFiltersBar
+            search={filters.search}
+            setSearch={filters.setSearch}
+            status={filters.status}
+            setStatus={filters.setStatus}
+            modality={filters.modality}
+            setModality={filters.setModality}
+            priority={filters.priority}
+            setPriority={filters.setPriority}
+            fromDate={filters.fromDate}
+            setFromDate={filters.setFromDate}
+            toDate={filters.toDate}
+            setToDate={filters.setToDate}
+          />
+
+          {/* 5 & 6. Order Status Tabs & Main Table */}
+          <div className="bg-white border border-slate-200/80 rounded-2xl shadow-2xs overflow-hidden">
+            <RadiologyOrderTabs
+              activeTab={filters.activeTab}
+              setActiveTab={filters.setActiveTab}
+              counts={dynamicCounts}
+            />
+
+            {loading ? (
+              <div className="p-12 text-center text-slate-500 font-medium text-xs">
+                Loading radiology orders from database...
+              </div>
+            ) : (
+              <RadiologyOrdersTable
+                orders={filteredOrders}
+                selectedOrder={selectedOrder}
+                onSelectOrder={handleSelectOrder}
+                onStatusChange={updateOrderStatus}
+                onDeleteOrder={deleteOrder}
+              />
+            )}
+          </div>
+
+          {/* 7. Enter Radiology Report 3-Column Section */}
+          <div id="radiology-report-entry-section">
+            <RadiologyReportSection
+              selectedOrder={selectedOrder}
+              onReportUpdated={fetchOrders}
+            />
+          </div>
         </div>
-        <Button onClick={() => setModalOpen(true)}>
-          <span className="flex items-center gap-1.5"><Plus className="w-4 h-4" /> Order Test</span>
-        </Button>
+
+        {/* RIGHT COLUMN: Modality Distribution, Status Workflow, Today's Schedule */}
+        <div className="lg:col-span-4 xl:col-span-3 space-y-4">
+          {/* 8. Dynamic Modality Distribution Donut Chart Card */}
+          <RadiologyModalityDistributionCard orders={orders} />
+
+          {/* 9. Status Workflow Visual Diagram Card */}
+          <RadiologyStatusWorkflowCard orders={orders} backendStats={stats} />
+
+          {/* 10. Dynamic Today's Schedule Card */}
+          <RadiologyTodayScheduleCard orders={orders} />
+        </div>
       </div>
 
-      {loading ? <Loading /> : error ? <ErrorState message={error} /> : (
-        <>
-          <Table columns={columns} data={tests} emptyMessage="No radiology tests found" />
-          <Pagination {...pagination} page={page} onPageChange={setPage} />
-        </>
-      )}
-
-      <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)} title="Order Radiology Test">
-        <RadiologyTestForm onSubmit={handleCreate} onCancel={() => setModalOpen(false)} submitting={submitting} />
-      </Modal>
+      {/* Order Radiology Test Slide-Over Drawer Modal */}
+      <RadiologyTestOrderModal
+        isOpen={modalOpen}
+        onClose={() => setModalOpen(false)}
+        onSuccess={fetchOrders}
+      />
     </div>
   );
 }

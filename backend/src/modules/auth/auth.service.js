@@ -1,4 +1,5 @@
 import User from "../users/user.model.js";
+import Role from "../roles/role.model.js";
 import AppError from "../../core/errors/AppError.js";
 import { ErrorCodes } from "../../core/errors/errorCodes.js";
 import {
@@ -18,7 +19,7 @@ const sanitizeUser = (user) => {
 export const registerUser = async (data) => {
   const { name, email, password, roleId, phone } = data;
 
-  const existingUser = await User.findOne({ email });
+  const existingUser = await User.findOne({ email: email.toLowerCase() });
   if (existingUser) {
     throw new AppError(
       "User with this email already exists",
@@ -27,12 +28,9 @@ export const registerUser = async (data) => {
     );
   }
 
-  // NOTE: password plain jaa raha hai — user.model.js ka pre-save hook
-  // isse automatically hash karega. Yahan bcrypt.hash() manually mat karna,
-  // warna double-hashing ho jayegi aur login kabhi match nahi karega.
   const user = await User.create({
     name,
-    email,
+    email: email.toLowerCase(),
     password,
     roleId,
     phone,
@@ -44,11 +42,11 @@ export const registerUser = async (data) => {
 
 // ---------------- LOGIN ----------------
 export const loginUser = async (email, password) => {
-  const user = await User.findOne({ email })
+  const user = await User.findOne({ email: email.toLowerCase() })
     .select("+password")
     .populate({
       path: "roleId",
-      select: "name permissionIds",
+      select: "name modulePermissions actionPermissions permissionIds",
       populate: { path: "permissionIds", select: "name" },
     });
 
@@ -60,15 +58,24 @@ export const loginUser = async (email, password) => {
     );
   }
 
+  // Account Status check
   if (user.status !== "active") {
     throw new AppError(
-      "Account is inactive. Contact admin.",
+      `Account is currently ${user.status}. Please contact administrator.`,
       403,
       ErrorCodes.AUTH_ACCOUNT_INACTIVE
     );
   }
 
-  // Model ka instance method use ho raha hai — manual bcrypt.compare nahi
+  // Login Access control check (Section 3: Status & Access)
+  if (user.loginAccess && user.loginAccess !== "Allowed") {
+    throw new AppError(
+      `Login access is ${user.loginAccess.toLowerCase()} for this account. Contact system administrator.`,
+      403,
+      ErrorCodes.AUTH_ACCOUNT_INACTIVE
+    );
+  }
+
   const isMatch = await user.isPasswordMatch(password);
   if (!isMatch) {
     throw new AppError(
@@ -78,19 +85,34 @@ export const loginUser = async (email, password) => {
     );
   }
 
-  const payload = { id: user._id, roleId: user.roleId?._id };
+  if (!user.roleId && user.roleName) {
+    const roleDoc = await Role.findOne({ name: user.roleName.toUpperCase() });
+    if (roleDoc) {
+      user.roleId = roleDoc;
+    }
+  }
+
+  const payload = { id: user._id, roleId: user.roleId?._id || user.roleId };
 
   const accessToken = generateAccessToken(payload);
   const refreshToken = generateRefreshToken(payload);
 
   user.refreshToken = refreshToken;
   user.lastLoginAt = new Date();
+  user.lastLoginFormatted =
+    new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) +
+    " \n " +
+    new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
   await user.save();
 
+  const sanitized = sanitizeUser(user);
+
   return {
-    user: sanitizeUser(user),
+    user: sanitized,
     accessToken,
     refreshToken,
+    mustChangePassword: user.forcePasswordChange || false,
   };
 };
 
@@ -156,12 +178,21 @@ export const logoutUser = async (userId) => {
 export const getCurrentUser = async (userId) => {
   const user = await User.findById(userId).populate({
     path: "roleId",
-    select: "name permissionIds",
+    select: "name modulePermissions actionPermissions permissionIds",
     populate: { path: "permissionIds", select: "name" },
   });
 
   if (!user) {
     throw new AppError("User not found", 404, ErrorCodes.USER_NOT_FOUND);
+  }
+
+  if (!user.roleId && user.roleName) {
+    const roleDoc = await Role.findOne({ name: user.roleName.toUpperCase() });
+    if (roleDoc) {
+      const userObj = user.toObject();
+      userObj.roleId = roleDoc;
+      return sanitizeUser(userObj);
+    }
   }
 
   return sanitizeUser(user);

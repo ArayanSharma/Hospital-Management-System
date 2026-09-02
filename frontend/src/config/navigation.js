@@ -12,6 +12,9 @@ import {
   FlaskConical,
   Scan,
   Pill,
+  Package,
+  ShoppingCart,
+  Truck,
   Receipt,
   History,
   FileBarChart,
@@ -25,7 +28,7 @@ export const navigationItems = [
   // Administration
   { label: "Users", path: "/users", icon: Users, permission: "user:read" },
   { label: "Roles", path: "/roles", icon: Shield, permission: "role:read" },
-  { label: "Permissions", path: "/permissions", icon: KeyRound, permission: "permission:read" },
+  { label: "Permissions", path: "/roles?tab=matrix", icon: KeyRound, permission: "permission:read" },
 
   // Hospital
   { label: "Patients", path: "/patients", icon: UserRound, permission: "patient:read" },
@@ -38,7 +41,20 @@ export const navigationItems = [
   { label: "Radiology", path: "/radiology", icon: Scan, permission: "radiology_test:read" },
 
   // Operations
-  { label: "Pharmacy", path: "/pharmacy", icon: Pill, permission: "medicine:read" },
+  {
+    label: "Pharmacy",
+    path: "/pharmacy",
+    icon: Pill,
+    permission: "medicine:read",
+    hasSub: true,
+    subItems: [
+      { label: "Overview", path: "/pharmacy", icon: LayoutDashboard },
+      { label: "Medicines", path: "/pharmacy/medicines", icon: Pill },
+      { label: "Inventory", path: "/pharmacy/inventory", icon: Package },
+      { label: "Sales", path: "/pharmacy/sales", icon: ShoppingCart },
+      { label: "Suppliers", path: "/pharmacy/suppliers", icon: Truck },
+    ],
+  },
   { label: "Billing", path: "/billing", icon: Receipt, permission: "invoice:read" },
   { label: "Insurance", path: "/insurance", icon: Shield, permission: "insurance:read" },
 
