@@ -142,6 +142,8 @@ export const getAllAppointments = async ({
   } else if (tab === "upcoming") {
     query.status = "scheduled";
     query.appointmentDate = { $gt: todayEnd };
+  } else if (tab === "checked_in") {
+    query.status = { $in: ["checked_in", "in_consultation"] };
   } else if (tab === "completed") {
     query.status = "completed";
   } else if (tab === "cancelled") {
@@ -154,7 +156,7 @@ export const getAllAppointments = async ({
 
   const skip = (page - 1) * limit;
 
-  const [appointments, total, todayCount, scheduledCount, completedCount, cancelledCount, noShowCount] = await Promise.all([
+  const [appointments, total, todayCount, scheduledCount, checkedInCount, completedCount, cancelledCount, noShowCount] = await Promise.all([
     Appointment.find(query)
       .populate("patientId", "name patientId phone email photoUrl")
       .populate({
@@ -169,6 +171,7 @@ export const getAllAppointments = async ({
     Appointment.countDocuments(query),
     Appointment.countDocuments({ appointmentDate: { $gte: todayStart, $lte: todayEnd } }),
     Appointment.countDocuments({ status: "scheduled" }),
+    Appointment.countDocuments({ status: { $in: ["checked_in", "in_consultation"] } }),
     Appointment.countDocuments({ status: "completed" }),
     Appointment.countDocuments({ status: "cancelled" }),
     Appointment.countDocuments({ status: "no-show" }),
@@ -190,6 +193,7 @@ export const getAllAppointments = async ({
       totalAppointments: total,
       todayCount,
       scheduledCount,
+      checkedInCount,
       completedCount,
       cancelledCount,
       noShowCount,
@@ -277,9 +281,9 @@ export const updateAppointment = async (id, data, currentUser, requestMeta) => {
   return appointment;
 };
 
-// ---------------- STATUS CHANGE (complete / cancel / no-show) ----------------
+// ---------------- STATUS CHANGE (complete / cancel / no-show / check-in) ----------------
 export const changeAppointmentStatus = async (id, newStatus, cancelledReason, currentUser, requestMeta) => {
-  const validStatuses = ["completed", "cancelled", "no-show", "scheduled"];
+  const validStatuses = ["scheduled", "checked_in", "in_consultation", "completed", "cancelled", "no-show"];
   if (!validStatuses.includes(newStatus)) {
     throw new AppError("Invalid status value", 400, ErrorCodes.VALIDATION_ERROR);
   }
@@ -289,36 +293,58 @@ export const changeAppointmentStatus = async (id, newStatus, cancelledReason, cu
     throw new AppError("Appointment not found", 404, ErrorCodes.NOT_FOUND);
   }
 
+  // Edge Case State Transition Validation
+  if (appointment.status === "cancelled" && newStatus !== "scheduled" && newStatus !== "cancelled") {
+    throw new AppError("Cancelled appointments cannot be updated. Please reschedule the appointment slot.", 400, ErrorCodes.VALIDATION_ERROR);
+  }
+  if (appointment.status === "completed" && newStatus !== "completed") {
+    throw new AppError("Completed appointments are finalized and cannot be modified.", 400, ErrorCodes.VALIDATION_ERROR);
+  }
+
   const oldValue = appointment.toObject();
 
   appointment.status = newStatus;
   if (newStatus === "cancelled") {
-    appointment.cancelledReason = cancelledReason || "Not specified";
+    appointment.cancelledReason = (cancelledReason && cancelledReason.trim()) || "Patient requested cancellation";
   }
 
   await appointment.save();
 
-  await createAuditLog({
-    userId: currentUser.id,
-    action: "UPDATE",
-    resource: "appointment",
-    resourceId: appointment._id,
-    oldValue,
-    newValue: appointment.toObject(),
-    ipAddress: requestMeta.ipAddress,
-    userAgent: requestMeta.userAgent,
-  });
+  // Audit Log & Notification (Safe Execution)
+  try {
+    await createAuditLog({
+      userId: currentUser.id,
+      action: "UPDATE",
+      resource: "appointment",
+      resourceId: appointment._id,
+      oldValue,
+      newValue: appointment.toObject(),
+      ipAddress: requestMeta.ipAddress,
+      userAgent: requestMeta.userAgent,
+    });
+  } catch (auditErr) {
+    console.error("Audit log error on appointment status change:", auditErr);
+  }
 
-  if (newStatus === "cancelled") {
-    const doctor = await Doctor.findById(appointment.doctorId);
-    if (doctor) {
-      await createNotification({
-        userId: doctor.userId,
-        type: "appointment",
-        title: "Appointment Cancelled",
-        message: `Appointment on ${new Date(appointment.appointmentDate).toLocaleDateString()} was cancelled. Reason: ${cancelledReason || "Not specified"}`,
-        metadata: { appointmentId: appointment._id },
-      });
+  if (newStatus === "cancelled" || newStatus === "checked_in") {
+    try {
+      const doctor = await Doctor.findById(appointment.doctorId);
+      if (doctor && doctor.userId) {
+        const notifTitle = newStatus === "cancelled" ? "Appointment Cancelled" : "Patient Checked-In";
+        const notifMsg = newStatus === "cancelled"
+          ? `Appointment on ${new Date(appointment.appointmentDate).toLocaleDateString()} was cancelled. Reason: ${appointment.cancelledReason}`
+          : `Patient has checked in for OPD appointment at ${appointment.startTime}.`;
+
+        await createNotification({
+          userId: doctor.userId,
+          type: "appointment",
+          title: notifTitle,
+          message: notifMsg,
+          metadata: { appointmentId: appointment._id },
+        });
+      }
+    } catch (notifErr) {
+      console.error("Notification error on appointment status change:", notifErr);
     }
   }
 

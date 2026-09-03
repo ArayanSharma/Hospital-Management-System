@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   Eye,
   CreditCard,
@@ -6,11 +6,16 @@ import {
   MoreVertical,
   ChevronLeft,
   ChevronRight,
-  ChevronDown,
   Inbox,
+  FileText,
+  History,
+  RefreshCw,
+  Ban,
+  Plus,
+  AlertCircle,
 } from "lucide-react";
 import { formatRupee, getStatusBadgeConfig, formatReportDate } from "../helpers/invoiceCalculations.js";
-import { downloadRadiologyReportPdf } from "../../radiology/helpers/radiologyPdfHelper.js";
+import CustomDropdown from "../../../components/ui/CustomDropdown.jsx";
 
 export default function InvoiceTable({
   invoices = [],
@@ -22,13 +27,31 @@ export default function InvoiceTable({
   onViewInvoice,
   onCollectPayment,
   onPrintInvoice,
+  onViewPaymentDetails,
+  onViewPaymentHistory,
+  onRefundInvoice,
+  onVoidInvoice,
+  onViewCancellationDetails,
+  onCreateNewInvoice,
 }) {
   const displayInvoices = Array.isArray(invoices) ? invoices : [];
+  const [activeDropdownId, setActiveDropdownId] = useState(null);
+  const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setActiveDropdownId(null);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   return (
-    <div className="bg-white border border-slate-200/80 rounded-2xl shadow-2xs overflow-hidden">
+    <div className="bg-white border border-slate-200/80 rounded-2xl shadow-2xs relative">
       {/* Table Data Container */}
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto rounded-t-2xl">
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="bg-slate-50/80 border-b border-slate-200/80 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
@@ -53,16 +76,23 @@ export default function InvoiceTable({
                       <Inbox className="w-6 h-6" />
                     </div>
                     <p className="font-semibold text-slate-600 text-sm">No invoices found</p>
-                    <p className="text-xs text-slate-400">Click &quot;+ New Invoice&quot; above to create a new patient bill.</p>
+                    <p className="text-xs text-slate-400">Click &quot;New Invoice&quot; above to create a new patient bill.</p>
                   </div>
                 </td>
               </tr>
             ) : (
               displayInvoices.map((row) => {
+                const rowId = row._id || row.invoiceNumber;
+                const rawStatus = (row.status || "unpaid").toLowerCase();
+                const isPaid = rawStatus === "paid";
+                const isPartiallyPaid = rawStatus === "partially-paid" || rawStatus === "partially paid";
+                const isUnpaid = rawStatus === "unpaid";
+                const isCancelled = rawStatus === "cancelled" || rawStatus === "voided";
+
                 const pName = row.patientName || row.patientId?.name || "Patient";
                 const pPhone = row.patientPhone || row.patientId?.phone || "";
                 const uhid = row.uhid || row.patientId?.patientId || "UHID-N/A";
-                const dateDisplay = row.createdAt ? formatReportDate(row.createdAt) : "31 May 2025";
+                const dateDisplay = row.createdAt ? formatReportDate(row.createdAt) : "31 Aug 2026";
                 const deptsStr = Array.isArray(row.departments) && row.departments.length > 0
                   ? row.departments.join(", ")
                   : "OPD";
@@ -73,9 +103,11 @@ export default function InvoiceTable({
                 const dueVal = row.dueAmount !== undefined ? row.dueAmount : (row.total - (row.amountPaid || 0));
                 const dueStr = formatRupee(dueVal);
 
+                const isDropdownOpen = activeDropdownId === rowId;
+
                 return (
                   <tr
-                    key={row._id || row.invoiceNumber}
+                    key={rowId}
                     className="hover:bg-slate-50/70 transition-colors"
                   >
                     {/* Invoice ID */}
@@ -134,10 +166,10 @@ export default function InvoiceTable({
                       </span>
                     </td>
 
-                    {/* Actions */}
-                    <td className="py-3 px-3.5 text-right whitespace-nowrap">
+                    {/* Actions Matrix: [ 👁 ] [ 💵 (if Unpaid/Partial) ] [ 🖨 ] [ ⋮ ] */}
+                    <td className="py-3 px-3.5 text-right whitespace-nowrap relative">
                       <div className="flex items-center justify-end gap-1">
-                        {/* View */}
+                        {/* 1. Standalone View Invoice */}
                         <button
                           type="button"
                           onClick={() => onViewInvoice && onViewInvoice(row)}
@@ -147,35 +179,185 @@ export default function InvoiceTable({
                           <Eye className="w-3.5 h-3.5" />
                         </button>
 
-                        {/* Collect Payment */}
-                        <button
-                          type="button"
-                          onClick={() => onCollectPayment && onCollectPayment(row)}
-                          className="p-1.5 rounded-lg border border-slate-200 text-emerald-600 hover:bg-emerald-50 transition cursor-pointer"
-                          title="Collect Payment"
-                        >
-                          <CreditCard className="w-3.5 h-3.5" />
-                        </button>
+                        {/* 2. Standalone Collect Payment (ONLY for Unpaid or Partially Paid) */}
+                        {(isUnpaid || isPartiallyPaid) && (
+                          <button
+                            type="button"
+                            onClick={() => onCollectPayment && onCollectPayment(row)}
+                            className="p-1.5 rounded-lg border border-emerald-200 bg-emerald-50/50 text-emerald-600 hover:bg-emerald-600 hover:text-white transition cursor-pointer"
+                            title="Collect Payment"
+                          >
+                            <CreditCard className="w-3.5 h-3.5" />
+                          </button>
+                        )}
 
-                        {/* Print */}
+                        {/* 3. Standalone Print / Download */}
                         <button
                           type="button"
                           onClick={() => onPrintInvoice && onPrintInvoice(row)}
                           className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 transition cursor-pointer"
-                          title="Print Invoice"
+                          title="Print / Download Invoice"
                         >
                           <Printer className="w-3.5 h-3.5" />
                         </button>
 
-                        {/* Three Dots Options */}
-                        <button
-                          type="button"
-                          onClick={() => onViewInvoice && onViewInvoice(row)}
-                          className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition cursor-pointer"
-                          title="More Actions"
-                        >
-                          <MoreVertical className="w-3.5 h-3.5" />
-                        </button>
+                        {/* 4. Three Dots Options Dropdown */}
+                        <div className="relative inline-block text-left" ref={isDropdownOpen ? dropdownRef : null}>
+                          <button
+                            type="button"
+                            onClick={() => setActiveDropdownId(isDropdownOpen ? null : rowId)}
+                            className={`p-1.5 rounded-lg border transition cursor-pointer ${
+                              isDropdownOpen
+                                ? "bg-blue-50 border-blue-300 text-blue-600"
+                                : "border-slate-200 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                            }`}
+                            title="More Actions"
+                          >
+                            <MoreVertical className="w-3.5 h-3.5" />
+                          </button>
+
+                          {/* Context-Aware Dropdown Menu */}
+                          {isDropdownOpen && (
+                            <div className="absolute right-0 mt-1 w-48 bg-white border border-slate-200/90 rounded-xl shadow-xl z-50 p-1 text-xs space-y-0.5 animate-in fade-in zoom-in-95 duration-150 ease-out">
+                              {/* 1. View Invoice */}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  onViewInvoice?.(row);
+                                  setActiveDropdownId(null);
+                                }}
+                                className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-left font-medium text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition"
+                              >
+                                <Eye className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                                <span>View Invoice</span>
+                              </button>
+
+                              {/* 2. Paid Status Actions */}
+                              {isPaid && (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      onViewPaymentDetails?.(row);
+                                      setActiveDropdownId(null);
+                                    }}
+                                    className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-left font-medium text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition"
+                                  >
+                                    <FileText className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                    <span>Payment Details</span>
+                                  </button>
+                                </>
+                              )}
+
+                              {/* 3. Collect Payment (Partially Paid or Unpaid) */}
+                              {(isPartiallyPaid || isUnpaid) && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    onCollectPayment?.(row);
+                                    setActiveDropdownId(null);
+                                  }}
+                                  className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-left font-medium text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition"
+                                >
+                                  <CreditCard className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                  <span>Collect Payment</span>
+                                </button>
+                              )}
+
+                              {/* 4. Payment History (Paid, Partially Paid, Unpaid) */}
+                              {!isCancelled && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    onViewPaymentHistory?.(row);
+                                    setActiveDropdownId(null);
+                                  }}
+                                  className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-left font-medium text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition"
+                                >
+                                  <History className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                                  <span>Payment History</span>
+                                </button>
+                              )}
+
+                              {/* 5. View Cancellation Details (Cancelled) */}
+                              {isCancelled && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    onViewCancellationDetails?.(row);
+                                    setActiveDropdownId(null);
+                                  }}
+                                  className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-left font-medium text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition"
+                                >
+                                  <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                                  <span>View Cancellation Details</span>
+                                </button>
+                              )}
+
+                              {/* 6. Print / Download */}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  onPrintInvoice?.(row);
+                                  setActiveDropdownId(null);
+                                }}
+                                className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-left font-medium text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition"
+                              >
+                                <Printer className="w-3.5 h-3.5 text-slate-600 shrink-0" />
+                                <span>Print / Download</span>
+                              </button>
+
+                              {/* 7. Refund / Credit Note (Paid or Partially Paid) */}
+                              {(isPaid || isPartiallyPaid) && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    onRefundInvoice?.(row);
+                                    setActiveDropdownId(null);
+                                  }}
+                                  className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-left font-medium text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition"
+                                >
+                                  <RefreshCw className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                                  <span>Refund / Credit Note</span>
+                                </button>
+                              )}
+
+                              {/* 8. Void Invoice (Paid, Partially Paid, Unpaid) */}
+                              {!isCancelled && (
+                                <div className="pt-1 border-t border-slate-100">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      onVoidInvoice?.(row);
+                                      setActiveDropdownId(null);
+                                    }}
+                                    className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-left font-semibold text-rose-600 hover:bg-rose-50 hover:text-rose-700 transition"
+                                  >
+                                    <Ban className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                                    <span>Void Invoice*</span>
+                                  </button>
+                                </div>
+                              )}
+
+                              {/* 9. Create New Invoice (Cancelled) */}
+                              {isCancelled && (
+                                <div className="pt-1 border-t border-slate-100">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      onCreateNewInvoice?.();
+                                      setActiveDropdownId(null);
+                                    }}
+                                    className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-left font-semibold text-blue-600 hover:bg-blue-50 hover:text-blue-700 transition"
+                                  >
+                                    <Plus className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                                    <span>Create New Invoice</span>
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </td>
                   </tr>
@@ -186,9 +368,9 @@ export default function InvoiceTable({
         </table>
       </div>
 
-      {/* Pagination Footer matching screenshot: Showing 1 to 10 of 1,248 entries | < [1] 2 3 4 5 ... 125 > */}
-      <div className="p-3.5 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-        <p className="text-slate-500 font-medium text-[11px]">
+      {/* Pagination Footer */}
+      <div className="p-3.5 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs font-semibold text-slate-500 overflow-visible relative z-20">
+        <p className="font-medium text-[11px]">
           Showing {displayInvoices.length > 0 ? (page - 1) * limit + 1 : 0} to {Math.min(page * limit, pagination.total || 1248)} of {(pagination.total || 1248).toLocaleString()} entries
         </p>
 
@@ -198,7 +380,7 @@ export default function InvoiceTable({
               type="button"
               disabled={page <= 1}
               onClick={() => onPageChange && onPageChange(page - 1)}
-              className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+              className="w-7 h-7 rounded-lg border border-slate-200 flex items-center justify-center text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-white transition-all"
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
@@ -208,49 +390,31 @@ export default function InvoiceTable({
             >
               {page}
             </button>
+
             <button
               type="button"
+              disabled={page >= (pagination.totalPages || 125)}
               onClick={() => onPageChange && onPageChange(page + 1)}
-              className="w-7 h-7 rounded-lg text-slate-600 font-semibold hover:bg-slate-100 flex items-center justify-center text-xs cursor-pointer"
-            >
-              {page + 1}
-            </button>
-            <button
-              type="button"
-              onClick={() => onPageChange && onPageChange(page + 2)}
-              className="w-7 h-7 rounded-lg text-slate-600 font-semibold hover:bg-slate-100 flex items-center justify-center text-xs cursor-pointer"
-            >
-              {page + 2}
-            </button>
-            <span className="text-slate-400 px-1 font-bold">...</span>
-            <button
-              type="button"
-              onClick={() => onPageChange && onPageChange(pagination.totalPages || 125)}
-              className="w-7 h-7 rounded-lg text-slate-600 font-semibold hover:bg-slate-100 flex items-center justify-center text-xs cursor-pointer"
-            >
-              {pagination.totalPages || 125}
-            </button>
-            <button
-              type="button"
-              onClick={() => onPageChange && onPageChange(page + 1)}
-              className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 cursor-pointer"
+              className="w-7 h-7 rounded-lg border border-slate-200 flex items-center justify-center text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-white transition-all"
             >
               <ChevronRight className="w-4 h-4" />
             </button>
           </div>
 
-          <div className="relative flex items-center gap-1 border border-slate-200 rounded-xl px-2.5 py-1 bg-white text-xs font-bold text-slate-700 cursor-pointer">
-            <select
-              value={limit}
-              onChange={(e) => onLimitChange && onLimitChange(Number(e.target.value))}
-              className="bg-transparent border-none text-xs font-bold text-slate-700 focus:outline-none cursor-pointer pr-1"
-            >
-              <option value={10}>10 / page</option>
-              <option value={25}>25 / page</option>
-              <option value={50}>50 / page</option>
-              <option value={100}>100 / page</option>
-            </select>
-          </div>
+          {/* Page-size Custom Dropdown (Opens Downward) */}
+          <CustomDropdown
+            value={limit}
+            options={[
+              { label: "10 / page", value: 10 },
+              { label: "25 / page", value: 25 },
+              { label: "50 / page", value: 50 },
+              { label: "100 / page", value: 100 },
+            ]}
+            onChange={(val) => onLimitChange && onLimitChange(Number(val))}
+            minWidth="110px"
+            direction="down"
+            alignRight={true}
+          />
         </div>
       </div>
     </div>

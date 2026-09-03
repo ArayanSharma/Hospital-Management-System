@@ -365,3 +365,70 @@ export const dischargePatient = async (id, dischargeSummary, currentUser, reques
     throw err;
   }
 };
+
+// ---------------- TRANSFER BED / WARD ----------------
+export const transferBed = async (id, { newWardId, newBedId, transferReason }, currentUser, requestMeta) => {
+  const admission = await Admission.findById(id);
+  if (!admission) {
+    throw new AppError("Admission not found", 404, ErrorCodes.NOT_FOUND);
+  }
+  if (admission.status === "discharged") {
+    throw new AppError("Cannot transfer a discharged patient", 400, ErrorCodes.VALIDATION_ERROR);
+  }
+
+  const targetBed = await Bed.findById(newBedId);
+  if (!targetBed) {
+    throw new AppError("Target bed not found", 404, ErrorCodes.NOT_FOUND);
+  }
+  if (targetBed.status !== "available" && targetBed._id.toString() !== admission.bedId.toString()) {
+    throw new AppError(`Target bed is currently ${targetBed.status}`, 409, ErrorCodes.VALIDATION_ERROR);
+  }
+
+  const oldBedId = admission.bedId;
+  const oldValue = admission.toObject();
+
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    // 1. Free old bed
+    if (oldBedId && oldBedId.toString() !== newBedId.toString()) {
+      await Bed.findByIdAndUpdate(oldBedId, { status: "available", currentPatientId: null }, { session });
+    }
+
+    // 2. Occupy new bed
+    await Bed.findByIdAndUpdate(newBedId, { status: "occupied", currentPatientId: admission.patientId }, { session });
+
+    // 3. Update admission
+    admission.wardId = newWardId || targetBed.wardId;
+    admission.bedId = newBedId;
+    if (transferReason) {
+      admission.notes = `${admission.notes || ""}\n[Bed Transfer ${new Date().toLocaleDateString()}]: ${transferReason}`.trim();
+    }
+    await admission.save({ session });
+
+    await session.commitTransaction();
+    session.endSession();
+
+    try {
+      await createAuditLog({
+        userId: currentUser.id,
+        action: "UPDATE",
+        resource: "admission",
+        resourceId: admission._id,
+        oldValue,
+        newValue: admission.toObject(),
+        ipAddress: requestMeta.ipAddress,
+        userAgent: requestMeta.userAgent,
+      });
+    } catch (auditErr) {
+      console.error("Audit log error on bed transfer:", auditErr);
+    }
+
+    return admission;
+  } catch (err) {
+    await session.abortTransaction();
+    session.endSession();
+    throw err;
+  }
+};

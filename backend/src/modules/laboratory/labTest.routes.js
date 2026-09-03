@@ -11,6 +11,13 @@ router.post("/", authenticate, checkPermission("lab_test:create"), validate(crea
 router.get("/", authenticate, checkPermission("lab_test:read"), getAll);
 router.get("/:id", authenticate, checkPermission("lab_test:read"), getById);
 router.patch(
+  "/:id",
+  authenticate,
+  checkPermission("lab_test:update"),
+  validate(updateLabTestStatusSchema),
+  updateStatus
+);
+router.patch(
   "/:id/status",
   authenticate,
   checkPermission("lab_test:update"),

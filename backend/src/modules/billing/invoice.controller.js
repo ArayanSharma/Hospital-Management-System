@@ -3,6 +3,8 @@ import {
   getAllInvoices,
   getInvoiceById,
   cancelInvoice,
+  voidInvoiceService,
+  refundInvoiceService,
   getNextInvoiceNumberService,
   getPatientEncountersService,
   getBillableCatalogService,
@@ -46,4 +48,18 @@ export const cancel = asyncHandler(async (req, res) => {
   const meta = getRequestMeta(req);
   const result = await cancelInvoice(req.params.id, req.user, meta);
   return successResponse(res, 200, result.message);
+});
+
+export const voidInvoiceController = asyncHandler(async (req, res) => {
+  const meta = getRequestMeta(req);
+  const { voidReason, authCode } = req.body;
+  const result = await voidInvoiceService(req.params.id, voidReason, authCode, req.user, meta);
+  return successResponse(res, 200, result.message, result.invoice);
+});
+
+export const refundInvoiceController = asyncHandler(async (req, res) => {
+  const meta = getRequestMeta(req);
+  const { refundAmount, refundReason, refundMethod } = req.body;
+  const result = await refundInvoiceService(req.params.id, refundAmount, refundReason, refundMethod, req.user, meta);
+  return successResponse(res, 200, result.message, result.invoice);
 });

@@ -7,6 +7,7 @@ export default function InventoryTabs({ activeTab, onSelectTab, counts = {} }) {
     { key: "low_stock", label: "Low Stock", count: counts.low_stock ?? counts.lowStock ?? 0 },
     { key: "out_of_stock", label: "Out of Stock", count: counts.out_of_stock ?? counts.outOfStock ?? 0 },
     { key: "expiring_soon", label: "Expiring Soon", count: counts.expiring_soon ?? counts.expiringSoon ?? 0 },
+    { key: "archived", label: "Archived Batches", count: counts.archived ?? counts.archivedBatches ?? 0 },
   ];
 
   return (

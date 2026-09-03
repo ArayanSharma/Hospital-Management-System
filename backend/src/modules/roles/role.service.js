@@ -63,8 +63,14 @@ export const getAllRolesService = async (params = {}) => {
   const { search, roleType, status } = params;
   const query = {};
 
-  if (roleType && roleType !== "All Roles") {
-    query.roleType = roleType;
+  if (roleType && roleType.toLowerCase() !== "all roles" && roleType.toLowerCase() !== "all") {
+    if (roleType.toLowerCase() === "system") {
+      query.$or = [{ roleType: new RegExp("system", "i") }, { isSystemRole: true }];
+    } else if (roleType.toLowerCase() === "custom") {
+      query.$or = [{ roleType: new RegExp("custom", "i") }, { isSystemRole: false }, { isSystemRole: { $exists: false } }];
+    } else {
+      query.roleType = new RegExp(roleType.trim(), "i");
+    }
   }
   if (status) {
     query.status = status;

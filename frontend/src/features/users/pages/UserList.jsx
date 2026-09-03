@@ -1,72 +1,13 @@
-import React, { useState, useRef, useEffect } from "react";
-import { Plus, Search, RotateCcw, SlidersHorizontal, Shield, FileText, Lock, RefreshCw, ChevronDown, Check } from "lucide-react";
+import React, { useState } from "react";
+import { Plus, Search, RotateCcw, SlidersHorizontal, Shield, FileText, Lock, RefreshCw, Download } from "lucide-react";
 import { useUserManagement } from "../hooks/useUserManagement.js";
+import { exportUsersApi } from "../services/user.api.js";
 import { USER_ROLES, USER_STATUSES, USER_DEPARTMENTS } from "../constants/user.constants.js";
 import UserTable from "../components/UserTable.jsx";
 import UserSidebarWidgets from "../components/UserSidebarWidgets.jsx";
 import AddUserModal from "../components/modals/AddUserModal.jsx";
-
-// Custom UI Dropdown with smooth Chevron 180deg rotation & opening animation
-function CustomFilterDropdown({ value, options, onChange, minWidth = "140px" }) {
-  const [isOpen, setIsOpen] = useState(false);
-  const ref = useRef(null);
-
-  useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (ref.current && !ref.current.contains(e.target)) {
-        setIsOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  return (
-    <div className="relative inline-block text-left" ref={ref}>
-      <button
-        type="button"
-        onClick={() => setIsOpen(!isOpen)}
-        style={{ minWidth }}
-        className={`flex items-center justify-between gap-2 px-3 py-1.5 bg-slate-50 hover:bg-slate-100/90 border rounded-xl text-xs font-bold text-slate-700 transition-all duration-200 cursor-pointer shadow-2xs ${
-          isOpen ? "border-blue-500 ring-2 ring-blue-500/10 bg-white" : "border-slate-200/90"
-        }`}
-      >
-        <span className="truncate">{value}</span>
-        <ChevronDown
-          className={`w-3.5 h-3.5 shrink-0 transition-transform duration-200 ease-in-out ${
-            isOpen ? "rotate-180 text-blue-600" : "rotate-0 text-slate-400"
-          }`}
-        />
-      </button>
-
-      {isOpen && (
-        <div className="absolute left-0 mt-1.5 w-full min-w-[150px] bg-white border border-slate-200/90 rounded-xl shadow-xl z-40 p-1 text-xs space-y-0.5 animate-in fade-in zoom-in-95 duration-150 ease-out origin-top-left">
-          {options.map((opt) => {
-            const isSelected = value === opt;
-            return (
-              <button
-                key={opt}
-                type="button"
-                onClick={() => {
-                  onChange(opt);
-                  setIsOpen(false);
-                }}
-                className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-left font-bold transition-colors duration-150 cursor-pointer ${
-                  isSelected
-                    ? "bg-blue-50 text-blue-700"
-                    : "text-slate-700 hover:bg-slate-50 hover:text-slate-900"
-                }`}
-              >
-                <span className="truncate">{opt}</span>
-                {isSelected && <Check className="w-3.5 h-3.5 text-blue-600 shrink-0" />}
-              </button>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
+import CustomDropdown from "../../../components/ui/CustomDropdown.jsx";
+import { downloadFileBlob } from "../../../utils/downloadBlob.js";
 
 export default function UserList() {
   const {
@@ -103,6 +44,24 @@ export default function UserList() {
   } = useUserManagement();
 
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [exporting, setExporting] = useState(false);
+
+  const handleExportCSV = async () => {
+    setExporting(true);
+    try {
+      const response = await exportUsersApi({
+        role: roleFilter,
+        status: statusFilter,
+        department: departmentFilter,
+        search,
+      });
+      downloadFileBlob(response.data, `Users_Export_${new Date().toISOString().split("T")[0]}.csv`);
+    } catch (err) {
+      alert("Failed to export user records from backend server.");
+    } finally {
+      setExporting(false);
+    }
+  };
 
   return (
     <div className="space-y-6 min-h-screen flex flex-col justify-between">
@@ -116,17 +75,31 @@ export default function UserList() {
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={() => {
-              setSelectedUser(null);
-              setAddUserOpen(true);
-            }}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer self-start sm:self-auto"
-          >
-            <Plus className="w-4 h-4" />
-            <span>+ Add New User</span>
-          </button>
+          <div className="flex items-center gap-2.5 self-start sm:self-auto">
+            {/* Export CSV Button (Backend Controlled Stream) */}
+            <button
+              type="button"
+              onClick={handleExportCSV}
+              disabled={exporting}
+              className="group flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-bold text-xs rounded-xl shadow-2xs transition-all duration-150 cursor-pointer active:scale-95 disabled:opacity-50"
+              title="Export Users Data to CSV from Backend"
+            >
+              <Download className={`w-3.5 h-3.5 text-slate-500 transition-transform duration-200 ${exporting ? "animate-bounce text-blue-600" : "group-hover:translate-y-0.5"}`} />
+              <span>{exporting ? "Exporting..." : "Export"}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedUser(null);
+                setAddUserOpen(true);
+              }}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Add New User</span>
+            </button>
+          </div>
         </div>
 
         {/* Search + Filter Panel Box */}
@@ -145,7 +118,7 @@ export default function UserList() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-wrap items-center gap-2.5">
               {/* All Roles Dropdown */}
-              <CustomFilterDropdown
+              <CustomDropdown
                 value={roleFilter}
                 options={USER_ROLES}
                 onChange={setRoleFilter}
@@ -153,7 +126,7 @@ export default function UserList() {
               />
 
               {/* All Status Dropdown */}
-              <CustomFilterDropdown
+              <CustomDropdown
                 value={statusFilter}
                 options={USER_STATUSES}
                 onChange={setStatusFilter}
@@ -161,7 +134,7 @@ export default function UserList() {
               />
 
               {/* All Departments Dropdown */}
-              <CustomFilterDropdown
+              <CustomDropdown
                 value={departmentFilter}
                 options={USER_DEPARTMENTS}
                 onChange={setDepartmentFilter}

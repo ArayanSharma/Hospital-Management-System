@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   User,
   UserCheck,
@@ -22,6 +22,8 @@ import {
   Save,
 } from "lucide-react";
 import { MODULE_DETAILS } from "../constants/role.constants.js";
+import CustomDropdown from "../../../components/ui/CustomDropdown.jsx";
+import { downloadFileBlob } from "../../../utils/downloadBlob.js";
 
 const ICON_MAP = {
   User,
@@ -68,27 +70,13 @@ export default function PermissionMatrix({
             <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
               Select Role
             </span>
-            <div className="relative">
-              <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
-                <UserCheck className="w-3.5 h-3.5 text-blue-600" />
-              </div>
-              <select
-                value={selectedRoleName}
-                onChange={(e) => onSelectRole(e.target.value)}
-                className="pl-8 pr-8 py-2 bg-slate-50 border border-slate-200/90 rounded-xl text-xs font-black text-slate-800 focus:outline-none focus:border-blue-500 cursor-pointer appearance-none min-w-[170px]"
-              >
-                {roles.map((r) => (
-                  <option key={r._id || r.name} value={r.name}>
-                    {r.name}
-                  </option>
-                ))}
-              </select>
-              <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 20 20">
-                  <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
-                </svg>
-              </div>
-            </div>
+            <CustomDropdown
+              value={selectedRoleName}
+              options={roles.map((r) => r.name)}
+              onChange={onSelectRole}
+              icon={Shield}
+              minWidth="170px"
+            />
           </div>
 
           {/* Module Search Input */}

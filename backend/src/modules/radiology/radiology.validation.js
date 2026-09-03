@@ -17,14 +17,23 @@ export const createRadiologyTestSchema = z.object({
     locationRoom: z.string().trim().optional(),
     requestedAt: z.string().optional(),
     attachmentUrl: z.string().trim().optional().nullable(),
-  }),
+  }).passthrough(),
 });
 
 export const updateRadiologyTestStatusSchema = z.object({
   body: z.object({
-    status: z.enum(["pending", "scheduled", "in-progress", "completed", "cancelled"]),
+    status: z.enum(["pending", "scheduled", "in-progress", "completed", "cancelled"]).optional().nullable(),
+    modality: z.string().trim().optional().nullable(),
+    bodyRegion: z.string().trim().optional().nullable(),
+    priority: z.enum(["routine", "urgent", "emergency"]).optional().nullable(),
     scheduledAt: z.string().optional().nullable(),
-  }),
+    clinicalHistory: z.string().trim().optional().nullable(),
+    cancellationReason: z.string().trim().optional().nullable(),
+    imageUrls: z.array(z.string()).optional().nullable(),
+    findings: z.string().trim().optional().nullable(),
+    impression: z.string().trim().optional().nullable(),
+    notes: z.string().trim().optional().nullable(),
+  }).passthrough(),
 });
 
 export const createRadiologyReportSchema = z.object({
@@ -48,7 +57,7 @@ export const createRadiologyReportSchema = z.object({
     images: z.array(z.string()).optional(),
     reportFile: z.string().trim().optional().nullable(),
     status: z.enum(["draft", "finalized"]).optional().default("draft"),
-  }),
+  }).passthrough(),
 });
 
 export const updateRadiologyReportSchema = z.object({
@@ -71,5 +80,5 @@ export const updateRadiologyReportSchema = z.object({
     images: z.array(z.string()).optional(),
     reportFile: z.string().trim().optional().nullable(),
     status: z.enum(["draft", "finalized"]).optional(),
-  }),
+  }).passthrough(),
 });

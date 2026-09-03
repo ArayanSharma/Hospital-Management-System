@@ -238,6 +238,8 @@ export const getMedicineStats = async () => {
       active: activeMedicines,
       inactive: inactiveMedicines,
     },
+    categories: categories.filter(Boolean),
+    manufacturers: manufacturers.filter(Boolean),
     therapeuticCategories,
     topManufacturers,
     gstDistribution,

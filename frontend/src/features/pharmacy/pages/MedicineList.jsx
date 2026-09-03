@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { Plus, Download, ChevronDown } from "lucide-react";
+import { Plus, Download } from "lucide-react";
 import { getMedicinesApi, getMedicineStatsApi, createMedicineApi, updateMedicineApi } from "../services/medicine.api.js";
+import { downloadFileBlob } from "../../../utils/downloadBlob.js";
 
 import MedicineKpiCards from "../components/MedicineKpiCards.jsx";
 import MedicineFilterBar from "../components/MedicineFilterBar.jsx";
@@ -10,6 +11,7 @@ import TherapeuticCategoriesChartCard from "../components/TherapeuticCategoriesC
 import TopManufacturersCard from "../components/TopManufacturersCard.jsx";
 import GstDistributionCard from "../components/GstDistributionCard.jsx";
 import MedicineDetailModal from "../components/MedicineDetailModal.jsx";
+import MedicineUsageHistoryModal from "../components/MedicineUsageHistoryModal.jsx";
 import MedicineForm from "../components/MedicineForm.jsx";
 import Modal from "../../../components/ui/Modal.jsx";
 
@@ -38,8 +40,12 @@ export default function MedicineList() {
   const [editingItem, setEditingItem] = useState(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [selectedDetailItem, setSelectedDetailItem] = useState(null);
-  const [isExportOpen, setIsExportOpen] = useState(false);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [selectedHistoryItem, setSelectedHistoryItem] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+
+  // Helper for safe row identity matching
+  const getIdentifier = (obj) => obj?._id || obj?.id || obj?.code;
 
   // Fetch stats and data live from backend DB
   useEffect(() => {
@@ -83,9 +89,10 @@ export default function MedicineList() {
   // Compute filtered dataset
   const filteredItems = useMemo(() => {
     return items.filter((item) => {
+      const st = String(item.status || "active").toLowerCase();
       // 1. Tab Filter
-      if (activeTab === "active" && (item.status === "Inactive" || item.status === "inactive")) return false;
-      if (activeTab === "inactive" && (item.status === "Active" || item.status === "active")) return false;
+      if (activeTab === "active" && (st === "inactive" || st === "archived")) return false;
+      if (activeTab === "inactive" && (st === "active" || st === "in stock" || st === "low stock")) return false;
 
       // 2. Search Query
       if (searchQuery.trim()) {
@@ -106,8 +113,9 @@ export default function MedicineList() {
 
       // 5. Status Filter
       if (statusFilter !== "all") {
-        if (statusFilter === "Active" && item.status !== "Active" && item.status !== "active") return false;
-        if (statusFilter === "Inactive" && item.status !== "Inactive" && item.status !== "inactive") return false;
+        if (statusFilter === "Active" && st !== "active" && st !== "in stock" && st !== "low stock") return false;
+        if (statusFilter === "Inactive" && st !== "inactive") return false;
+        if (statusFilter === "Archived" && st !== "archived") return false;
       }
 
       // 6. Dosage Form Filter
@@ -120,15 +128,26 @@ export default function MedicineList() {
     });
   }, [items, activeTab, searchQuery, categoryFilter, manufacturerFilter, statusFilter, dosageFormFilter, gstFilter]);
 
-  const handleToggleStatus = async (item) => {
-    const newStatus = item.status === "Active" || item.status === "active" ? "inactive" : "active";
+  const handleChangeStatus = async (item, newStatus) => {
+    const targetId = getIdentifier(item);
+    if (!targetId) return;
+
     try {
       await updateMedicineApi(item._id || item.id, { status: newStatus }).catch(() => null);
-      setItems(
-        items.map((it) => ((it.id === item.id || it._id === item._id) ? { ...it, status: newStatus } : it))
+
+      setItems((prevItems) =>
+        prevItems.map((it) => {
+          const currentId = getIdentifier(it);
+          return currentId && String(currentId) === String(targetId) ? { ...it, status: newStatus } : it;
+        })
       );
+
+      // Refetch live stats
+      getMedicineStatsApi().then((res) => {
+        if (res?.data?.data) setStats(res.data.data);
+      }).catch(() => null);
     } catch (err) {
-      console.error("Failed to toggle status:", err);
+      console.error("Failed to change status:", err);
     }
   };
 
@@ -136,19 +155,38 @@ export default function MedicineList() {
     setSubmitting(true);
     try {
       if (editingItem) {
-        await updateMedicineApi(editingItem._id || editingItem.id, formData).catch(() => null);
-        setItems(
-          items.map((it) => ((it.id === editingItem.id || it._id === editingItem._id) ? { ...it, ...formData } : it))
+        const editId = getIdentifier(editingItem);
+        const res = await updateMedicineApi(editingItem._id || editingItem.id, formData).catch(() => null);
+        const updatedDoc = res?.data?.data || { ...editingItem, ...formData };
+        setItems((prevItems) =>
+          prevItems.map((it) => {
+            const currentId = getIdentifier(it);
+            return currentId && String(currentId) === String(editId) ? { ...it, ...updatedDoc } : it;
+          })
         );
       } else {
         const res = await createMedicineApi(formData).catch(() => null);
         const newItem = res?.data?.data || {
-          id: String(items.length + 1),
+          id: `med-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+          _id: `med-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
           ...formData,
           colorBg: "bg-blue-100 text-blue-600",
         };
-        setItems([newItem, ...items]);
+        setItems((prev) => [newItem, ...prev]);
         setTotalItems((prev) => prev + 1);
+      }
+
+      // Live refetch from MongoDB
+      const [statsRes, listRes] = await Promise.all([
+        getMedicineStatsApi().catch(() => null),
+        getMedicinesApi({ page: currentPage, limit: itemsPerPage, search: searchQuery || undefined }).catch(() => null),
+      ]);
+      if (statsRes?.data?.data) setStats(statsRes.data.data);
+      if (listRes?.data?.data) {
+        const resItems = listRes.data.data.items || listRes.data.data.medicines || (Array.isArray(listRes.data.data) ? listRes.data.data : []);
+        if (Array.isArray(resItems) && resItems.length > 0) {
+          setItems(resItems);
+        }
       }
 
       if (formData.addAnother) {
@@ -164,9 +202,28 @@ export default function MedicineList() {
     }
   };
 
-  const handleExport = (type) => {
-    setIsExportOpen(false);
-    alert(`Downloading Master Catalog (${type.toUpperCase()})...`);
+  const handleExport = () => {
+    const listToExport = filteredItems.length > 0 ? filteredItems : items;
+    if (!listToExport || listToExport.length === 0) {
+      alert("No medicine records found to export.");
+      return;
+    }
+
+    const headers = ["Medicine Code", "Medicine Name", "Brand Name", "Category", "Manufacturer", "Unit Price (INR)", "GST (%)", "Status"];
+    const rows = listToExport.map((m) => [
+      `"${m.code || "MED-0000"}"`,
+      `"${(m.name || "").replace(/"/g, '""')}"`,
+      `"${(m.brandName || "Generic").replace(/"/g, '""')}"`,
+      `"${(m.category || "").replace(/"/g, '""')}"`,
+      `"${(m.manufacturer || "").replace(/"/g, '""')}"`,
+      `"${Number(m.unitPrice || m.price || 0).toFixed(2)}"`,
+      `"${m.gstRate || m.gst || 12}%"`,
+      `"${m.status || "Active"}"`,
+    ]);
+
+    const csvContent = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+    const dateStr = new Date().toISOString().split("T")[0];
+    downloadFileBlob(csvContent, `Medicines_Master_Catalog_${dateStr}.csv`);
   };
 
   return (
@@ -191,47 +248,18 @@ export default function MedicineList() {
             className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-4 py-2.5 text-xs font-bold flex items-center gap-2 shadow-sm transition-all cursor-pointer"
           >
             <Plus className="w-4 h-4 stroke-[2.5]" />
-            <span>+ Add Medicine</span>
+            <span>Add Medicine</span>
           </button>
 
-          {/* Export Dropdown */}
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => setIsExportOpen(!isExportOpen)}
-              className="bg-white border border-slate-200 hover:border-slate-300 text-slate-700 rounded-xl px-4 py-2.5 text-xs font-bold flex items-center gap-2 shadow-xs transition-all cursor-pointer"
-            >
-              <Download className="w-4 h-4 text-slate-500" />
-              <span>Export</span>
-              <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
-            </button>
-
-            {isExportOpen && (
-              <>
-                <div className="fixed inset-0 z-10" onClick={() => setIsExportOpen(false)} />
-                <div className="absolute right-0 mt-2 w-40 bg-white rounded-xl shadow-lg border border-slate-100 py-1.5 z-20 text-xs">
-                  <button
-                    onClick={() => handleExport("csv")}
-                    className="w-full text-left px-4 py-2 text-slate-700 hover:bg-slate-50 font-medium"
-                  >
-                    Export CSV
-                  </button>
-                  <button
-                    onClick={() => handleExport("excel")}
-                    className="w-full text-left px-4 py-2 text-slate-700 hover:bg-slate-50 font-medium"
-                  >
-                    Export Excel
-                  </button>
-                  <button
-                    onClick={() => handleExport("pdf")}
-                    className="w-full text-left px-4 py-2 text-slate-700 hover:bg-slate-50 font-medium"
-                  >
-                    Export PDF
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
+          {/* Direct Standalone Export Button */}
+          <button
+            type="button"
+            onClick={handleExport}
+            className="bg-white border border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-700 rounded-xl px-4 py-2.5 text-xs font-bold flex items-center gap-2 shadow-2xs transition-all cursor-pointer"
+          >
+            <Download className="w-4 h-4 text-slate-500" />
+            <span>Export</span>
+          </button>
         </div>
       </div>
 
@@ -252,6 +280,8 @@ export default function MedicineList() {
         onDosageFormChange={setDosageFormFilter}
         gstFilter={gstFilter}
         onGstChange={setGstFilter}
+        categoriesList={Array.from(new Set(items.map((i) => i.category).filter(Boolean)))}
+        manufacturersList={Array.from(new Set(items.map((i) => i.manufacturer).filter(Boolean)))}
         onResetFilters={() => {
           setSearchQuery("");
           setCategoryFilter("all");
@@ -290,7 +320,11 @@ export default function MedicineList() {
               setEditingItem(item);
               setIsFormOpen(true);
             }}
-            onToggleStatusItem={handleToggleStatus}
+            onViewHistory={(item) => {
+              setSelectedHistoryItem(item);
+              setIsHistoryOpen(true);
+            }}
+            onChangeStatus={handleChangeStatus}
           />
         </div>
 
@@ -321,12 +355,16 @@ export default function MedicineList() {
         isOpen={isFormOpen}
         onClose={() => setIsFormOpen(false)}
         title={editingItem ? "Edit Medicine Master Record" : "Add New Medicine Master Record"}
+        subtitle={editingItem ? "Update medicine details and pricing information" : "Enter complete medicine details and pricing configuration"}
+        maxWidth="max-w-4xl"
       >
         <MedicineForm
           defaultValues={editingItem}
           onSubmit={handleCreateOrUpdate}
           onCancel={() => setIsFormOpen(false)}
           submitting={submitting}
+          categoriesList={stats?.categories || Array.from(new Set(items.map((i) => i.category).filter(Boolean)))}
+          manufacturersList={stats?.manufacturers || Array.from(new Set(items.map((i) => i.manufacturer).filter(Boolean)))}
         />
       </Modal>
 
@@ -334,6 +372,12 @@ export default function MedicineList() {
         item={selectedDetailItem}
         isOpen={isDetailOpen}
         onClose={() => setIsDetailOpen(false)}
+      />
+
+      <MedicineUsageHistoryModal
+        item={selectedHistoryItem}
+        isOpen={isHistoryOpen}
+        onClose={() => setIsHistoryOpen(false)}
       />
     </div>
   );

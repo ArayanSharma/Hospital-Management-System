@@ -28,7 +28,7 @@ export function useInvoices() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [departmentFilter, setDepartmentFilter] = useState("all");
-  const [dateRange, setDateRange] = useState("01 Aug 2026 - 31 Aug 2026");
+  const [dateRange, setDateRange] = useState("");
 
   // Panel state
   const [collectingInvoice, setCollectingInvoice] = useState(null);

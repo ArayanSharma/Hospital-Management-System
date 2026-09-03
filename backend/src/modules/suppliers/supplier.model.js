@@ -82,6 +82,19 @@ const supplierSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    outstandingBalance: {
+      type: Number,
+      default: 45000,
+    },
+    paymentHistory: [
+      {
+        payAmount: Number,
+        paymentMode: String,
+        notes: String,
+        date: { type: Date, default: Date.now },
+        processedBy: String,
+      },
+    ],
     preferredSupplier: {
       type: Boolean,
       default: false,
@@ -96,7 +109,7 @@ const supplierSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["active", "inactive"],
+      enum: ["active", "inactive", "archived", "Active", "Inactive", "Archived"],
       default: "active",
     },
   },
@@ -105,4 +118,4 @@ const supplierSchema = new mongoose.Schema(
 
 const Supplier = mongoose.model("Supplier", supplierSchema);
 
-export default Supplier;
+export default Supplier;

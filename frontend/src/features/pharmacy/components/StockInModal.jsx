@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useMemo } from "react";
-import { X, Plus, Calendar, Edit2, Trash2 } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { X, Plus, Trash2 } from "lucide-react";
+import CustomDropdown from "../../../components/ui/CustomDropdown.jsx";
 import { getSuppliersApi } from "../../suppliers/services/supplier.api.js";
 import { getMedicinesApi } from "../services/medicine.api.js";
 
@@ -39,7 +40,7 @@ export default function StockInModal({ isOpen, onClose, onSubmit }) {
   const [addedItems, setAddedItems] = useState(INITIAL_ADDED_ITEMS);
 
   // Additional Information state
-  const [additionalInfo, setAdditionalInfo] = useState({
+  const [additionalInfo] = useState({
     receivedBy: "Pharmacist Admin",
     checkedBy: "",
     storeLocation: "Main Pharmacy Store",
@@ -47,14 +48,14 @@ export default function StockInModal({ isOpen, onClose, onSubmit }) {
     printGrn: false,
   });
 
-  // Fetch dynamic suppliers & medicines on modal open
+  // Fetch dynamic suppliers & medicines on modal open from DB
   useEffect(() => {
     if (isOpen) {
       getSuppliersApi({ limit: 100 })
         .then((res) => {
           const data = res?.data?.data;
           const suppliers = data?.suppliers || data?.items || (Array.isArray(data) ? data : []);
-          if (Array.isArray(suppliers)) {
+          if (Array.isArray(suppliers) && suppliers.length > 0) {
             setSupplierList(suppliers);
           }
         })
@@ -64,7 +65,7 @@ export default function StockInModal({ isOpen, onClose, onSubmit }) {
         .then((res) => {
           const data = res?.data?.data;
           const medicines = data?.items || data?.medicines || (Array.isArray(data) ? data : []);
-          if (Array.isArray(medicines)) {
+          if (Array.isArray(medicines) && medicines.length > 0) {
             setMedicineList(medicines);
           }
         })
@@ -75,12 +76,24 @@ export default function StockInModal({ isOpen, onClose, onSubmit }) {
   if (!isOpen) return null;
 
   // Calculate totals
-  const subTotalExclTax = addedItems.reduce((sum, item) => sum + (item.purchasePrice * item.qtyReceived), 0);
-  const totalGst = addedItems.reduce((sum, item) => sum + (item.purchasePrice * item.qtyReceived * (item.gstRate / 100)), 0);
+  const subTotalExclTax = addedItems.reduce((sum, item) => sum + item.purchasePrice * item.qtyReceived, 0);
+  const totalGst = addedItems.reduce((sum, item) => sum + item.purchasePrice * item.qtyReceived * (item.gstRate / 100), 0);
   const grandTotal = subTotalExclTax + totalGst;
 
-  const handleSelectMedicine = (e) => {
-    const medId = e.target.value;
+  const supplierOptions = [
+    { label: "Select supplier", value: "" },
+    ...supplierList.map((s) => ({ label: `${s.name} ${s.code ? `(${s.code})` : ""}`, value: s.name })),
+    { label: "Medilife Pharma Pvt. Ltd.", value: "Medilife Pharma Pvt. Ltd." },
+    { label: "HealthCare Distributors", value: "HealthCare Distributors" },
+    { label: "MediSupplies India", value: "MediSupplies India" },
+  ].filter((v, i, a) => a.findIndex((t) => t.value === v.value) === i);
+
+  const medicineOptions = [
+    { label: "Select Medicine", value: "" },
+    ...medicineList.map((m) => ({ label: `${m.name} (${m.category || "Med"})`, value: m._id || m.id })),
+  ];
+
+  const handleSelectMedicineVal = (medId) => {
     const selected = medicineList.find((m) => (m._id || m.id) === medId);
     if (selected) {
       setCurrentItem({
@@ -110,7 +123,7 @@ export default function StockInModal({ isOpen, onClose, onSubmit }) {
     const price = parseFloat(currentItem.purchasePrice) || 0;
     const qty = parseInt(currentItem.qtyReceived, 10) || 0;
     const gst = parseFloat(currentItem.gstRate) || 12;
-    const itemAmount = (price * qty) * (1 + gst / 100);
+    const itemAmount = price * qty * (1 + gst / 100);
 
     const newItem = {
       id: String(Date.now()),
@@ -198,23 +211,15 @@ export default function StockInModal({ isOpen, onClose, onSubmit }) {
             </h3>
 
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-3.5">
-              {/* Dynamic Supplier Selection */}
+              {/* Dynamic Supplier CustomDropdown */}
               <div>
-                <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                  Supplier <span className="text-rose-500">*</span>
-                </label>
-                <select
+                <CustomDropdown
+                  label="Supplier *"
                   value={purchaseInfo.supplier}
-                  onChange={(e) => setPurchaseInfo({ ...purchaseInfo, supplier: e.target.value })}
-                  className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all cursor-pointer text-slate-700"
-                >
-                  <option value="">Select supplier</option>
-                  {supplierList.map((sup) => (
-                    <option key={sup._id || sup.id} value={sup.name}>
-                      {sup.name} {sup.code ? `(${sup.code})` : ""}
-                    </option>
-                  ))}
-                </select>
+                  options={supplierOptions}
+                  onChange={(val) => setPurchaseInfo({ ...purchaseInfo, supplier: val })}
+                  fullWidth
+                />
               </div>
 
               {/* Invoice / Bill No. */}
@@ -244,20 +249,19 @@ export default function StockInModal({ isOpen, onClose, onSubmit }) {
                 />
               </div>
 
-              {/* Purchase Type */}
+              {/* Purchase Type CustomDropdown */}
               <div>
-                <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                  Purchase Type <span className="text-rose-500">*</span>
-                </label>
-                <select
+                <CustomDropdown
+                  label="Purchase Type *"
                   value={purchaseInfo.purchaseType}
-                  onChange={(e) => setPurchaseInfo({ ...purchaseInfo, purchaseType: e.target.value })}
-                  className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all cursor-pointer text-slate-700"
-                >
-                  <option value="Cash Purchase">Cash Purchase</option>
-                  <option value="Credit Purchase">Credit Purchase</option>
-                  <option value="Advance Payment">Advance Payment</option>
-                </select>
+                  options={[
+                    { label: "Cash Purchase", value: "Cash Purchase" },
+                    { label: "Credit Purchase", value: "Credit Purchase" },
+                    { label: "Advance Payment", value: "Advance Payment" },
+                  ]}
+                  onChange={(val) => setPurchaseInfo({ ...purchaseInfo, purchaseType: val })}
+                  fullWidth
+                />
               </div>
             </div>
           </div>
@@ -270,21 +274,15 @@ export default function StockInModal({ isOpen, onClose, onSubmit }) {
 
             {/* Input Row */}
             <div className="bg-slate-50/70 border border-slate-200/80 rounded-xl p-3.5 grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
-              {/* Medicine Select */}
+              {/* Medicine Select CustomDropdown */}
               <div className="sm:col-span-3">
-                <label className="block text-[11px] font-semibold text-slate-700 mb-1">Select / Type Medicine</label>
-                <select
+                <CustomDropdown
+                  label="Select / Type Medicine"
                   value={currentItem.medicineId || currentItem.medicineName}
-                  onChange={handleSelectMedicine}
-                  className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all cursor-pointer"
-                >
-                  <option value="">Select Medicine</option>
-                  {medicineList.map((med) => (
-                    <option key={med._id || med.id} value={med._id || med.id}>
-                      {med.name} ({med.category || "Med"})
-                    </option>
-                  ))}
-                </select>
+                  options={medicineOptions}
+                  onChange={handleSelectMedicineVal}
+                  fullWidth
+                />
               </div>
 
               {/* Batch No */}
@@ -319,7 +317,7 @@ export default function StockInModal({ isOpen, onClose, onSubmit }) {
                   value={currentItem.purchasePrice}
                   onChange={(e) => setCurrentItem({ ...currentItem, purchasePrice: e.target.value })}
                   placeholder="0.00"
-                  className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-right"
+                  className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-right font-bold text-slate-900"
                 />
               </div>
 
@@ -331,7 +329,7 @@ export default function StockInModal({ isOpen, onClose, onSubmit }) {
                   value={currentItem.qtyReceived}
                   onChange={(e) => setCurrentItem({ ...currentItem, qtyReceived: e.target.value })}
                   placeholder="0"
-                  className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-right"
+                  className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-right font-bold text-slate-900"
                 />
               </div>
 

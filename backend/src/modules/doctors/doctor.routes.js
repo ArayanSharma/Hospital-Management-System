@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { create, getAll, getById, update, remove, updatePhoto } from "./doctor.controller.js";
+import { create, getAll, exportCSV, getById, update, remove, updatePhoto } from "./doctor.controller.js";
 import { authenticate } from "../../middleware/auth.middleware.js";
 import { checkPermission } from "../../middleware/permission.middleware.js";
 import { validate } from "../../middleware/validation.middleware.js";
@@ -15,6 +15,7 @@ router.post(
   validate(createDoctorSchema),
   create
 );
+router.get("/export", authenticate, checkPermission("doctor:read"), exportCSV);
 router.get("/", authenticate, checkPermission("doctor:read"), getAll);
 router.get("/:id", authenticate, checkPermission("doctor:read"), getById);
 router.patch(

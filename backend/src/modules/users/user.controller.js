@@ -5,6 +5,7 @@ import {
   updateUser,
   changePassword,
   deleteUser,
+  exportUsersService,
 } from "./user.service.js";
 import { successResponse } from "../../core/responses/apiResponse.js";
 import { asyncHandler } from "../../utils/asyncHandler.js";
@@ -12,6 +13,14 @@ import { asyncHandler } from "../../utils/asyncHandler.js";
 export const create = asyncHandler(async (req, res) => {
   const user = await createUser(req.body);
   return successResponse(res, 201, "User created successfully", user);
+});
+
+export const exportCSV = asyncHandler(async (req, res) => {
+  const csvData = await exportUsersService(req.query);
+  const filename = `Users_Export_${new Date().toISOString().split("T")[0]}.csv`;
+  res.setHeader("Content-Type", "text/csv");
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+  return res.status(200).send(csvData);
 });
 
 export const getById = asyncHandler(async (req, res) => {

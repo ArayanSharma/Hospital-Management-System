@@ -396,3 +396,52 @@ export const deleteUser = async (id) => {
   await user.save();
   return { message: "User deleted successfully" };
 };
+
+// ---------------- EXPORT CSV (Backend Controlled) ----------------
+export const exportUsersService = async (params = {}) => {
+  await ensureSampleUsers();
+  const { status, role, department, search } = params;
+  const query = { status: { $ne: "deleted" } };
+
+  if (status && status.toLowerCase() !== "all" && status.toLowerCase() !== "all status") {
+    query.status = new RegExp(`^${status.trim()}$`, "i");
+  }
+  if (role && role.toLowerCase() !== "all" && role.toLowerCase() !== "all roles") {
+    query.$or = [
+      { roleName: new RegExp(`^${role.trim()}$`, "i") },
+      { role: new RegExp(`^${role.trim()}$`, "i") },
+    ];
+  }
+  if (department && department.toLowerCase() !== "all" && department.toLowerCase() !== "all departments") {
+    query.department = new RegExp(department.trim(), "i");
+  }
+
+  if (search) {
+    const reg = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+    const searchConditions = [{ name: reg }, { email: reg }, { username: reg }, { phone: reg }];
+    if (query.$or) {
+      query.$and = [{ $or: query.$or }, { $or: searchConditions }];
+      delete query.$or;
+    } else {
+      query.$or = searchConditions;
+    }
+  }
+
+  const users = await User.find(query).sort({ createdAt: -1 });
+
+  const headers = ["Employee ID", "Name", "Email", "Username", "Role", "Department", "Designation", "Phone", "Status", "Created At"];
+  const rows = users.map((u) => [
+    u.employeeId || u._id,
+    `"${(u.name || "").replace(/"/g, '""')}"`,
+    `"${(u.email || "").replace(/"/g, '""')}"`,
+    `"${(u.username || "").replace(/"/g, '""')}"`,
+    u.roleName || u.role || "",
+    `"${(u.department || "").replace(/"/g, '""')}"`,
+    `"${(u.designation || "").replace(/"/g, '""')}"`,
+    `"${(u.phone || "").replace(/"/g, '""')}"`,
+    u.status || "",
+    u.createdAt ? new Date(u.createdAt).toISOString().split("T")[0] : "",
+  ]);
+
+  return [headers.join(","), ...rows.map((row) => row.join(","))].join("\n");
+};

@@ -154,48 +154,38 @@ export const getAllLabTests = async ({
 
   const query = {};
   if (patientId) query.patientId = patientId;
-  if (status && status !== "all") query.status = status;
-  if (priority && priority !== "all") query.priority = priority;
+  if (status && status !== "all" && status !== "") query.status = status;
+  if (priority && priority !== "all" && priority !== "") query.priority = priority;
 
   if (fromDate || toDate) {
-    query.requestedAt = {};
+    const dateQuery = {};
     if (fromDate) {
       const start = new Date(fromDate);
       start.setHours(0, 0, 0, 0);
-      query.requestedAt.$gte = start;
+      dateQuery.$gte = start;
     }
     if (toDate) {
       const end = new Date(toDate);
       end.setHours(23, 59, 59, 999);
-      query.requestedAt.$lte = end;
+      dateQuery.$lte = end;
     }
+    query.$or = [{ requestedAt: dateQuery }, { createdAt: dateQuery }];
   }
 
-  const safeSearch = search ? search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") : "";
-  const skip = (Number(page) - 1) * Number(limit);
+  const safeSearch = search ? search.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&") : "";
 
   try {
-    const [tests, total, pendingCount, sampleCollectedCount, completedCount, cancelledCount] =
-      await Promise.all([
-        LabTest.find(query)
-          .populate("patientId", "name patientId phone dateOfBirth gender photoUrl")
-          .populate({
-            path: "doctorId",
-            select: "doctorId specialization photoUrl userId",
-            populate: { path: "userId", select: "name" },
-          })
-          .skip(skip)
-          .limit(Number(limit))
-          .sort({ createdAt: -1 }),
-        LabTest.countDocuments(query),
-        LabTest.countDocuments({ status: "pending" }),
-        LabTest.countDocuments({ status: "sample-collected" }),
-        LabTest.countDocuments({ status: "completed" }),
-        LabTest.countDocuments({ status: "cancelled" }),
-      ]);
+    const allTests = await LabTest.find(query)
+      .populate("patientId", "name patientId phone dateOfBirth gender photoUrl")
+      .populate({
+        path: "doctorId",
+        select: "doctorId specialization photoUrl userId",
+        populate: { path: "userId", select: "name" },
+      })
+      .sort({ createdAt: -1 });
 
     const filteredTests = safeSearch
-      ? tests.filter(
+      ? allTests.filter(
           (t) =>
             t.orderId?.toLowerCase().includes(safeSearch.toLowerCase()) ||
             t.testName?.toLowerCase().includes(safeSearch.toLowerCase()) ||
@@ -203,16 +193,28 @@ export const getAllLabTests = async ({
             t.patientId?.patientId?.toLowerCase().includes(safeSearch.toLowerCase()) ||
             t.doctorId?.userId?.name?.toLowerCase().includes(safeSearch.toLowerCase())
         )
-      : tests;
+      : allTests;
 
-    const grandTotal = total;
+    const [pendingCount, sampleCollectedCount, completedCount, cancelledCount] =
+      await Promise.all([
+        LabTest.countDocuments({ status: "pending" }),
+        LabTest.countDocuments({ status: "sample-collected" }),
+        LabTest.countDocuments({ status: "completed" }),
+        LabTest.countDocuments({ status: "cancelled" }),
+      ]);
+
+    const total = filteredTests.length;
+    const startIndex = (Number(page) - 1) * Number(limit);
+    const paginatedTests = filteredTests.slice(startIndex, startIndex + Number(limit));
+
+    const grandTotal = await LabTest.countDocuments();
     const pPct = grandTotal > 0 ? ((pendingCount / grandTotal) * 100).toFixed(2) : "0.00";
     const sPct = grandTotal > 0 ? ((sampleCollectedCount / grandTotal) * 100).toFixed(2) : "0.00";
     const cPct = grandTotal > 0 ? ((completedCount / grandTotal) * 100).toFixed(2) : "0.00";
     const xPct = grandTotal > 0 ? ((cancelledCount / grandTotal) * 100).toFixed(2) : "0.00";
 
     return {
-      tests: filteredTests,
+      tests: paginatedTests,
       stats: {
         totalOrders: grandTotal,
         pendingOrders: pendingCount,
@@ -268,19 +270,33 @@ export const getLabTestById = async (id) => {
   return test;
 };
 
-// ---------------- UPDATE STATUS (sample collect / cancel karna) ----------------
-export const updateLabTestStatus = async (id, status, currentUser, requestMeta) => {
+// ---------------- UPDATE LAB TEST DETAILS & STATUS ----------------
+export const updateLabTestStatus = async (id, payload, currentUser, requestMeta) => {
   const test = await LabTest.findById(id);
   if (!test) {
     throw new AppError("Lab test not found", 404, ErrorCodes.NOT_FOUND);
   }
 
-  if (test.status === "completed" && status !== "completed") {
+  // Handle both simple status string or full payload object
+  const updateData = typeof payload === "string" ? { status: payload } : payload || {};
+
+  if (test.status === "completed" && updateData.status && updateData.status !== "completed") {
     throw new AppError("Cannot change status of a completed lab test", 400, ErrorCodes.VALIDATION_ERROR);
   }
 
   const oldValue = test.toObject();
-  test.status = status;
+
+  // Dynamically update fields if provided
+  if (updateData.status) test.status = updateData.status;
+  if (updateData.testName) test.testName = updateData.testName;
+  if (updateData.doctorId) test.doctorId = updateData.doctorId;
+  if (updateData.priority) test.priority = updateData.priority;
+  if (updateData.sampleType) test.sampleType = updateData.sampleType;
+  if (updateData.visitType) test.visitType = updateData.visitType;
+  if (updateData.clinicalNotes !== undefined) test.clinicalNotes = updateData.clinicalNotes;
+  if (updateData.attachmentUrl !== undefined) test.attachmentUrl = updateData.attachmentUrl;
+  if (updateData.cancellationReason !== undefined) test.cancellationReason = updateData.cancellationReason;
+
   await test.save();
 
   if (currentUser) {

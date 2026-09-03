@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   X,
   Save,
@@ -16,8 +16,17 @@ import {
   PieChart,
   Lock,
   Check,
+  ChevronDown,
 } from "lucide-react";
 import EditPermissionsRightSidebar from "../EditPermissionsRightSidebar.jsx";
+import CustomDropdown from "../../../../components/ui/CustomDropdown.jsx";
+
+const ACCESS_LEVEL_OPTIONS = [
+  { value: "Full Access", label: "🟢 Full Access" },
+  { value: "Read Only", label: "🔵 Read Only" },
+  { value: "Limited Access", label: "🟠 Limited Access" },
+  { value: "No Access", label: "🔴 No Access" },
+];
 
 const EDIT_PERM_MODULES = [
   { key: "Patient Management", name: "Patient Management", sub: "Patients, registration, profiles" },
@@ -227,31 +236,34 @@ export default function EditPermissionsModal({ isOpen, onClose, onSubmit, role }
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Back to Roles Button */}
             <button
               type="button"
               onClick={onClose}
-              className="flex items-center gap-1 px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-xs rounded-xl shadow-2xs transition cursor-pointer"
+              className="group flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 font-bold text-xs rounded-xl shadow-2xs transition-all duration-150 cursor-pointer active:scale-95"
             >
-              <ArrowLeft className="w-3.5 h-3.5" />
+              <ArrowLeft className="w-3.5 h-3.5 text-slate-500 group-hover:-translate-x-1 transition-transform duration-200 ease-out" />
               <span>Back to Roles</span>
             </button>
 
+            {/* Reset Changes Button */}
             <button
               type="button"
               onClick={handleResetChanges}
-              className="flex items-center gap-1 px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-xs rounded-xl shadow-2xs transition cursor-pointer"
+              className="group flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 font-bold text-xs rounded-xl shadow-2xs transition-all duration-150 cursor-pointer active:scale-95"
             >
-              <RotateCcw className="w-3.5 h-3.5" />
+              <RotateCcw className="w-3.5 h-3.5 text-slate-500 group-hover:-rotate-180 transition-transform duration-300 ease-out" />
               <span>Reset Changes</span>
             </button>
 
+            {/* Save Changes Button */}
             <button
               type="button"
               onClick={handleSubmit}
               disabled={submitting}
-              className="flex items-center gap-1 px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer disabled:opacity-50"
+              className="group flex items-center gap-1.5 px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs hover:shadow-md transition-all duration-150 cursor-pointer active:scale-95 disabled:opacity-50"
             >
-              <Save className="w-3.5 h-3.5" />
+              <Save className="w-3.5 h-3.5 group-hover:scale-110 transition-transform duration-200" />
               <span>{submitting ? "Saving..." : "Save Changes"}</span>
             </button>
           </div>
@@ -525,16 +537,13 @@ export default function EditPermissionsModal({ isOpen, onClose, onSubmit, role }
                               <p className="text-[10px] text-slate-400 font-medium">{m.sub}</p>
                             </div>
 
-                            <select
+                            <CustomDropdown
                               value={accessLvl}
-                              onChange={(e) => handleAccessLevelChange(m.key, e.target.value)}
-                              className="bg-white border border-slate-200 rounded-lg px-3 py-1 text-xs font-bold text-slate-800 cursor-pointer focus:outline-none focus:border-blue-500"
-                            >
-                              <option value="Full Access">🟢 Full Access</option>
-                              <option value="Read Only">🔵 Read Only</option>
-                              <option value="Limited Access">🟠 Limited Access</option>
-                              <option value="No Access">🔴 No Access</option>
-                            </select>
+                              options={ACCESS_LEVEL_OPTIONS}
+                              onChange={(newVal) => handleAccessLevelChange(m.key, newVal)}
+                              minWidth="135px"
+                              alignRight
+                            />
                           </div>
 
                           {/* Action Checkbox Chips */}

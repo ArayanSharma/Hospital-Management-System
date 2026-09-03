@@ -4,6 +4,8 @@ import {
   getAll,
   getById,
   cancel,
+  voidInvoiceController,
+  refundInvoiceController,
   getNextNumber,
   getPatientEncounters,
   getCatalog,
@@ -23,5 +25,7 @@ router.post("/", authenticate, checkPermission("invoice:create"), validate(creat
 router.get("/", authenticate, checkPermission("invoice:read"), getAll);
 router.get("/:id", authenticate, checkPermission("invoice:read"), getById);
 router.patch("/:id/cancel", authenticate, checkPermission("invoice:update"), cancel);
+router.patch("/:id/void", authenticate, checkPermission("invoice:update"), voidInvoiceController);
+router.post("/:id/refund", authenticate, checkPermission("invoice:update"), refundInvoiceController);
 
 export default router;

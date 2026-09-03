@@ -4,6 +4,7 @@ import {
   getPatientById,
   updatePatient,
   deletePatient,
+  exportPatientsService,
 } from "./patient.service.js";
 import { successResponse } from "../../core/responses/apiResponse.js";
 import { asyncHandler } from "../../utils/asyncHandler.js";
@@ -18,6 +19,14 @@ export const create = asyncHandler(async (req, res) => {
 export const getAll = asyncHandler(async (req, res) => {
   const result = await getAllPatients(req.query);
   return successResponse(res, 200, "Patients fetched successfully", result);
+});
+
+export const exportCSV = asyncHandler(async (req, res) => {
+  const csvData = await exportPatientsService(req.query);
+  const filename = `Patients_Export_${new Date().toISOString().split("T")[0]}.csv`;
+  res.setHeader("Content-Type", "text/csv");
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+  return res.status(200).send(csvData);
 });
 
 export const getById = asyncHandler(async (req, res) => {

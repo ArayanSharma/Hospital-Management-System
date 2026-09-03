@@ -228,12 +228,17 @@ export default function IpdActiveAdmissionsTable({
                         </button>
                         <button
                           type="button"
+                          disabled={adm.status === "discharged"}
                           onClick={() => onDischarge(adm)}
-                          className="p-1 rounded-lg border border-emerald-200 text-emerald-600 hover:bg-emerald-50 transition cursor-pointer font-bold text-[10px] px-2 py-1 flex items-center gap-1"
-                          title="Discharge Patient"
+                          className={`p-1 rounded-lg border text-[10px] px-2 py-1 flex items-center gap-1 transition ${
+                            adm.status === "discharged"
+                              ? "border-slate-200 text-slate-400 bg-slate-50 cursor-not-allowed opacity-50"
+                              : "border-emerald-200 text-emerald-600 hover:bg-emerald-50 cursor-pointer font-bold"
+                          }`}
+                          title={adm.status === "discharged" ? "Patient already discharged" : "Discharge Patient"}
                         >
                           <UserCheck className="w-3 h-3" />
-                          <span>Discharge</span>
+                          <span>{adm.status === "discharged" ? "Discharged" : "Discharge"}</span>
                         </button>
                       </div>
                     </td>

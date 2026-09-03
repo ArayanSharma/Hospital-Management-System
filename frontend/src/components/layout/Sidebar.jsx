@@ -40,18 +40,34 @@ export default function Sidebar() {
   const location = useLocation();
   const { hasPermission } = usePermission();
 
-  // Keep track of which submenus are expanded
-  const [openSubMenus, setOpenSubMenus] = useState({
-    "/pharmacy": true,
-  });
+  // Keep track of submenus toggle state
+  const [openSubMenus, setOpenSubMenus] = useState({});
 
   const toggleSubMenu = (path, e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setOpenSubMenus((prev) => ({
-      ...prev,
-      [path]: !prev[path],
-    }));
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    setOpenSubMenus((prev) => {
+      const isCurrentlyOpen = prev[path] !== undefined ? prev[path] : location.pathname.startsWith(path);
+      return {
+        ...prev,
+        [path]: !isCurrentlyOpen,
+      };
+    });
+  };
+
+  const handleParentClick = (item) => {
+    if (item.hasSub) {
+      // Ensure submenu expands when navigating to pharmacy or parent section with submenus
+      setOpenSubMenus((prev) => ({
+        ...prev,
+        [item.path]: true,
+      }));
+    } else {
+      // Auto-close/collapse sub-menus when clicking any other module outside of Pharmacy
+      setOpenSubMenus({});
+    }
   };
 
   const visibleItemsMap = new Map(
@@ -95,13 +111,17 @@ export default function Sidebar() {
                 const isParentActive =
                   location.pathname === item.path ||
                   (item.path !== "/" && location.pathname.startsWith(item.path));
-                const isSubMenuOpen = openSubMenus[item.path] ?? isParentActive;
+                const isSubMenuOpen =
+                  openSubMenus[item.path] !== undefined
+                    ? openSubMenus[item.path]
+                    : isParentActive;
 
                 return (
                   <div key={item.path} className="space-y-1">
                     <NavLink
                       to={item.path}
                       end={item.path === "/"}
+                      onClick={() => handleParentClick(item)}
                       className={({ isActive }) => {
                         const isCustomActive =
                           isActive || (item.path === "/" && location.pathname === "/dashboard");
@@ -137,12 +157,13 @@ export default function Sidebar() {
                                 <button
                                   type="button"
                                   onClick={(e) => toggleSubMenu(item.path, e)}
-                                  className="p-0.5 hover:bg-black/5 rounded transition-colors"
+                                  className="p-1 hover:bg-black/10 rounded-md transition-colors cursor-pointer"
+                                  title={isSubMenuOpen ? "Collapse menu" : "Expand menu"}
                                 >
                                   <ChevronDown
                                     className={`w-3.5 h-3.5 transition-transform duration-200 ${
                                       isSubMenuOpen ? "rotate-180" : ""
-                                    } ${isCustomActive ? "text-white/90" : "text-slate-400"}`}
+                                    } ${isCustomActive ? "text-white/90" : "text-slate-500"}`}
                                   />
                                 </button>
                               )}
@@ -157,9 +178,13 @@ export default function Sidebar() {
                       }}
                     </NavLink>
 
-                    {/* Sub-items rendering */}
-                    {item.hasSub && item.subItems && isSubMenuOpen && (
-                      <div className="pl-6 space-y-1 pt-0.5">
+                    {/* Sub-items collapse/expand animated container */}
+                    {item.hasSub && item.subItems && (
+                      <div
+                        className={`pl-6 space-y-1 overflow-hidden transition-all duration-300 ease-in-out ${
+                          isSubMenuOpen ? "max-h-96 opacity-100 pt-0.5" : "max-h-0 opacity-0 pointer-events-none"
+                        }`}
+                      >
                         {item.subItems.map((sub) => {
                           const SubIcon = sub.icon;
                           const isSubActive =

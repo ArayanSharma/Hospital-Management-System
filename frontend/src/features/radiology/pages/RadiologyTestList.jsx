@@ -12,8 +12,28 @@ import RadiologyTodayScheduleCard from "../components/RadiologyTodayScheduleCard
 import RadiologyTestOrderModal from "../components/RadiologyTestOrderModal.jsx";
 import RadiologyReportSection from "../components/RadiologyReportSection.jsx";
 
+// Import 8 Radiology Action Modals
+import RadiologyViewOrderModal from "../components/modals/RadiologyViewOrderModal.jsx";
+import RadiologyEditOrderModal from "../components/modals/RadiologyEditOrderModal.jsx";
+import RadiologyScheduleModal from "../components/modals/RadiologyScheduleModal.jsx";
+import RadiologyCancelModal from "../components/modals/RadiologyCancelModal.jsx";
+import RadiologyStudyDetailsModal from "../components/modals/RadiologyStudyDetailsModal.jsx";
+import RadiologyUploadImagesModal from "../components/modals/RadiologyUploadImagesModal.jsx";
+import RadiologyFindingsModal from "../components/modals/RadiologyFindingsModal.jsx";
+import RadiologyCancellationDetailsModal from "../components/modals/RadiologyCancellationDetailsModal.jsx";
+
 export default function RadiologyTestList() {
   const [modalOpen, setModalOpen] = useState(false);
+
+  // Target modal state variables
+  const [viewModalOrder, setViewModalOrder] = useState(null);
+  const [editModalOrder, setEditModalOrder] = useState(null);
+  const [scheduleModalOrder, setScheduleModalOrder] = useState(null);
+  const [cancelModalOrder, setCancelModalOrder] = useState(null);
+  const [studyModalOrder, setStudyModalOrder] = useState(null);
+  const [uploadImagesOrder, setUploadImagesOrder] = useState(null);
+  const [findingsModalOrder, setFindingsModalOrder] = useState(null);
+  const [cancellationDetailsOrder, setCancellationDetailsOrder] = useState(null);
 
   const {
     orders,
@@ -35,6 +55,57 @@ export default function RadiologyTestList() {
     const reportElem = document.getElementById("radiology-report-entry-section");
     if (reportElem) {
       reportElem.scrollIntoView({ behavior: "smooth" });
+    }
+  };
+
+  const handleAction = (actionKey, orderItem) => {
+    setSelectedOrder(orderItem);
+    switch (actionKey) {
+      case "view-order":
+        setViewModalOrder(orderItem);
+        break;
+      case "edit-order":
+        setEditModalOrder(orderItem);
+        break;
+      case "schedule-scan":
+        setScheduleModalOrder(orderItem);
+        break;
+      case "start-scan":
+        updateOrderStatus(orderItem._id, "in-progress");
+        break;
+      case "cancel-order":
+        setCancelModalOrder(orderItem);
+        break;
+      case "view-study":
+        setStudyModalOrder(orderItem);
+        break;
+      case "upload-images":
+        setUploadImagesOrder(orderItem);
+        break;
+      case "enter-findings":
+        setFindingsModalOrder(orderItem);
+        break;
+      case "complete-scan":
+        updateOrderStatus(orderItem._id, "completed");
+        break;
+      case "view-report":
+        const reportElem = document.getElementById("radiology-report-entry-section");
+        if (reportElem) reportElem.scrollIntoView({ behavior: "smooth" });
+        break;
+      case "print-report":
+        window.print();
+        break;
+      case "view-history":
+        alert(`Showing history for scan #${orderItem.orderId || orderItem._id}`);
+        break;
+      case "view-cancellation":
+        setCancellationDetailsOrder(orderItem);
+        break;
+      case "reorder":
+        setModalOpen(true);
+        break;
+      default:
+        break;
     }
   };
 
@@ -87,7 +158,7 @@ export default function RadiologyTestList() {
                 selectedOrder={selectedOrder}
                 onSelectOrder={handleSelectOrder}
                 onStatusChange={updateOrderStatus}
-                onDeleteOrder={deleteOrder}
+                onAction={handleAction}
               />
             )}
           </div>
@@ -119,6 +190,60 @@ export default function RadiologyTestList() {
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
         onSuccess={fetchOrders}
+      />
+
+      {/* Action Modals */}
+      <RadiologyViewOrderModal
+        order={viewModalOrder}
+        isOpen={!!viewModalOrder}
+        onClose={() => setViewModalOrder(null)}
+      />
+
+      <RadiologyEditOrderModal
+        order={editModalOrder}
+        isOpen={!!editModalOrder}
+        onClose={() => setEditModalOrder(null)}
+        onSuccess={fetchOrders}
+      />
+
+      <RadiologyScheduleModal
+        order={scheduleModalOrder}
+        isOpen={!!scheduleModalOrder}
+        onClose={() => setScheduleModalOrder(null)}
+        onSuccess={fetchOrders}
+      />
+
+      <RadiologyCancelModal
+        order={cancelModalOrder}
+        isOpen={!!cancelModalOrder}
+        onClose={() => setCancelModalOrder(null)}
+        onSuccess={fetchOrders}
+      />
+
+      <RadiologyStudyDetailsModal
+        order={studyModalOrder}
+        isOpen={!!studyModalOrder}
+        onClose={() => setStudyModalOrder(null)}
+      />
+
+      <RadiologyUploadImagesModal
+        order={uploadImagesOrder}
+        isOpen={!!uploadImagesOrder}
+        onClose={() => setUploadImagesOrder(null)}
+        onSuccess={fetchOrders}
+      />
+
+      <RadiologyFindingsModal
+        order={findingsModalOrder}
+        isOpen={!!findingsModalOrder}
+        onClose={() => setFindingsModalOrder(null)}
+        onSuccess={fetchOrders}
+      />
+
+      <RadiologyCancellationDetailsModal
+        order={cancellationDetailsOrder}
+        isOpen={!!cancellationDetailsOrder}
+        onClose={() => setCancellationDetailsOrder(null)}
       />
     </div>
   );

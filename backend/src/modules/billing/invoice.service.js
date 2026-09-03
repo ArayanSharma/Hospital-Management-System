@@ -456,7 +456,7 @@ export const cancelInvoice = async (id, currentUser, requestMeta) => {
 
   if (currentUser) {
     await createAuditLog({
-      userId: currentUser.id,
+      userId: currentUser?.id,
       action: "UPDATE",
       resource: "invoice",
       resourceId: invoice._id,
@@ -468,4 +468,91 @@ export const cancelInvoice = async (id, currentUser, requestMeta) => {
   }
 
   return { message: "Invoice cancelled successfully", invoice };
+};
+
+// ---------------- VOID / CANCEL INVOICE WITH AUDIT ----------------
+export const voidInvoiceService = async (id, voidReason, authCode, currentUser, requestMeta) => {
+  const invoice = await Invoice.findById(id);
+  if (!invoice) {
+    throw new AppError("Invoice not found", 404, ErrorCodes.NOT_FOUND);
+  }
+
+  const oldValue = invoice.toObject();
+  invoice.status = "cancelled";
+  invoice.cancellationInfo = {
+    reason: voidReason || "Admin Void Request",
+    cancelledBy: currentUser?.name || "Billing Supervisor (Admin)",
+    authCode: authCode || "AUTH-VOID",
+    cancelledAt: new Date(),
+  };
+
+  await invoice.save();
+
+  if (currentUser) {
+    await createAuditLog({
+      userId: currentUser?.id,
+      action: "VOID_INVOICE",
+      resource: "invoice",
+      resourceId: invoice._id,
+      oldValue,
+      newValue: invoice.toObject(),
+      ipAddress: requestMeta?.ipAddress || "",
+      userAgent: requestMeta?.userAgent || "",
+    });
+  }
+
+  return { message: `Invoice ${invoice.invoiceNumber} voided successfully`, invoice };
+};
+
+// ---------------- REFUND INVOICE ----------------
+export const refundInvoiceService = async (id, refundAmount, refundReason, refundMethod, currentUser, requestMeta) => {
+  const invoice = await Invoice.findById(id);
+  if (!invoice) {
+    throw new AppError("Invoice not found", 404, ErrorCodes.NOT_FOUND);
+  }
+
+  const refAmt = Number(refundAmount || 0);
+  if (refAmt <= 0) {
+    throw new AppError("Refund amount must be greater than 0", 400, ErrorCodes.VALIDATION_ERROR);
+  }
+
+  if (refAmt > (invoice.amountPaid || 0)) {
+    throw new AppError(`Refund amount (₹${refAmt}) cannot exceed paid amount (₹${invoice.amountPaid})`, 400, ErrorCodes.VALIDATION_ERROR);
+  }
+
+  const oldValue = invoice.toObject();
+  invoice.amountPaid = Math.max(0, (invoice.amountPaid || 0) - refAmt);
+  invoice.dueAmount = Math.max(0, invoice.total - invoice.amountPaid);
+
+  if (invoice.amountPaid <= 0) {
+    invoice.status = "unpaid";
+  } else if (invoice.amountPaid < invoice.total) {
+    invoice.status = "partially-paid";
+  }
+
+  invoice.refundHistory = invoice.refundHistory || [];
+  invoice.refundHistory.push({
+    refundAmount: refAmt,
+    refundReason: refundReason || "Patient Request",
+    refundMethod: refundMethod || "Cash",
+    processedBy: currentUser?.name || "Billing Admin",
+    date: new Date(),
+  });
+
+  await invoice.save();
+
+  if (currentUser) {
+    await createAuditLog({
+      userId: currentUser?.id,
+      action: "REFUND_INVOICE",
+      resource: "invoice",
+      resourceId: invoice._id,
+      oldValue,
+      newValue: invoice.toObject(),
+      ipAddress: requestMeta?.ipAddress || "",
+      userAgent: requestMeta?.userAgent || "",
+    });
+  }
+
+  return { message: `Refund of ₹${refAmt} processed successfully for ${invoice.invoiceNumber}`, invoice };
 };

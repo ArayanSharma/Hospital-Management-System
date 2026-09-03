@@ -250,3 +250,57 @@ export const deleteDoctor = async (id, currentUser, requestMeta) => {
 
   return { message: "Doctor deactivated successfully" };
 };
+
+// ---------------- EXPORT CSV (Backend Controlled) ----------------
+export const exportDoctorsService = async (params = {}) => {
+  const { departmentId, status, specialization, search } = params;
+  const query = {};
+  if (departmentId && departmentId !== "all") query.departmentId = departmentId;
+  if (status && status !== "all") query.status = status;
+  if (specialization && specialization !== "all") query.specialization = specialization;
+
+  const doctors = await Doctor.find(query)
+    .populate("userId", "name email phone")
+    .populate("departmentId", "name")
+    .sort({ createdAt: -1 });
+
+  const safeSearch = search ? search.toLowerCase() : "";
+  const filtered = safeSearch
+    ? doctors.filter(
+        (d) =>
+          d.userId?.name?.toLowerCase().includes(safeSearch) ||
+          d.specialization?.toLowerCase().includes(safeSearch) ||
+          d.doctorId?.toLowerCase().includes(safeSearch)
+      )
+    : doctors;
+
+  const headers = [
+    "Doctor ID",
+    "Name",
+    "Email",
+    "Phone",
+    "Department",
+    "Specialization",
+    "Qualification",
+    "Experience (Yrs)",
+    "Consultation Fee",
+    "Status",
+    "Created At",
+  ];
+
+  const rows = filtered.map((d) => [
+    d.doctorId || d._id,
+    `"${(d.userId?.name || d.name || "").replace(/"/g, '""')}"`,
+    `"${(d.userId?.email || d.email || "").replace(/"/g, '""')}"`,
+    `"${(d.userId?.phone || d.phone || "").replace(/"/g, '""')}"`,
+    `"${(d.departmentId?.name || "").replace(/"/g, '""')}"`,
+    `"${(d.specialization || "").replace(/"/g, '""')}"`,
+    `"${(d.qualification || "").replace(/"/g, '""')}"`,
+    d.experience || 0,
+    d.consultationFee || 0,
+    d.status || "",
+    d.createdAt ? new Date(d.createdAt).toISOString().split("T")[0] : "",
+  ]);
+
+  return [headers.join(","), ...rows.map((row) => row.join(","))].join("\n");
+};

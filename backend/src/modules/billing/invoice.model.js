@@ -164,6 +164,30 @@ const invoiceSchema = new mongoose.Schema(
       enum: ["unpaid", "partially-paid", "paid", "cancelled"],
       default: "unpaid",
     },
+    paymentHistory: [
+      {
+        amount: Number,
+        mode: String,
+        transactionId: String,
+        receivedBy: String,
+        date: { type: Date, default: Date.now },
+      },
+    ],
+    refundHistory: [
+      {
+        refundAmount: Number,
+        refundReason: String,
+        refundMethod: String,
+        processedBy: String,
+        date: { type: Date, default: Date.now },
+      },
+    ],
+    cancellationInfo: {
+      reason: String,
+      cancelledBy: String,
+      authCode: String,
+      cancelledAt: { type: Date, default: Date.now },
+    },
     notes: {
       type: String,
       trim: true,

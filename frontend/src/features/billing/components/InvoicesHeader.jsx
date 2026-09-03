@@ -18,7 +18,7 @@ export default function InvoicesHeader({ onNewInvoice, onExport }) {
           className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer"
         >
           <Plus className="w-4 h-4" />
-          <span>+ New Invoice</span>
+          <span>New Invoice</span>
         </button>
 
         <button

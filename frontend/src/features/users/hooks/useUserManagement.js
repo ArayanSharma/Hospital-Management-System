@@ -56,6 +56,10 @@ export function useUserManagement() {
   }, [page, limit, activeTab, roleFilter, statusFilter, departmentFilter, debouncedSearch]);
 
   useEffect(() => {
+    setPage(1);
+  }, [roleFilter, statusFilter, departmentFilter, debouncedSearch]);
+
+  useEffect(() => {
     fetchUsers();
   }, [fetchUsers]);
 

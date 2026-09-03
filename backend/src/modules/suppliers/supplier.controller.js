@@ -4,6 +4,9 @@ import {
   getSupplierById,
   updateSupplier,
   deleteSupplier,
+  paySupplierOutstandingService,
+  toggleSupplierStatusService,
+  toggleSupplierArchiveService,
 } from "./supplier.service.js";
 import { successResponse } from "../../core/responses/apiResponse.js";
 import { asyncHandler } from "../../utils/asyncHandler.js";
@@ -16,8 +19,8 @@ export const create = asyncHandler(async (req, res) => {
 });
 
 export const getAll = asyncHandler(async (req, res) => {
-  const suppliers = await getAllSuppliers(req.query);
-  return successResponse(res, 200, "Suppliers fetched successfully", suppliers);
+  const result = await getAllSuppliers(req.query);
+  return successResponse(res, 200, "Suppliers fetched successfully", result);
 });
 
 export const getById = asyncHandler(async (req, res) => {
@@ -35,4 +38,23 @@ export const remove = asyncHandler(async (req, res) => {
   const meta = getRequestMeta(req);
   const result = await deleteSupplier(req.params.id, req.user, meta);
   return successResponse(res, 200, result.message);
+});
+
+export const payOutstandingController = asyncHandler(async (req, res) => {
+  const meta = getRequestMeta(req);
+  const { payAmount, paymentMode, notes } = req.body;
+  const result = await paySupplierOutstandingService(req.params.id, payAmount, paymentMode, notes, req.user, meta);
+  return successResponse(res, 200, result.message, result.supplier);
+});
+
+export const toggleStatusController = asyncHandler(async (req, res) => {
+  const meta = getRequestMeta(req);
+  const result = await toggleSupplierStatusService(req.params.id, req.user, meta);
+  return successResponse(res, 200, result.message, result.supplier);
+});
+
+export const toggleArchiveController = asyncHandler(async (req, res) => {
+  const meta = getRequestMeta(req);
+  const result = await toggleSupplierArchiveService(req.params.id, req.user, meta);
+  return successResponse(res, 200, result.message, result.supplier);
 });

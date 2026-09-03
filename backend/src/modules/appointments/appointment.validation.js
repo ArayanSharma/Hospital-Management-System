@@ -28,7 +28,7 @@ export const updateAppointmentSchema = z.object({
 
 export const changeStatusSchema = z.object({
   body: z.object({
-    status: z.enum(["completed", "cancelled", "no-show", "scheduled"]),
+    status: z.enum(["scheduled", "checked_in", "in_consultation", "completed", "cancelled", "no-show"]),
     cancelledReason: z.string().trim().optional(),
   }),
 });

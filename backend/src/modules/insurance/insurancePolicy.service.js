@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import InsurancePolicy from "./insurancePolicy.model.js";
 import Patient from "../patients/patient.model.js";
 import AppError from "../../core/errors/AppError.js";
@@ -168,26 +169,70 @@ export const getAllPoliciesService = async ({ search, status } = {}) => {
   return policies;
 };
 
+const findPolicyByIdOrNumber = async (idOrNumber) => {
+  if (mongoose.Types.ObjectId.isValid(idOrNumber)) {
+    const found = await InsurancePolicy.findById(idOrNumber);
+    if (found) return found;
+  }
+  return await InsurancePolicy.findOne({ policyNumber: idOrNumber });
+};
+
 export const getPolicyByIdService = async (id) => {
-  const policy = await InsurancePolicy.findById(id);
+  const policy = await findPolicyByIdOrNumber(id);
   if (!policy) {
     throw new AppError("Policy not found", 404, ErrorCodes.NOT_FOUND);
   }
   return policy;
 };
 
-export const updatePolicyService = async (id, data) => {
-  const policy = await InsurancePolicy.findById(id);
+export const updatePolicyService = async (id, data, currentUser) => {
+  const policy = await findPolicyByIdOrNumber(id);
   if (!policy) {
     throw new AppError("Policy not found", 404, ErrorCodes.NOT_FOUND);
   }
+
+  if ((policy.claimsCount || 0) > 0) {
+    if (data.policyNumber && data.policyNumber !== policy.policyNumber) {
+      throw new AppError("Cannot change Policy Number after claims have been processed.", 400, ErrorCodes.VALIDATION_ERROR);
+    }
+    if (data.providerName && data.providerName !== policy.providerName) {
+      throw new AppError("Cannot change Insurance Provider Name after claims have been processed.", 400, ErrorCodes.VALIDATION_ERROR);
+    }
+  }
+
   Object.assign(policy, data);
   await policy.save();
   return policy;
 };
 
+export const togglePolicyStatusService = async (id) => {
+  const policy = await findPolicyByIdOrNumber(id);
+  if (!policy) {
+    throw new AppError("Policy not found", 404, ErrorCodes.NOT_FOUND);
+  }
+
+  const currentStatus = (policy.status || "").toLowerCase();
+  const nextStatus = currentStatus === "active" ? "Inactive" : "Active";
+  policy.status = nextStatus;
+  await policy.save();
+  return { message: `Policy status updated to ${nextStatus}`, policy };
+};
+
+export const togglePolicyArchiveService = async (id) => {
+  const policy = await findPolicyByIdOrNumber(id);
+  if (!policy) {
+    throw new AppError("Policy not found", 404, ErrorCodes.NOT_FOUND);
+  }
+
+  const isArchived = (policy.status || "").toLowerCase() === "archived";
+  const nextStatus = isArchived ? "Active" : "Archived";
+  policy.status = nextStatus;
+  await policy.save();
+  return { message: `Policy ${isArchived ? "restored" : "archived"} successfully`, policy };
+};
+
 export const deletePolicyService = async (id) => {
-  const policy = await InsurancePolicy.findById(id);
+  const policy = await findPolicyByIdOrNumber(id);
   if (!policy) {
     throw new AppError("Policy not found", 404, ErrorCodes.NOT_FOUND);
   }

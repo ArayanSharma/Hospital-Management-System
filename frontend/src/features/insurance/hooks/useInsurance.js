@@ -111,6 +111,7 @@ export function useInsurance() {
     setActiveTab,
 
     policies,
+    setPolicies,
     policyStatusFilter,
     setPolicyStatusFilter,
     policySearch,
@@ -142,6 +143,8 @@ export function useInsurance() {
     handleDeactivatePolicy,
     handleSubmitClaimSubmit,
     handleUpdateClaimStatus,
+    refreshPolicies: fetchPolicies,
+    refreshClaims: fetchClaims,
     refreshData: () => {
       fetchPolicies();
       fetchClaims();

@@ -8,6 +8,9 @@ import OpdTabs from "../components/OpdTabs.jsx";
 import OpdVisitTable from "../components/OpdVisitTable.jsx";
 import OpdVisitDetailsPanel from "../components/OpdVisitDetailsPanel.jsx";
 import OpdVisitFormModal from "../components/OpdVisitFormModal.jsx";
+import OpdCancelVisitModal from "../components/modals/OpdCancelVisitModal.jsx";
+import OpdAssignDoctorModal from "../components/modals/OpdAssignDoctorModal.jsx";
+import OpdViewVisitModal from "../components/modals/OpdViewVisitModal.jsx";
 import { updateOPDVisitApi } from "../services/opdVisit.api.js";
 
 export default function VisitList() {
@@ -38,6 +41,11 @@ export default function VisitList() {
   const doctorList = Array.isArray(rawDoctors) ? rawDoctors : rawDoctors?.doctors || [];
 
   const [modalOpen, setModalOpen] = useState(false);
+  const [editingVisit, setEditingVisit] = useState(null);
+  const [viewingVisit, setViewingVisit] = useState(null);
+  const [cancellingVisit, setCancellingVisit] = useState(null);
+  const [assignDoctorVisit, setAssignDoctorVisit] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
 
   const handleStatusChange = async (visit, newStatus) => {
     try {
@@ -45,6 +53,32 @@ export default function VisitList() {
       refetch();
     } catch (err) {
       alert(err.response?.data?.message || "Failed to update visit status");
+    }
+  };
+
+  const handleAssignDoctor = async (visitId, newDoctorId) => {
+    setSubmitting(true);
+    try {
+      await updateOPDVisitApi(visitId, { doctorId: newDoctorId });
+      setAssignDoctorVisit(null);
+      refetch();
+    } catch (err) {
+      alert(err.response?.data?.message || "Failed to assign doctor");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleConfirmCancel = async (visit, cancelledReason) => {
+    setSubmitting(true);
+    try {
+      await updateOPDVisitApi(visit._id, { status: "cancelled", cancelledReason });
+      setCancellingVisit(null);
+      refetch();
+    } catch (err) {
+      alert(err.response?.data?.message || "Failed to cancel visit");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -63,7 +97,10 @@ export default function VisitList() {
 
         <button
           type="button"
-          onClick={() => setModalOpen(true)}
+          onClick={() => {
+            setEditingVisit(null);
+            setModalOpen(true);
+          }}
           className="self-start sm:self-auto bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-4 py-2.5 rounded-xl shadow-sm shadow-blue-500/20 flex items-center gap-2 transition cursor-pointer"
         >
           <Plus className="w-4 h-4 stroke-[2.5]" />
@@ -104,8 +141,17 @@ export default function VisitList() {
             setPage={setPage}
             pagination={pagination}
             selectedVisit={selectedVisit}
-            onSelectVisit={setSelectedVisit}
+            onSelectVisit={(v, action) => {
+              setSelectedVisit(v);
+              if (action === "edit") {
+                setEditingVisit(v);
+              } else {
+                setViewingVisit(v);
+              }
+            }}
             onStatusChange={handleStatusChange}
+            onAssignDoctor={(v) => setAssignDoctorVisit(v)}
+            onOpenCancelModal={(v) => setCancellingVisit(v)}
           />
         </div>
 
@@ -119,10 +165,41 @@ export default function VisitList() {
         </div>
       </div>
 
-      {/* New OPD Visit (Walk-in) Modal */}
+      {/* View OPD Visit Modal */}
+      <OpdViewVisitModal
+        visit={viewingVisit}
+        isOpen={!!viewingVisit}
+        onClose={() => setViewingVisit(null)}
+      />
+
+      {/* Assign Doctor Modal */}
+      <OpdAssignDoctorModal
+        visit={assignDoctorVisit}
+        doctorList={doctorList}
+        isOpen={!!assignDoctorVisit}
+        onClose={() => setAssignDoctorVisit(null)}
+        onAssign={handleAssignDoctor}
+        submitting={submitting}
+      />
+
+      {/* Cancel Visit Modal */}
+      <OpdCancelVisitModal
+        visit={cancellingVisit}
+        isOpen={!!cancellingVisit}
+        onClose={() => setCancellingVisit(null)}
+        onConfirmCancel={handleConfirmCancel}
+        submitting={submitting}
+      />
+
+      {/* New / Edit OPD Visit Modal */}
       <OpdVisitFormModal
-        isOpen={modalOpen}
-        onClose={() => setModalOpen(false)}
+        isOpen={modalOpen || !!editingVisit}
+        defaultValues={editingVisit}
+        isEdit={!!editingVisit}
+        onClose={() => {
+          setModalOpen(false);
+          setEditingVisit(null);
+        }}
         onSuccess={refetch}
       />
     </div>

@@ -17,6 +17,13 @@ router.post(
 router.get("/", authenticate, checkPermission("radiology_test:read"), getAll);
 router.get("/:id", authenticate, checkPermission("radiology_test:read"), getById);
 router.patch(
+  "/:id",
+  authenticate,
+  checkPermission("radiology_test:update"),
+  validate(updateRadiologyTestStatusSchema),
+  updateStatus
+);
+router.patch(
   "/:id/status",
   authenticate,
   checkPermission("radiology_test:update"),

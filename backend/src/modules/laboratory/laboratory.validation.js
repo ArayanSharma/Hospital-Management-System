@@ -13,14 +13,26 @@ export const createLabTestSchema = z.object({
     clinicalNotes: z.string().trim().optional(),
     requestedAt: z.string().optional().nullable(),
     attachmentUrl: z.string().trim().optional().nullable(),
-  }),
+  }).passthrough(),
 });
 
 export const updateLabTestStatusSchema = z.object({
   body: z.object({
-    status: z.enum(["pending", "sample-collected", "completed", "cancelled"]),
-  }),
+    status: z.enum(["pending", "sample-collected", "completed", "cancelled"]).optional().nullable(),
+    testName: z.string().trim().optional().nullable(),
+    doctorId: z.string().optional().nullable(),
+    priority: z.enum(["routine", "urgent", "emergency"]).optional().nullable(),
+    sampleType: z.string().trim().optional().nullable(),
+    visitType: z.string().optional().nullable(),
+    clinicalNotes: z.string().trim().optional().nullable(),
+    attachmentUrl: z.string().trim().optional().nullable(),
+    cancellationReason: z.string().trim().optional().nullable(),
+    parameters: z.array(z.string()).optional().nullable(),
+    additionalTests: z.array(z.string()).optional().nullable(),
+  }).passthrough(),
 });
+
+export const updateLabTestSchema = updateLabTestStatusSchema;
 
 export const createLabReportSchema = z.object({
   body: z.object({
@@ -30,7 +42,7 @@ export const createLabReportSchema = z.object({
     }),
     interpretation: z.string().trim().optional(),
     reportFile: z.string().trim().optional(),
-  }),
+  }).passthrough(),
 });
 
 export const updateLabReportSchema = z.object({
@@ -38,5 +50,5 @@ export const updateLabReportSchema = z.object({
     results: z.record(z.any()).optional(),
     interpretation: z.string().trim().optional(),
     reportFile: z.string().trim().optional(),
-  }),
+  }).passthrough(),
 });

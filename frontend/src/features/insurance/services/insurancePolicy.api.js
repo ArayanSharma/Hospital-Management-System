@@ -6,3 +6,5 @@ export const getPolicyByIdApi = (id) => api.get(`/insurance-policies/${id}`);
 export const createPolicyApi = (data) => api.post("/insurance-policies", data);
 export const updatePolicyApi = (id, data) => api.patch(`/insurance-policies/${id}`, data);
 export const deletePolicyApi = (id) => api.delete(`/insurance-policies/${id}`);
+export const togglePolicyStatusApi = (id) => api.patch(`/insurance-policies/${id}/toggle-status`);
+export const togglePolicyArchiveApi = (id) => api.patch(`/insurance-policies/${id}/toggle-archive`);

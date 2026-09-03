@@ -1,11 +1,17 @@
-import React from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   Calendar,
   Clock,
   Eye,
+  Edit2,
   MoreVertical,
   ChevronLeft,
   ChevronRight,
+  RefreshCw,
+  UserCheck,
+  CheckCircle2,
+  AlertCircle,
+  XCircle,
   HeartPulse,
   Brain,
   Bone,
@@ -61,6 +67,158 @@ const getDepartmentBadge = (deptName) => {
   };
 };
 
+function AppointmentActionMenu({
+  appt,
+  onEdit,
+  onView,
+  onReschedule,
+  onStatusChange,
+  onOpenCancelModal,
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  return (
+    <div className="flex items-center justify-end gap-1.5" ref={ref}>
+      {/* 1. [ ✏️ ] Edit Button */}
+      <button
+        type="button"
+        onClick={() => onEdit(appt)}
+        className="p-1.5 rounded-lg border border-slate-200 text-blue-600 hover:bg-blue-50 transition-all duration-150 cursor-pointer active:scale-95 shadow-2xs"
+        title="Edit Appointment Details"
+      >
+        <Edit2 className="w-3.5 h-3.5" />
+      </button>
+
+      {/* 2. [ 👁 ] View Button */}
+      <button
+        type="button"
+        onClick={() => onView(appt)}
+        className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 hover:text-blue-600 transition-all duration-150 cursor-pointer active:scale-95 shadow-2xs"
+        title="View Details"
+      >
+        <Eye className="w-3.5 h-3.5" />
+      </button>
+
+      {/* 3. [ ⋮ ] More Menu Button */}
+      <div className="relative inline-block text-left">
+        <button
+          type="button"
+          onClick={() => setIsOpen(!isOpen)}
+          className={`p-1.5 rounded-lg border text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-all duration-150 cursor-pointer active:scale-95 shadow-2xs ${
+            isOpen ? "border-blue-500 bg-blue-50/50 ring-2 ring-blue-500/10 text-blue-600" : "border-slate-200"
+          }`}
+          title="More Actions"
+        >
+          <MoreVertical className="w-3.5 h-3.5" />
+        </button>
+
+        {isOpen && (
+          <div className="absolute right-0 top-full mt-1.5 w-52 bg-white border border-slate-200/90 rounded-2xl shadow-2xl z-[100] p-1.5 text-xs space-y-0.5 animate-in fade-in zoom-in-95 duration-150 ease-out origin-top-right">
+            {/* 1. Reschedule */}
+            <button
+              type="button"
+              onClick={() => {
+                setIsOpen(false);
+                onReschedule(appt);
+              }}
+              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-left font-semibold text-slate-700 hover:bg-purple-50/70 hover:text-purple-700 transition cursor-pointer"
+            >
+              <RefreshCw className="w-4 h-4 text-purple-600 shrink-0" />
+              <span>Reschedule Slot</span>
+            </button>
+
+            <div className="my-1 border-t border-slate-100"></div>
+
+            {/* 2. Check-in */}
+            {appt.status !== "completed" && appt.status !== "cancelled" && (
+              <button
+                type="button"
+                onClick={() => {
+                  setIsOpen(false);
+                  onStatusChange(appt, "checked_in");
+                }}
+                disabled={appt.status === "checked_in"}
+                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-left font-semibold transition ${
+                  appt.status === "checked_in"
+                    ? "opacity-50 text-slate-400 cursor-not-allowed bg-slate-50"
+                    : "text-slate-700 hover:bg-indigo-50/70 hover:text-indigo-700 cursor-pointer"
+                }`}
+              >
+                <UserCheck className="w-4 h-4 text-indigo-600 shrink-0" />
+                <span>{appt.status === "checked_in" ? "Already Checked-In" : "Check-in Patient"}</span>
+              </button>
+            )}
+
+            {/* 3. Mark as Completed */}
+            {appt.status !== "completed" && appt.status !== "cancelled" && (
+              <button
+                type="button"
+                onClick={() => {
+                  setIsOpen(false);
+                  onStatusChange(appt, "completed");
+                }}
+                className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-left font-semibold text-emerald-700 hover:bg-emerald-50/70 transition cursor-pointer"
+              >
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>Mark as Completed</span>
+              </button>
+            )}
+
+            {/* 4. Mark as No-Show */}
+            {appt.status !== "completed" && appt.status !== "cancelled" && (
+              <button
+                type="button"
+                onClick={() => {
+                  setIsOpen(false);
+                  onStatusChange(appt, "no-show");
+                }}
+                className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-left font-semibold text-amber-700 hover:bg-amber-50/70 transition cursor-pointer"
+              >
+                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>Mark as No-Show</span>
+              </button>
+            )}
+
+            {(appt.status === "completed" || appt.status === "cancelled") && (
+              <div className="px-3 py-2 text-[11px] font-semibold text-slate-400 italic">
+                Appointment is {appt.status}. Reschedule to reactivate.
+              </div>
+            )}
+
+            <div className="my-1 border-t border-slate-100"></div>
+
+            {/* 5. Cancel */}
+            {appt.status !== "cancelled" && (
+              <button
+                type="button"
+                onClick={() => {
+                  setIsOpen(false);
+                  onOpenCancelModal(appt);
+                }}
+                className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-left font-semibold text-rose-700 hover:bg-rose-50/70 transition cursor-pointer"
+              >
+                <XCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>Cancel Appointment</span>
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function AppointmentTable({
   appointments,
   loading,
@@ -68,7 +226,11 @@ export default function AppointmentTable({
   page,
   setPage,
   pagination,
+  onEdit,
+  onView,
+  onReschedule,
   onStatusChange,
+  onOpenCancelModal,
 }) {
   return (
     <div>
@@ -98,16 +260,16 @@ export default function AppointmentTable({
             </thead>
             <tbody className="divide-y divide-slate-100 text-xs text-slate-800">
               {appointments.map((appt, index) => {
-                const rowNumber = ((page - 1) * 10) + index + 1;
+                const rowNumber = (page - 1) * 10 + index + 1;
                 const patient = appt.patientId;
                 const patientName = patient?.name || "Patient";
                 const patientUhid = patient?.patientId || "PAT-000123";
 
                 const doctor = appt.doctorId;
                 const doctorName = doctor?.userId?.name || doctor?.name || "Dr. Doctor";
-                const doctorCode = doctor?.doctorId || "CARD-001";
+                const doctorCode = doctor?.doctorId || "DOC-001";
 
-                const deptName = appt.departmentId?.name || doctor?.specialization || "Cardiology";
+                const deptName = appt.departmentId?.name || doctor?.specialization || "General Medicine";
                 const deptBadge = getDepartmentBadge(deptName);
                 const DeptIcon = deptBadge.icon;
 
@@ -119,20 +281,15 @@ export default function AppointmentTable({
                 const timeFormatted = `${appt.startTime} - ${appt.endTime}`;
 
                 return (
-                  <tr
-                    key={appt._id}
-                    className="hover:bg-slate-50/70 transition-colors group"
-                  >
+                  <tr key={appt._id} className="hover:bg-slate-50/70 transition-colors group">
                     <td className="py-3.5 px-4 text-center font-semibold text-slate-400">
                       {rowNumber}
                     </td>
 
-                    {/* Appointment ID */}
                     <td className="py-3.5 px-4 font-mono font-medium text-slate-500 whitespace-nowrap">
                       {appt.appointmentId || `APT-${index + 1}`}
                     </td>
 
-                    {/* Patient Cell */}
                     <td className="py-3.5 px-4 whitespace-nowrap">
                       <div className="flex items-center gap-2.5">
                         {patient?.photoUrl ? (
@@ -153,7 +310,6 @@ export default function AppointmentTable({
                       </div>
                     </td>
 
-                    {/* Doctor Cell */}
                     <td className="py-3.5 px-4 whitespace-nowrap">
                       <div className="flex items-center gap-2.5">
                         {doctor?.photoUrl ? (
@@ -174,7 +330,6 @@ export default function AppointmentTable({
                       </div>
                     </td>
 
-                    {/* Department Cell */}
                     <td className="py-3.5 px-4 whitespace-nowrap">
                       <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border ${deptBadge.style}`}>
                         <DeptIcon className="w-3.5 h-3.5" />
@@ -182,7 +337,6 @@ export default function AppointmentTable({
                       </span>
                     </td>
 
-                    {/* Date & Time Cell */}
                     <td className="py-3.5 px-4 whitespace-nowrap">
                       <div className="leading-tight">
                         <div className="flex items-center gap-1 text-slate-800 font-medium text-xs">
@@ -196,16 +350,19 @@ export default function AppointmentTable({
                       </div>
                     </td>
 
-                    {/* Reason Cell */}
                     <td className="py-3.5 px-4 max-w-xs text-slate-700 font-medium whitespace-nowrap">
                       {appt.reason || "General Checkup"}
                     </td>
 
-                    {/* Status Cell */}
                     <td className="py-3.5 px-4 whitespace-nowrap">
                       {appt.status === "scheduled" && (
                         <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 text-blue-600 border border-blue-200">
                           Scheduled
+                        </span>
+                      )}
+                      {(appt.status === "checked_in" || appt.status === "in_consultation") && (
+                        <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-purple-50 text-purple-600 border border-purple-200">
+                          Checked-In
                         </span>
                       )}
                       {appt.status === "completed" && (
@@ -225,26 +382,15 @@ export default function AppointmentTable({
                       )}
                     </td>
 
-                    {/* Actions Cell */}
                     <td className="py-3.5 px-4 text-right whitespace-nowrap">
-                      <div className="flex items-center justify-end gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => alert(`Appointment Details: ${appt.appointmentId || appt._id}`)}
-                          className="p-1.5 rounded-lg border border-slate-200 text-blue-600 hover:bg-blue-50 transition cursor-pointer"
-                          title="View Appointment"
-                        >
-                          <Eye className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => onStatusChange(appt, appt.status === "scheduled" ? "completed" : "scheduled")}
-                          className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition cursor-pointer"
-                          title="More Options"
-                        >
-                          <MoreVertical className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
+                      <AppointmentActionMenu
+                        appt={appt}
+                        onEdit={onEdit}
+                        onView={onView}
+                        onReschedule={onReschedule}
+                        onStatusChange={onStatusChange}
+                        onOpenCancelModal={onOpenCancelModal}
+                      />
                     </td>
                   </tr>
                 );
@@ -257,7 +403,7 @@ export default function AppointmentTable({
       {/* Pagination Bar */}
       <div className="p-4 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
         <p className="text-slate-500 font-medium">
-          Showing {((page - 1) * 10) + 1} to {Math.min(page * 10, pagination?.total || appointments.length)} of {pagination?.total || appointments.length} entries
+          Showing {(page - 1) * 10 + 1} to {Math.min(page * 10, pagination?.total || appointments.length)} of {pagination?.total || appointments.length} entries
         </p>
         <div className="flex items-center gap-1 self-center sm:self-auto">
           <button

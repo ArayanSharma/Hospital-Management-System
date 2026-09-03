@@ -85,9 +85,25 @@ const medicineSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
+    availableStock: {
+      type: Number,
+      default: 100,
+    },
+    batchNo: {
+      type: String,
+      default: "PCM650/01",
+    },
+    expiryDate: {
+      type: String,
+      default: "2026-12-30",
+    },
     minStockLevel: {
       type: Number,
       default: 50,
+    },
+    maxStockLevel: {
+      type: Number,
+      default: 500,
     },
     reorderLevel: {
       type: Number,
@@ -116,7 +132,7 @@ const medicineSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["active", "inactive"],
+      enum: ["active", "inactive", "archived", "quarantined", "expired", "Active", "Inactive", "Archived", "Quarantined", "Expired"],
       default: "active",
     },
   },

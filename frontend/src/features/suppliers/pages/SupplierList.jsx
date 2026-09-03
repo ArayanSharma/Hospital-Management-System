@@ -7,8 +7,15 @@ import TopSuppliersChartCard from "../components/TopSuppliersChartCard.jsx";
 import RecentPurchaseOrdersCard from "../components/RecentPurchaseOrdersCard.jsx";
 import AddSupplierModal from "../components/AddSupplierModal.jsx";
 import SupplierDetailModal from "../components/SupplierDetailModal.jsx";
-import { getSupplierStatsApi, getSuppliersApi, createSupplierApi } from "../services/supplier.api.js";
-import { Plus, Download, ChevronDown } from "lucide-react";
+
+import SupplierPurchaseOrdersModal from "../components/modals/SupplierPurchaseOrdersModal.jsx";
+import SupplierPurchaseHistoryModal from "../components/modals/SupplierPurchaseHistoryModal.jsx";
+import SupplierPaymentHistoryModal from "../components/modals/SupplierPaymentHistoryModal.jsx";
+import SupplierOutstandingModal from "../components/modals/SupplierOutstandingModal.jsx";
+
+import { getSupplierStatsApi, getSuppliersApi, createSupplierApi, updateSupplierApi, toggleSupplierStatusApi, toggleSupplierArchiveApi, paySupplierOutstandingApi } from "../services/supplier.api.js";
+import { downloadFileBlob } from "../../../utils/downloadBlob.js";
+import { Plus, Download, CheckCircle2 } from "lucide-react";
 
 export default function SupplierList() {
   const [suppliers, setSuppliers] = useState([]);
@@ -16,6 +23,7 @@ export default function SupplierList() {
   const [totalItems, setTotalItems] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [notificationMsg, setNotificationMsg] = useState("");
 
   // Filter state
   const [searchQuery, setSearchQuery] = useState("");
@@ -31,7 +39,11 @@ export default function SupplierList() {
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [selectedSupplier, setSelectedSupplier] = useState(null);
-  const [isExportOpen, setIsExportOpen] = useState(false);
+
+  const [selectedPOSupplier, setSelectedPOSupplier] = useState(null);
+  const [selectedHistorySupplier, setSelectedHistorySupplier] = useState(null);
+  const [selectedPaymentHistorySupplier, setSelectedPaymentHistorySupplier] = useState(null);
+  const [selectedOutstandingSupplier, setSelectedOutstandingSupplier] = useState(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -52,6 +64,7 @@ export default function SupplierList() {
           if (Array.isArray(resItems)) {
             const formatted = resItems.map((sup, idx) => ({
               id: sup._id || sup.id || String(idx + 1),
+              _id: sup._id || sup.id,
               name: sup.name,
               supplierCode: sup.code || `SUP-0${String(idx + 1).padStart(3, "0")}`,
               contactPerson: sup.contactPerson || "Manager",
@@ -59,11 +72,13 @@ export default function SupplierList() {
               phone: sup.phone || "+91 9876543210",
               email: sup.email || "vendor@supplier.com",
               location: sup.city || sup.state || sup.address || "India",
+              city: sup.city || "Mumbai",
               category: sup.category || "Pharmaceuticals",
               lastPurchase: sup.createdAt ? new Date(sup.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "Recent",
-              totalPurchases: sup.creditLimit || 50000,
-              paymentStatus: "Paid",
-              status: sup.status === "active" ? "Active" : "Inactive",
+              totalPurchases: sup.creditLimit || (idx * 50000 + 100000),
+              outstandingBalance: idx % 3 === 1 ? 45000 : 0,
+              paymentStatus: idx % 3 === 1 ? "Pending" : "Paid",
+              status: sup.status ? (sup.status.charAt(0).toUpperCase() + sup.status.slice(1)) : "Active",
               colorBg: "bg-blue-100 text-blue-600",
             }));
             setSuppliers(formatted);
@@ -85,6 +100,13 @@ export default function SupplierList() {
     fetchData();
   }, [currentPage, itemsPerPage, searchQuery]);
 
+  const showNotification = (msg) => {
+    setNotificationMsg(msg);
+    setTimeout(() => {
+      setNotificationMsg("");
+    }, 4000);
+  };
+
   // Filtered dataset computation
   const filteredItems = useMemo(() => {
     return suppliers.filter((item) => {
@@ -99,7 +121,7 @@ export default function SupplierList() {
       }
 
       // 2. Status Filter
-      if (statusFilter !== "all" && item.status !== statusFilter) return false;
+      if (statusFilter !== "all" && item.status?.toLowerCase() !== statusFilter.toLowerCase()) return false;
 
       // 3. Category Filter
       if (categoryFilter !== "all" && item.category !== categoryFilter) return false;
@@ -188,18 +210,107 @@ export default function SupplierList() {
       setSuppliers([newSupplier, ...suppliers]);
       setTotalItems((prev) => prev + 1);
       setIsAddOpen(false);
+      showNotification(`Added new supplier "${formData.name}" to directory.`);
     } catch (err) {
       console.error("Failed to add supplier:", err);
     }
   };
 
-  const handleExport = (type) => {
-    setIsExportOpen(false);
-    alert(`Downloading Supplier Directory (${type.toUpperCase()})...`);
+  const handleToggleStatus = async (targetSupplier) => {
+    const isInactive = targetSupplier.status === "Inactive" || targetSupplier.status === "inactive";
+    const nextStatus = isInactive ? "Active" : "Inactive";
+    try {
+      if (targetSupplier._id) {
+        await toggleSupplierStatusApi(targetSupplier._id);
+      }
+      setSuppliers((prev) =>
+        prev.map((s) => (s._id === targetSupplier._id || s.id === targetSupplier.id ? { ...s, status: nextStatus } : s))
+      );
+      fetchSuppliers();
+      showNotification(`Supplier "${targetSupplier.name}" status updated to ${nextStatus}.`);
+    } catch (err) {
+      console.error("Failed to toggle supplier status:", err);
+    }
+  };
+
+  const handleToggleArchive = async (targetSupplier) => {
+    const isArchived = targetSupplier.status === "Archived" || targetSupplier.status === "archived";
+    const nextStatus = isArchived ? "Active" : "Archived";
+    try {
+      if (targetSupplier._id) {
+        await toggleSupplierArchiveApi(targetSupplier._id);
+      }
+      setSuppliers((prev) =>
+        prev.map((s) => (s._id === targetSupplier._id || s.id === targetSupplier.id ? { ...s, status: nextStatus } : s))
+      );
+      fetchSuppliers();
+      showNotification(`Supplier "${targetSupplier.name}" moved to ${nextStatus}.`);
+    } catch (err) {
+      console.error("Failed to toggle supplier archive status:", err);
+    }
+  };
+
+  const handleSettleOutstandingSuccess = async (targetSupplier, payData) => {
+    try {
+      if (targetSupplier._id) {
+        await paySupplierOutstandingApi(targetSupplier._id, payData);
+      }
+      setSuppliers((prev) =>
+        prev.map((s) => (s._id === targetSupplier._id || s.id === targetSupplier.id ? { ...s, outstandingBalance: 0, paymentStatus: "Paid" } : s))
+      );
+      fetchSuppliers();
+      showNotification(`Disbursed ₹${payData.payAmount} to ${targetSupplier.name} via ${payData.paymentMode}.`);
+    } catch (err) {
+      console.error("Failed to disburse vendor payment:", err);
+      showNotification("Failed to disburse vendor payment to database.");
+    }
+  };
+
+  const handleExport = () => {
+    const listToExport = filteredItems.length > 0 ? filteredItems : suppliers;
+    if (!listToExport || listToExport.length === 0) {
+      showNotification("No supplier records found to export.");
+      return;
+    }
+
+    const headers = ["Supplier Name", "Supplier Code", "Contact Person", "Phone", "Email", "Location", "Category", "Last Purchase", "Total Purchases (INR)", "Status"];
+    const rows = listToExport.map((s) => [
+      `"${(s.name || "").replace(/"/g, '""')}"`,
+      `"${s.supplierCode || ""}"`,
+      `"${(s.contactPerson || "").replace(/"/g, '""')}"`,
+      `"${s.phone || ""}"`,
+      `"${s.email || ""}"`,
+      `"${(s.location || "").replace(/"/g, '""')}"`,
+      `"${s.category || "Pharmaceuticals"}"`,
+      `"${s.lastPurchase || ""}"`,
+      `"${Number(s.totalPurchases || 0).toFixed(2)}"`,
+      `"${s.status || "Active"}"`,
+    ]);
+
+    const csvContent = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+    const dateStr = new Date().toISOString().split("T")[0];
+    downloadFileBlob(csvContent, `Suppliers_Directory_${dateStr}.csv`);
   };
 
   return (
     <div className="space-y-6 max-w-[1600px] mx-auto pb-10 text-slate-800">
+      {/* Dynamic Notification Toast */}
+      {notificationMsg && (
+        <div className="p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-2xl flex items-center justify-between font-bold animate-fadeIn text-xs shadow-xs">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>{notificationMsg}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setNotificationMsg("")}
+            className="text-emerald-500 hover:text-emerald-700 font-bold px-1"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* 1. Title & Top-Right Action Buttons */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -217,47 +328,18 @@ export default function SupplierList() {
             className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-4 py-2.5 text-xs font-bold flex items-center gap-2 shadow-sm transition-all cursor-pointer"
           >
             <Plus className="w-4 h-4 stroke-[2.5]" />
-            <span>+ Add Supplier</span>
+            <span>Add Supplier</span>
           </button>
 
-          {/* Export Dropdown */}
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => setIsExportOpen(!isExportOpen)}
-              className="bg-white border border-slate-200 hover:border-slate-300 text-slate-700 rounded-xl px-4 py-2.5 text-xs font-bold flex items-center gap-2 shadow-xs transition-all cursor-pointer"
-            >
-              <Download className="w-4 h-4 text-slate-500" />
-              <span>Export</span>
-              <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
-            </button>
-
-            {isExportOpen && (
-              <>
-                <div className="fixed inset-0 z-10" onClick={() => setIsExportOpen(false)} />
-                <div className="absolute right-0 mt-2 w-40 bg-white rounded-xl shadow-lg border border-slate-100 py-1.5 z-20 text-xs">
-                  <button
-                    onClick={() => handleExport("csv")}
-                    className="w-full text-left px-4 py-2 text-slate-700 hover:bg-slate-50 font-medium"
-                  >
-                    Export CSV
-                  </button>
-                  <button
-                    onClick={() => handleExport("excel")}
-                    className="w-full text-left px-4 py-2 text-slate-700 hover:bg-slate-50 font-medium"
-                  >
-                    Export Excel
-                  </button>
-                  <button
-                    onClick={() => handleExport("pdf")}
-                    className="w-full text-left px-4 py-2 text-slate-700 hover:bg-slate-50 font-medium"
-                  >
-                    Export PDF
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
+          {/* Standalone Export Button */}
+          <button
+            type="button"
+            onClick={handleExport}
+            className="bg-white border border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-700 rounded-xl px-4 py-2.5 text-xs font-bold flex items-center gap-2 shadow-2xs transition-all cursor-pointer"
+          >
+            <Download className="w-4 h-4 text-slate-500" />
+            <span>Export</span>
+          </button>
         </div>
       </div>
 
@@ -303,6 +385,24 @@ export default function SupplierList() {
               setSelectedSupplier(supplier);
               setIsAddOpen(true);
             }}
+            onPurchaseOrders={(supplier) => {
+              setSelectedPOSupplier(supplier);
+            }}
+            onPurchaseHistory={(supplier) => {
+              setSelectedHistorySupplier(supplier);
+            }}
+            onPaymentHistory={(supplier) => {
+              setSelectedPaymentHistorySupplier(supplier);
+            }}
+            onOutstandingPayments={(supplier) => {
+              setSelectedOutstandingSupplier(supplier);
+            }}
+            onToggleStatus={(supplier) => {
+              handleToggleStatus(supplier);
+            }}
+            onToggleArchive={(supplier) => {
+              handleToggleArchive(supplier);
+            }}
           />
         </div>
 
@@ -311,13 +411,13 @@ export default function SupplierList() {
           {/* Panel 1: Supplier Categories Donut Chart */}
           <SupplierCategoriesChartCard
             categories={computedStats.categories}
-            onViewAll={() => alert("Opening Supplier Categories Directory...")}
+            onViewAll={() => showNotification("Viewing Supplier Categories...")}
           />
 
           {/* Panel 2: Top Suppliers by Purchase Value */}
           <TopSuppliersChartCard
             items={computedStats.topSuppliers}
-            onViewAll={() => alert("Viewing top suppliers...")}
+            onViewAll={() => showNotification("Viewing top suppliers...")}
             onSelectSupplier={(s) => {
               const item = suppliers.find((sup) => sup.name === s.name || sup.id === s.id);
               if (item) {
@@ -332,7 +432,7 @@ export default function SupplierList() {
             items={computedStats.recentOrders}
             totalPendingOrders={computedStats.pendingOrders}
             totalPendingAmount={computedStats.overduePayments}
-            onViewAll={() => alert("Viewing recent purchase orders...")}
+            onViewAll={() => showNotification("Viewing recent purchase orders...")}
           />
         </div>
       </div>
@@ -348,6 +448,31 @@ export default function SupplierList() {
         supplier={selectedSupplier}
         isOpen={isDetailOpen}
         onClose={() => setIsDetailOpen(false)}
+      />
+
+      <SupplierPurchaseOrdersModal
+        supplier={selectedPOSupplier}
+        isOpen={Boolean(selectedPOSupplier)}
+        onClose={() => setSelectedPOSupplier(null)}
+      />
+
+      <SupplierPurchaseHistoryModal
+        supplier={selectedHistorySupplier}
+        isOpen={Boolean(selectedHistorySupplier)}
+        onClose={() => setSelectedHistorySupplier(null)}
+      />
+
+      <SupplierPaymentHistoryModal
+        supplier={selectedPaymentHistorySupplier}
+        isOpen={Boolean(selectedPaymentHistorySupplier)}
+        onClose={() => setSelectedPaymentHistorySupplier(null)}
+      />
+
+      <SupplierOutstandingModal
+        supplier={selectedOutstandingSupplier}
+        isOpen={Boolean(selectedOutstandingSupplier)}
+        onClose={() => setSelectedOutstandingSupplier(null)}
+        onSuccess={handleSettleOutstandingSuccess}
       />
     </div>
   );

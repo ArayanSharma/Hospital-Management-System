@@ -81,6 +81,7 @@ export default function AppointmentFilters({
         >
           <option value="">All Status</option>
           <option value="scheduled">Scheduled</option>
+          <option value="checked_in">Checked-In</option>
           <option value="completed">Completed</option>
           <option value="cancelled">Cancelled</option>
           <option value="no-show">No-Show</option>

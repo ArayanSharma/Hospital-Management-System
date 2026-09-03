@@ -52,7 +52,7 @@ const insuranceClaimSchema = new mongoose.Schema(
     },
     invoiceNumber: {
       type: String,
-      required: true,
+      default: "INV-2026-0001",
       trim: true,
     },
     admissionType: {
@@ -90,7 +90,10 @@ const insuranceClaimSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["Draft", "Submitted", "Under Review", "Approved", "Partially Approved", "Rejected", "Settled"],
+      enum: [
+        "Draft", "Submitted", "Under Review", "Approved", "Partially Approved", "Rejected", "Settled", "Withdrawn", "Cancelled",
+        "draft", "submitted", "under review", "approved", "partially approved", "rejected", "settled", "withdrawn", "cancelled"
+      ],
       default: "Submitted",
     },
     submittedDate: {
@@ -113,19 +116,33 @@ const insuranceClaimSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
-    documents: {
-      claimForm: { type: String, default: "" },
-      medicalReports: { type: String, default: "" },
-      labReports: { type: String, default: "" },
-      dischargeSummary: { type: String, default: "" },
-      invoiceCopy: { type: String, default: "" },
-      otherDocs: { type: String, default: "" },
-    },
     rejectionReason: {
       type: String,
       trim: true,
       default: null,
     },
+    settlementDetails: {
+      utrNumber: { type: String, default: "" },
+      bankName: { type: String, default: "" },
+      settlementDate: { type: String, default: "" },
+      settledAmount: { type: Number, default: 0 },
+      paymentMode: { type: String, default: "NEFT/RTGS" },
+    },
+    internalNotes: [
+      {
+        noteText: String,
+        author: { type: String, default: "System Admin" },
+        date: { type: Date, default: Date.now },
+      },
+    ],
+    documentsList: [
+      {
+        name: String,
+        category: String,
+        url: String,
+        uploadedAt: { type: Date, default: Date.now },
+      },
+    ],
     lastUpdatedDate: {
       type: String,
       default: () => new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),

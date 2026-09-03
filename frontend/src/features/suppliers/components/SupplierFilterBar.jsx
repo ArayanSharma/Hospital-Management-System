@@ -1,5 +1,6 @@
 import React from "react";
 import { Search, Filter } from "lucide-react";
+import CustomDropdown from "../../../components/ui/CustomDropdown.jsx";
 
 export default function SupplierFilterBar({
   searchQuery,
@@ -13,7 +14,7 @@ export default function SupplierFilterBar({
   onResetFilters,
 }) {
   return (
-    <div className="bg-white border border-slate-200/70 rounded-2xl p-3.5 shadow-xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+    <div className="bg-white border border-slate-200/80 rounded-2xl p-3.5 shadow-xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
       {/* Search Input */}
       <div className="relative flex-1 min-w-[240px]">
         <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -26,69 +27,56 @@ export default function SupplierFilterBar({
         />
       </div>
 
-      {/* Filter Dropdowns */}
+      {/* Filter Custom Dropdowns */}
       <div className="flex flex-wrap items-center gap-2.5">
         {/* Status */}
-        <div className="flex items-center gap-1.5">
-          <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider hidden lg:inline">Status</span>
-          <select
-            value={statusFilter}
-            onChange={(e) => onStatusChange(e.target.value)}
-            className="bg-slate-50/60 border border-slate-200/80 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all cursor-pointer"
-          >
-            <option value="all">All Status</option>
-            <option value="Active">Active</option>
-            <option value="Inactive">Inactive</option>
-            <option value="Blocked">Blocked</option>
-          </select>
-        </div>
+        <CustomDropdown
+          value={statusFilter}
+          options={[
+            { label: "All Status", value: "all" },
+            { label: "Active", value: "active" },
+            { label: "Inactive", value: "inactive" },
+            { label: "Archived", value: "archived" },
+          ]}
+          onChange={onStatusChange}
+          minWidth="120px"
+        />
 
         {/* Category */}
-        <div className="flex items-center gap-1.5">
-          <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider hidden lg:inline">Category</span>
-          <select
-            value={categoryFilter}
-            onChange={(e) => onCategoryChange(e.target.value)}
-            className="bg-slate-50/60 border border-slate-200/80 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all cursor-pointer"
-          >
-            <option value="all">All Categories</option>
-            <option value="Pharmaceuticals">Pharmaceuticals</option>
-            <option value="Surgical">Surgical</option>
-            <option value="Equipment">Equipment</option>
-            <option value="Others">Others</option>
-          </select>
-        </div>
+        <CustomDropdown
+          value={categoryFilter}
+          options={[
+            { label: "All Categories", value: "all" },
+            { label: "Pharmaceuticals", value: "Pharmaceuticals" },
+            { label: "Surgical", value: "Surgical" },
+            { label: "Equipment", value: "Equipment" },
+          ]}
+          onChange={onCategoryChange}
+          minWidth="145px"
+        />
 
         {/* Location */}
-        <div className="flex items-center gap-1.5">
-          <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider hidden lg:inline">Location</span>
-          <select
-            value={locationFilter}
-            onChange={(e) => onLocationChange(e.target.value)}
-            className="bg-slate-50/60 border border-slate-200/80 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all cursor-pointer"
-          >
-            <option value="all">All Locations</option>
-            <option value="Delhi">Delhi</option>
-            <option value="Mumbai">Mumbai</option>
-            <option value="Bangalore">Bangalore</option>
-            <option value="Chennai">Chennai</option>
-            <option value="Ahmedabad">Ahmedabad</option>
-            <option value="Kolkata">Kolkata</option>
-            <option value="Hyderabad">Hyderabad</option>
-            <option value="Pune">Pune</option>
-            <option value="Lucknow">Lucknow</option>
-            <option value="Jaipur">Jaipur</option>
-          </select>
-        </div>
+        <CustomDropdown
+          value={locationFilter}
+          options={[
+            { label: "All Locations", value: "all" },
+            { label: "Mumbai", value: "Mumbai" },
+            { label: "Ahmedabad", value: "Ahmedabad" },
+            { label: "Delhi", value: "Delhi" },
+            { label: "Bengaluru", value: "Bengaluru" },
+          ]}
+          onChange={onLocationChange}
+          minWidth="130px"
+        />
 
         {/* Filter Reset Button */}
         <button
           type="button"
           onClick={onResetFilters}
-          className="flex items-center gap-1.5 bg-slate-50/60 border border-slate-200/80 hover:bg-slate-100 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 transition-colors cursor-pointer"
+          className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 hover:bg-slate-100 rounded-xl px-3 py-2 text-xs font-bold text-slate-600 transition-colors cursor-pointer"
         >
           <Filter className="w-3.5 h-3.5 text-slate-500" />
-          <span>Filters</span>
+          <span>Reset Filters</span>
         </button>
       </div>
     </div>

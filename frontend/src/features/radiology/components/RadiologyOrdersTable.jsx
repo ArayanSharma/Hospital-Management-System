@@ -1,11 +1,19 @@
-import React from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   Eye,
-  Trash2,
+  Edit2,
   MoreVertical,
   ChevronLeft,
   ChevronRight,
   ChevronDown,
+  Calendar,
+  Play,
+  Upload,
+  FileText,
+  CheckCircle,
+  XCircle,
+  Printer,
+  History,
   Layers,
   Disc,
   Activity,
@@ -14,11 +22,13 @@ import {
   Radio,
   Sparkles,
   Inbox,
+  AlertCircle,
+  PlusCircle,
 } from "lucide-react";
 import { getInitials } from "../../../utils/formatters.js";
 import { formatReportDate } from "../helpers/radiologyReportFormatter.js";
 
-// Helper for rendering modality-specific icons
+// Modality icon resolver
 const getModalityIcon = (modality) => {
   const m = String(modality || "").toLowerCase();
   if (m.includes("x-ray")) {
@@ -45,12 +55,274 @@ const getModalityIcon = (modality) => {
   return { icon: Layers, bg: "bg-slate-50 text-slate-600" };
 };
 
+function RadiologyOrderActionsDropdown({ order, onAction }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const handleSelect = (actionKey) => {
+    setIsOpen(false);
+    onAction(actionKey, order);
+  };
+
+  const status = String(order.status || "pending").toLowerCase();
+
+  return (
+    <div className="relative inline-block text-left" ref={ref}>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          setIsOpen(!isOpen);
+        }}
+        className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition cursor-pointer border border-slate-200/80"
+        title="More Options"
+      >
+        <MoreVertical className="w-3.5 h-3.5" />
+      </button>
+
+      {isOpen && (
+        <div
+          onClick={(e) => e.stopPropagation()}
+          className="absolute right-0 mt-1 w-52 bg-white border border-slate-200/90 rounded-2xl shadow-xl z-50 p-1.5 text-xs space-y-0.5 animate-in fade-in zoom-in-95 duration-150 ease-out"
+        >
+          {/* Status === "pending" */}
+          {status === "pending" && (
+            <>
+              <button
+                type="button"
+                onClick={() => handleSelect("view-order")}
+                className="w-full flex items-center gap-2 px-3 py-1.5 rounded-xl font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
+              >
+                <Eye className="w-3.5 h-3.5 text-blue-600" />
+                <span>View Order</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSelect("edit-order")}
+                className="w-full flex items-center gap-2 px-3 py-1.5 rounded-xl font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
+              >
+                <Edit2 className="w-3.5 h-3.5 text-indigo-600" />
+                <span>Edit Order</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSelect("schedule-scan")}
+                className="w-full flex items-center gap-2 px-3 py-1.5 rounded-xl font-semibold text-blue-700 hover:bg-blue-50 cursor-pointer"
+              >
+                <Calendar className="w-3.5 h-3.5 text-blue-600" />
+                <span>Schedule Scan</span>
+              </button>
+              <div className="border-t border-slate-100 my-1" />
+              <button
+                type="button"
+                onClick={() => handleSelect("cancel-order")}
+                className="w-full flex items-center gap-2 px-3 py-1.5 rounded-xl font-semibold text-rose-600 hover:bg-rose-50 cursor-pointer"
+              >
+                <XCircle className="w-3.5 h-3.5 text-rose-600" />
+                <span>Cancel Order</span>
+              </button>
+            </>
+          )}
+
+          {/* Status === "scheduled" */}
+          {status === "scheduled" && (
+            <>
+              <button
+                type="button"
+                onClick={() => handleSelect("view-order")}
+                className="w-full flex items-center gap-2 px-3 py-1.5 rounded-xl font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
+              >
+                <Eye className="w-3.5 h-3.5 text-blue-600" />
+                <span>View Order</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSelect("schedule-scan")}
+                className="w-full flex items-center gap-2 px-3 py-1.5 rounded-xl font-semibold text-blue-700 hover:bg-blue-50 cursor-pointer"
+              >
+                <Calendar className="w-3.5 h-3.5 text-blue-600" />
+                <span>Reschedule</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSelect("start-scan")}
+                className="w-full flex items-center gap-2 px-3 py-1.5 rounded-xl font-semibold text-cyan-700 hover:bg-cyan-50 cursor-pointer"
+              >
+                <Play className="w-3.5 h-3.5 text-cyan-600" />
+                <span>Start Scan / Mark In-Progress</span>
+              </button>
+              <div className="border-t border-slate-100 my-1" />
+              <button
+                type="button"
+                onClick={() => handleSelect("cancel-order")}
+                className="w-full flex items-center gap-2 px-3 py-1.5 rounded-xl font-semibold text-rose-600 hover:bg-rose-50 cursor-pointer"
+              >
+                <XCircle className="w-3.5 h-3.5 text-rose-600" />
+                <span>Cancel Order</span>
+              </button>
+            </>
+          )}
+
+          {/* Status === "in-progress" */}
+          {status === "in-progress" && (
+            <>
+              <button
+                type="button"
+                onClick={() => handleSelect("view-order")}
+                className="w-full flex items-center gap-2 px-3 py-1.5 rounded-xl font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
+              >
+                <Eye className="w-3.5 h-3.5 text-blue-600" />
+                <span>View Order</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSelect("view-study")}
+                className="w-full flex items-center gap-2 px-3 py-1.5 rounded-xl font-semibold text-purple-700 hover:bg-purple-50 cursor-pointer"
+              >
+                <Disc className="w-3.5 h-3.5 text-purple-600" />
+                <span>View Study Details</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSelect("upload-images")}
+                className="w-full flex items-center gap-2 px-3 py-1.5 rounded-xl font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
+              >
+                <Upload className="w-3.5 h-3.5 text-slate-600" />
+                <span>Upload / Attach Images</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSelect("enter-findings")}
+                className="w-full flex items-center gap-2 px-3 py-1.5 rounded-xl font-semibold text-blue-700 hover:bg-blue-50 cursor-pointer"
+              >
+                <FileText className="w-3.5 h-3.5 text-blue-600" />
+                <span>Enter Findings</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSelect("complete-scan")}
+                className="w-full flex items-center gap-2 px-3 py-1.5 rounded-xl font-semibold text-emerald-700 hover:bg-emerald-50 cursor-pointer"
+              >
+                <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Complete Scan</span>
+              </button>
+              <div className="border-t border-slate-100 my-1" />
+              <button
+                type="button"
+                onClick={() => handleSelect("cancel-order")}
+                className="w-full flex items-center gap-2 px-3 py-1.5 rounded-xl font-semibold text-rose-600 hover:bg-rose-50 cursor-pointer"
+              >
+                <XCircle className="w-3.5 h-3.5 text-rose-600" />
+                <span>Cancel / Abort</span>
+              </button>
+            </>
+          )}
+
+          {/* Status === "completed" */}
+          {status === "completed" && (
+            <>
+              <button
+                type="button"
+                onClick={() => handleSelect("view-order")}
+                className="w-full flex items-center gap-2 px-3 py-1.5 rounded-xl font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
+              >
+                <Eye className="w-3.5 h-3.5 text-blue-600" />
+                <span>View Order</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSelect("view-report")}
+                className="w-full flex items-center gap-2 px-3 py-1.5 rounded-xl font-semibold text-emerald-700 hover:bg-emerald-50 cursor-pointer"
+              >
+                <FileText className="w-3.5 h-3.5 text-emerald-600" />
+                <span>View Report</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSelect("view-study")}
+                className="w-full flex items-center gap-2 px-3 py-1.5 rounded-xl font-semibold text-purple-700 hover:bg-purple-50 cursor-pointer"
+              >
+                <Disc className="w-3.5 h-3.5 text-purple-600" />
+                <span>View Images / Study</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSelect("enter-findings")}
+                className="w-full flex items-center gap-2 px-3 py-1.5 rounded-xl font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
+              >
+                <FileText className="w-3.5 h-3.5 text-slate-600" />
+                <span>View Findings</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSelect("print-report")}
+                className="w-full flex items-center gap-2 px-3 py-1.5 rounded-xl font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
+              >
+                <Printer className="w-3.5 h-3.5 text-slate-600" />
+                <span>Print / Download Report</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSelect("view-history")}
+                className="w-full flex items-center gap-2 px-3 py-1.5 rounded-xl font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
+              >
+                <History className="w-3.5 h-3.5 text-slate-600" />
+                <span>View Result History</span>
+              </button>
+            </>
+          )}
+
+          {/* Status === "cancelled" */}
+          {status === "cancelled" && (
+            <>
+              <button
+                type="button"
+                onClick={() => handleSelect("view-order")}
+                className="w-full flex items-center gap-2 px-3 py-1.5 rounded-xl font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
+              >
+                <Eye className="w-3.5 h-3.5 text-blue-600" />
+                <span>View Order</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSelect("view-cancellation")}
+                className="w-full flex items-center gap-2 px-3 py-1.5 rounded-xl font-semibold text-rose-700 hover:bg-rose-50 cursor-pointer"
+              >
+                <AlertCircle className="w-3.5 h-3.5 text-rose-600" />
+                <span>View Cancellation Details</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSelect("reorder")}
+                className="w-full flex items-center gap-2 px-3 py-1.5 rounded-xl font-semibold text-blue-700 hover:bg-blue-50 cursor-pointer"
+              >
+                <PlusCircle className="w-3.5 h-3.5 text-blue-600" />
+                <span>Reorder / Create New Order</span>
+              </button>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function RadiologyOrdersTable({
   orders = [],
   selectedOrder,
   onSelectOrder,
   onStatusChange,
-  onDeleteOrder,
+  onAction,
 }) {
   const displayOrders = Array.isArray(orders) ? orders : [];
 
@@ -226,7 +498,7 @@ export default function RadiologyOrdersTable({
                       </div>
                     </td>
 
-                    {/* Actions */}
+                    {/* Actions Cell: [ 👁 ] [ ⋮ ] */}
                     <td className="py-3 px-3.5 text-right whitespace-nowrap">
                       <div
                         className="flex items-center justify-end gap-1.5"
@@ -234,28 +506,23 @@ export default function RadiologyOrdersTable({
                       >
                         <button
                           type="button"
-                          onClick={() => onSelectOrder && onSelectOrder(row)}
+                          onClick={() => {
+                            if (onAction) {
+                              onAction("view-order", row);
+                            } else if (onSelectOrder) {
+                              onSelectOrder(row);
+                            }
+                          }}
                           className="p-1.5 rounded-lg border border-slate-200 text-blue-600 hover:bg-blue-50 transition cursor-pointer"
-                          title="View Details"
+                          title="View Order Details"
                         >
                           <Eye className="w-3.5 h-3.5" />
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => onDeleteOrder && row._id && onDeleteOrder(row._id)}
-                          className="p-1.5 rounded-lg border border-rose-200 text-rose-600 hover:bg-rose-50 transition cursor-pointer"
-                          title="Delete Order"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => onSelectOrder && onSelectOrder(row)}
-                          className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition cursor-pointer"
-                          title="More Options"
-                        >
-                          <MoreVertical className="w-3.5 h-3.5" />
-                        </button>
+
+                        <RadiologyOrderActionsDropdown
+                          order={row}
+                          onAction={onAction || ((actionKey, item) => onSelectOrder && onSelectOrder(item))}
+                        />
                       </div>
                     </td>
                   </tr>

@@ -200,18 +200,34 @@ export const getRadiologyTestById = async (id) => {
   return test;
 };
 
-// ---------------- UPDATE STATUS ----------------
-export const updateRadiologyTestStatus = async (id, status, scheduledAt, currentUser, requestMeta) => {
+// ---------------- UPDATE RADIOLOGY TEST DETAILS & STATUS ----------------
+export const updateRadiologyTestStatus = async (id, payload, currentUser, requestMeta) => {
   const test = await RadiologyTest.findById(id);
   if (!test) {
     throw new AppError("Radiology test not found", 404, ErrorCodes.NOT_FOUND);
   }
 
+  const updateData = typeof payload === "string" ? { status: payload } : payload || {};
   const oldValue = test.toObject();
-  test.status = status;
-  if (scheduledAt) {
-    test.scheduledAt = new Date(scheduledAt);
+
+  if (updateData.status) test.status = updateData.status;
+  if (updateData.modality) {
+    test.modality = updateData.modality;
+    test.testType = updateData.modality;
   }
+  if (updateData.bodyRegion) {
+    test.bodyRegion = updateData.bodyRegion;
+    test.bodyPart = updateData.bodyRegion;
+  }
+  if (updateData.priority) test.priority = updateData.priority;
+  if (updateData.scheduledAt) test.scheduledAt = new Date(updateData.scheduledAt);
+  if (updateData.clinicalHistory !== undefined) test.clinicalHistory = updateData.clinicalHistory;
+  if (updateData.cancellationReason !== undefined) test.cancellationReason = updateData.cancellationReason;
+  if (Array.isArray(updateData.imageUrls)) test.imageUrls = updateData.imageUrls;
+  if (updateData.findings !== undefined) test.findings = updateData.findings;
+  if (updateData.impression !== undefined) test.impression = updateData.impression;
+  if (updateData.notes !== undefined) test.notes = updateData.notes;
+
   await test.save();
 
   if (currentUser) {

@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import InsuranceClaim from "./insuranceClaim.model.js";
 import Patient from "../patients/patient.model.js";
 import AppError from "../../core/errors/AppError.js";
@@ -56,7 +57,7 @@ export const ensureSampleClaims = async () => {
         treatmentDate: "30 May 2025",
         claimType: "Cashless",
         claimAmount: 240000,
-        approvedAmount: null,
+        approvedAmount: 0,
         settledAmount: 0,
         patientPayable: 240000,
         status: "Under Review",
@@ -77,7 +78,7 @@ export const ensureSampleClaims = async () => {
         treatmentDate: "28 May 2025",
         claimType: "Reimbursement",
         claimAmount: 95000,
-        approvedAmount: null,
+        approvedAmount: 0,
         settledAmount: 0,
         patientPayable: 95000,
         status: "Rejected",
@@ -103,6 +104,13 @@ export const ensureSampleClaims = async () => {
         settledAmount: 50000,
         patientPayable: 0,
         status: "Settled",
+        settlementDetails: {
+          utrNumber: "UTR99281745",
+          bankName: "HDFC Bank Ltd.",
+          settlementDate: "27 May 2025",
+          settledAmount: 50000,
+          paymentMode: "NEFT",
+        },
         submittedDate: "27 May 2025",
         expectedReviewDate: "04 Jun 2025",
         lastUpdatedDate: "27 May 2025",
@@ -120,7 +128,7 @@ export const ensureSampleClaims = async () => {
         treatmentDate: "31 May 2025",
         claimType: "Cashless",
         claimAmount: 175000,
-        approvedAmount: null,
+        approvedAmount: 0,
         settledAmount: 0,
         patientPayable: 175000,
         status: "Submitted",
@@ -140,7 +148,7 @@ export const createClaimService = async (data) => {
   await ensureSampleClaims();
   const count = await InsuranceClaim.countDocuments();
   const seq = (count + 106).toString().padStart(6, "0");
-  const claimNumber = `CLM-2025-${seq}`;
+  const claimNumber = data.claimNumber || `CLM-2025-${seq}`;
 
   let patient = null;
   if (data.patientId) {
@@ -150,7 +158,7 @@ export const createClaimService = async (data) => {
     patient = await Patient.findOne({ name: new RegExp(data.patientName, "i") });
   }
 
-  const claimAmount = Number(data.claimAmount || 0);
+  const claimAmount = Number(data.claimAmount || data.estimatedAmount || 0);
 
   const claim = await InsuranceClaim.create({
     claimNumber,
@@ -176,7 +184,6 @@ export const createClaimService = async (data) => {
     remarks: data.remarks || "",
     diagnosis: data.diagnosis || "",
     treatmentSummary: data.treatmentSummary || "",
-    documents: data.documents || {},
     lastUpdatedDate: new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
   });
 
@@ -204,33 +211,99 @@ export const getAllClaimsService = async ({ search, status } = {}) => {
   return claims;
 };
 
+const findClaimByIdOrNumber = async (idOrNumber) => {
+  if (mongoose.Types.ObjectId.isValid(idOrNumber)) {
+    const found = await InsuranceClaim.findById(idOrNumber);
+    if (found) return found;
+  }
+  return await InsuranceClaim.findOne({ claimNumber: idOrNumber });
+};
+
 export const getClaimByIdService = async (id) => {
-  const claim = await InsuranceClaim.findById(id);
+  const claim = await findClaimByIdOrNumber(id);
   if (!claim) {
     throw new AppError("Claim not found", 404, ErrorCodes.NOT_FOUND);
   }
   return claim;
 };
 
-export const updateClaimStatusService = async (id, { status, approvedAmount, rejectionReason }) => {
-  const claim = await InsuranceClaim.findById(id);
+export const updateClaimService = async (id, updateData) => {
+  const claim = await findClaimByIdOrNumber(id);
   if (!claim) {
     throw new AppError("Claim not found", 404, ErrorCodes.NOT_FOUND);
   }
 
-  claim.status = status;
+  Object.assign(claim, updateData);
+  claim.lastUpdatedDate = new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+  await claim.save();
+  return claim;
+};
+
+export const updateClaimStatusService = async (id, payload) => {
+  const claim = await findClaimByIdOrNumber(id);
+  if (!claim) {
+    throw new AppError("Claim not found", 404, ErrorCodes.NOT_FOUND);
+  }
+
+  const { status, approvedAmount, rejectionReason, settlementDetails, remarks } = payload;
+  if (status) claim.status = status;
+
   if (approvedAmount !== undefined) {
     claim.approvedAmount = Number(approvedAmount);
     claim.patientPayable = Math.max(0, claim.claimAmount - claim.approvedAmount);
   }
 
-  if (status === "Settled") {
+  if (status === "Settled" || status === "settled") {
     claim.settledAmount = claim.approvedAmount || claim.claimAmount;
+    if (settlementDetails) {
+      claim.settlementDetails = { ...claim.settlementDetails, ...settlementDetails };
+    }
   }
 
   if (rejectionReason) {
     claim.rejectionReason = rejectionReason;
   }
+
+  if (remarks) {
+    claim.remarks = remarks;
+  }
+
+  claim.lastUpdatedDate = new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+  await claim.save();
+  return claim;
+};
+
+export const addClaimNoteService = async (id, noteText, author = "TPA Admin") => {
+  const claim = await findClaimByIdOrNumber(id);
+  if (!claim) {
+    throw new AppError("Claim not found", 404, ErrorCodes.NOT_FOUND);
+  }
+
+  claim.internalNotes = claim.internalNotes || [];
+  claim.internalNotes.push({
+    noteText,
+    author,
+    date: new Date(),
+  });
+
+  claim.lastUpdatedDate = new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+  await claim.save();
+  return claim;
+};
+
+export const uploadClaimDocumentService = async (id, docData) => {
+  const claim = await findClaimByIdOrNumber(id);
+  if (!claim) {
+    throw new AppError("Claim not found", 404, ErrorCodes.NOT_FOUND);
+  }
+
+  claim.documentsList = claim.documentsList || [];
+  claim.documentsList.push({
+    name: docData.name || "Medical Document.pdf",
+    category: docData.category || "General",
+    url: docData.url || "",
+    uploadedAt: new Date(),
+  });
 
   claim.lastUpdatedDate = new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
   await claim.save();

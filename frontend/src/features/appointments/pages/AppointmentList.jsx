@@ -3,6 +3,7 @@ import { Plus } from "lucide-react";
 import { useAppointments } from "../hooks/useAppointments.js";
 import {
   createAppointmentApi,
+  updateAppointmentApi,
   changeAppointmentStatusApi,
 } from "../services/appointment.api.js";
 import { useDoctors } from "../../doctors/hooks/useDoctors.js";
@@ -14,6 +15,9 @@ import AppointmentFilters from "../components/AppointmentFilters.jsx";
 import AppointmentTabs from "../components/AppointmentTabs.jsx";
 import AppointmentTable from "../components/AppointmentTable.jsx";
 import AppointmentIntegratedModules from "../components/AppointmentIntegratedModules.jsx";
+import AppointmentViewModal from "../components/modals/AppointmentViewModal.jsx";
+import AppointmentRescheduleModal from "../components/modals/AppointmentRescheduleModal.jsx";
+import AppointmentCancelModal from "../components/modals/AppointmentCancelModal.jsx";
 
 export default function AppointmentList() {
   const {
@@ -47,15 +51,24 @@ export default function AppointmentList() {
 
   // Modal State
   const [modalOpen, setModalOpen] = useState(false);
+  const [editingAppt, setEditingAppt] = useState(null);
+  const [viewingAppt, setViewingAppt] = useState(null);
+  const [rescheduleAppt, setRescheduleAppt] = useState(null);
+  const [cancellingAppt, setCancellingAppt] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [conflictError, setConflictError] = useState("");
 
-  const handleCreate = async (formData) => {
+  const handleCreateOrUpdate = async (formData) => {
     setSubmitting(true);
     setConflictError("");
     try {
-      await createAppointmentApi(formData);
+      if (editingAppt) {
+        await updateAppointmentApi(editingAppt._id, formData);
+      } else {
+        await createAppointmentApi(formData);
+      }
       setModalOpen(false);
+      setEditingAppt(null);
       refetch();
     } catch (err) {
       if (err.response?.status === 409) {
@@ -69,17 +82,37 @@ export default function AppointmentList() {
   };
 
   const handleStatusChange = async (appointment, newStatus) => {
-    let cancelledReason = null;
-    if (newStatus === "cancelled") {
-      cancelledReason = prompt("Reason for cancellation:");
-      if (cancelledReason === null) return;
-    }
-
     try {
-      await changeAppointmentStatusApi(appointment._id, { status: newStatus, cancelledReason });
+      await changeAppointmentStatusApi(appointment._id, { status: newStatus });
       refetch();
     } catch (err) {
-      alert(err.response?.data?.message || "Failed to update status");
+      alert(err.response?.data?.message || "Failed to update appointment status");
+    }
+  };
+
+  const handleRescheduleSubmit = async (appointmentId, updatePayload) => {
+    setSubmitting(true);
+    try {
+      await updateAppointmentApi(appointmentId, updatePayload);
+      setRescheduleAppt(null);
+      refetch();
+    } catch (err) {
+      alert(err.response?.data?.message || "Failed to reschedule appointment");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleConfirmCancel = async (appointment, cancelledReason) => {
+    setSubmitting(true);
+    try {
+      await changeAppointmentStatusApi(appointment._id, { status: "cancelled", cancelledReason });
+      setCancellingAppt(null);
+      refetch();
+    } catch (err) {
+      alert(err.response?.data?.message || "Failed to cancel appointment");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -99,6 +132,7 @@ export default function AppointmentList() {
         <button
           type="button"
           onClick={() => {
+            setEditingAppt(null);
             setConflictError("");
             setModalOpen(true);
           }}
@@ -129,7 +163,7 @@ export default function AppointmentList() {
       />
 
       {/* 4. Tab Navigation & Table Container */}
-      <div className="bg-white border border-slate-200/80 rounded-2xl shadow-2xs overflow-hidden">
+      <div className="bg-white border border-slate-200/80 rounded-2xl shadow-2xs">
         <AppointmentTabs
           activeTab={activeTab}
           setActiveTab={setActiveTab}
@@ -143,24 +177,64 @@ export default function AppointmentList() {
           page={page}
           setPage={setPage}
           pagination={pagination}
+          onEdit={(appt) => {
+            setEditingAppt(appt);
+            setConflictError("");
+            setModalOpen(true);
+          }}
+          onView={(appt) => setViewingAppt(appt)}
+          onReschedule={(appt) => setRescheduleAppt(appt)}
           onStatusChange={handleStatusChange}
+          onOpenCancelModal={(appt) => setCancellingAppt(appt)}
         />
       </div>
 
       {/* 5. Integrated Modules Bar */}
       <AppointmentIntegratedModules />
 
-      {/* Book Appointment Modal */}
+      {/* View Appointment Details Modal */}
+      <AppointmentViewModal
+        appointment={viewingAppt}
+        onClose={() => setViewingAppt(null)}
+      />
+
+      {/* Reschedule Appointment Modal */}
+      <AppointmentRescheduleModal
+        appointment={rescheduleAppt}
+        isOpen={!!rescheduleAppt}
+        onClose={() => setRescheduleAppt(null)}
+        onReschedule={handleRescheduleSubmit}
+        submitting={submitting}
+      />
+
+      {/* Cancel Appointment Modal */}
+      <AppointmentCancelModal
+        appointment={cancellingAppt}
+        isOpen={!!cancellingAppt}
+        onClose={() => setCancellingAppt(null)}
+        onConfirmCancel={handleConfirmCancel}
+        submitting={submitting}
+      />
+
+      {/* Book / Edit Appointment Form Modal */}
       <Modal
         isOpen={modalOpen}
-        onClose={() => setModalOpen(false)}
-        title="Book New Appointment"
-        subtitle="Schedule a patient OPD appointment slot with conflict prevention"
+        onClose={() => {
+          setModalOpen(false);
+          setEditingAppt(null);
+        }}
+        title={editingAppt ? "Edit Appointment" : "Book New Appointment"}
+        subtitle={editingAppt ? "Update appointment details" : "Schedule a patient OPD appointment slot with conflict prevention"}
         maxWidth="max-w-[700px]"
       >
         <AppointmentForm
-          onSubmit={handleCreate}
-          onCancel={() => setModalOpen(false)}
+          defaultValues={editingAppt}
+          isEdit={!!editingAppt}
+          onSubmit={handleCreateOrUpdate}
+          onCancel={() => {
+            setModalOpen(false);
+            setEditingAppt(null);
+          }}
           submitting={submitting}
           conflictError={conflictError}
         />

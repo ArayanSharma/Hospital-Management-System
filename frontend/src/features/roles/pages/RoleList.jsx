@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Plus, Search, Edit3 } from "lucide-react";
 import { useRoleManagement } from "../hooks/useRoleManagement.js";
@@ -9,6 +9,7 @@ import RoleSidebarWidgets from "../components/RoleSidebarWidgets.jsx";
 import AddRoleModal from "../components/modals/AddRoleModal.jsx";
 import EditPermissionsModal from "../components/modals/EditPermissionsModal.jsx";
 import AuditLogList from "../../audit-logs/pages/AuditLogList.jsx";
+import CustomDropdown from "../../../components/ui/CustomDropdown.jsx";
 
 export default function RoleList() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -102,7 +103,7 @@ export default function RoleList() {
               className="flex items-center gap-1.5 px-4 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-bold text-xs rounded-xl shadow-2xs transition cursor-pointer"
             >
               <Plus className="w-4 h-4 text-blue-600" />
-              <span>+ Add Role</span>
+              <span>Add Role</span>
             </button>
 
             <button
@@ -217,7 +218,7 @@ export default function RoleList() {
                     className="flex items-center gap-1.5 px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer self-start sm:self-auto"
                   >
                     <Plus className="w-3.5 h-3.5" />
-                    <span>+ Add Role</span>
+                    <span>Add Role</span>
                   </button>
                 </div>
 
@@ -233,17 +234,12 @@ export default function RoleList() {
                     />
                   </div>
 
-                  <select
+                  <CustomDropdown
                     value={roleTypeFilter}
-                    onChange={(e) => setRoleTypeFilter(e.target.value)}
-                    className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-700 focus:outline-none focus:border-blue-500 cursor-pointer self-start sm:self-auto"
-                  >
-                    {ROLE_FILTER_TYPES.map((t) => (
-                      <option key={t} value={t}>
-                        {t}
-                      </option>
-                    ))}
-                  </select>
+                    options={ROLE_FILTER_TYPES}
+                    onChange={setRoleTypeFilter}
+                    minWidth="130px"
+                  />
                 </div>
 
                 <RoleTable

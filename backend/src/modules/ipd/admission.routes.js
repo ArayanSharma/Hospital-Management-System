@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { create, getAll, getById, update, discharge } from "./admission.controller.js";
+import { create, getAll, getById, update, discharge, transfer } from "./admission.controller.js";
 import { authenticate } from "../../middleware/auth.middleware.js";
 import { checkPermission } from "../../middleware/permission.middleware.js";
 import { validate } from "../../middleware/validation.middleware.js";
@@ -18,5 +18,6 @@ router.patch(
   validate(dischargeSchema),
   discharge
 );
+router.patch("/:id/transfer", authenticate, checkPermission("admission:update"), transfer);
 
 export default router;

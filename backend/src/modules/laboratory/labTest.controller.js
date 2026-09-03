@@ -26,6 +26,6 @@ export const getById = asyncHandler(async (req, res) => {
 
 export const updateStatus = asyncHandler(async (req, res) => {
   const meta = getRequestMeta(req);
-  const test = await updateLabTestStatus(req.params.id, req.body.status, req.user, meta);
-  return successResponse(res, 200, "Lab test status updated successfully", test);
+  const test = await updateLabTestStatus(req.params.id, req.body, req.user, meta);
+  return successResponse(res, 200, "Lab test details updated successfully", test);
 });

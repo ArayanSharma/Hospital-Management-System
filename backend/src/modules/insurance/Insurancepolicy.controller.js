@@ -4,6 +4,8 @@ import {
   getPolicyByIdService,
   updatePolicyService,
   deletePolicyService,
+  togglePolicyStatusService,
+  togglePolicyArchiveService,
 } from "./insurancePolicy.service.js";
 import { successResponse } from "../../core/responses/apiResponse.js";
 import { asyncHandler } from "../../utils/asyncHandler.js";
@@ -39,4 +41,14 @@ export const update = asyncHandler(async (req, res) => {
 export const remove = asyncHandler(async (req, res) => {
   const result = await deletePolicyService(req.params.id);
   return successResponse(res, 200, result.message);
+});
+
+export const toggleStatusController = asyncHandler(async (req, res) => {
+  const result = await togglePolicyStatusService(req.params.id);
+  return successResponse(res, 200, result.message, result.policy);
+});
+
+export const toggleArchiveController = asyncHandler(async (req, res) => {
+  const result = await togglePolicyArchiveService(req.params.id);
+  return successResponse(res, 200, result.message, result.policy);
 });

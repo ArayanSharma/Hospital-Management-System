@@ -72,6 +72,14 @@ const patientSchema = new mongoose.Schema(
       enum: ["active", "inactive"],
       default: "active",
     },
+    isDeleted: {
+      type: Boolean,
+      default: false,
+    },
+    deletedAt: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true,

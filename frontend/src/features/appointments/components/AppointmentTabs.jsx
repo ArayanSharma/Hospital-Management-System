@@ -57,6 +57,20 @@ export default function AppointmentTabs({
         </button>
 
         <button
+          onClick={() => setActiveTab("checked_in")}
+          className={`flex items-center gap-1.5 pb-1 border-b-2 transition cursor-pointer ${
+            activeTab === "checked_in"
+              ? "border-blue-600 text-blue-600 font-bold"
+              : "border-transparent text-slate-500 hover:text-slate-800"
+          }`}
+        >
+          <span>Checked-In</span>
+          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 text-purple-600">
+            {stats?.checkedInCount ?? 0}
+          </span>
+        </button>
+
+        <button
           onClick={() => setActiveTab("completed")}
           className={`flex items-center gap-1.5 pb-1 border-b-2 transition cursor-pointer ${
             activeTab === "completed"

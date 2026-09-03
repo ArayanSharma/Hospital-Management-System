@@ -1,5 +1,6 @@
 import React from "react";
-import { Search } from "lucide-react";
+import { Search, RotateCcw } from "lucide-react";
+import CustomDropdown from "../../../components/ui/CustomDropdown.jsx";
 
 export default function InventoryFilterBar({
   searchQuery,
@@ -12,9 +13,43 @@ export default function InventoryFilterBar({
   onStatusChange,
   expiryFilter,
   onExpiryChange,
+  onResetFilters,
 }) {
+  const categoryOptions = [
+    { label: "All Categories", value: "all" },
+    { label: "Analgesic", value: "Analgesic" },
+    { label: "Antibiotic", value: "Antibiotic" },
+    { label: "Antihistamine", value: "Antihistamine" },
+    { label: "Gastro", value: "Gastro" },
+    { label: "Supplement", value: "Supplement" },
+  ];
+
+  const manufacturerOptions = [
+    { label: "All Manufacturers", value: "all" },
+    { label: "Sun Pharma", value: "Sun Pharma" },
+    { label: "Cipla", value: "Cipla" },
+    { label: "Dr. Reddy's", value: "Dr. Reddy's" },
+    { label: "Lupin", value: "Lupin" },
+    { label: "Abbott", value: "Abbott" },
+  ];
+
+  const statusOptions = [
+    { label: "All Status", value: "all" },
+    { label: "In Stock", value: "In Stock" },
+    { label: "Low Stock", value: "Low Stock" },
+    { label: "Out of Stock", value: "Out of Stock" },
+    { label: "Expiring Soon", value: "Expiring Soon" },
+  ];
+
+  const expiryOptions = [
+    { label: "All Expiry", value: "all" },
+    { label: "Within 30 Days", value: "30" },
+    { label: "Within 60 Days", value: "60" },
+    { label: "Expired", value: "expired" },
+  ];
+
   return (
-    <div className="bg-white border border-slate-200/70 rounded-2xl p-3.5 shadow-xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+    <div className="bg-white border border-slate-200/70 rounded-2xl p-3.5 shadow-2xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
       {/* Search Input */}
       <div className="relative flex-1 min-w-[240px]">
         <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -27,76 +62,50 @@ export default function InventoryFilterBar({
         />
       </div>
 
-      {/* Dropdown Filters */}
+      {/* Dropdown Filters & Reset Button */}
       <div className="flex flex-wrap items-center gap-2.5">
-        {/* Category */}
-        <div className="flex items-center gap-1.5">
-          <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider hidden lg:inline">Category</span>
-          <select
-            value={categoryFilter}
-            onChange={(e) => onCategoryChange(e.target.value)}
-            className="bg-slate-50/60 border border-slate-200/80 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all cursor-pointer"
-          >
-            <option value="all">All Categories</option>
-            <option value="Analgesic">Analgesic</option>
-            <option value="Antibiotic">Antibiotic</option>
-            <option value="Antihistamine">Antihistamine</option>
-            <option value="Gastro">Gastro</option>
-            <option value="Supplement">Supplement</option>
-          </select>
-        </div>
+        <CustomDropdown
+          label="Category"
+          value={categoryFilter}
+          options={categoryOptions}
+          onChange={onCategoryChange}
+          minWidth="140px"
+        />
 
-        {/* Manufacturer */}
-        <div className="flex items-center gap-1.5">
-          <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider hidden lg:inline">Manufacturer</span>
-          <select
-            value={manufacturerFilter}
-            onChange={(e) => onManufacturerChange(e.target.value)}
-            className="bg-slate-50/60 border border-slate-200/80 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all cursor-pointer"
-          >
-            <option value="all">All Manufacturers</option>
-            <option value="Sun Pharma">Sun Pharma</option>
-            <option value="Cipla">Cipla</option>
-            <option value="Dr. Reddy's">Dr. Reddy's</option>
-            <option value="Lupin">Lupin</option>
-            <option value="Alkem">Alkem</option>
-            <option value="Abbott">Abbott</option>
-            <option value="Torrent">Torrent</option>
-            <option value="Zydus">Zydus</option>
-            <option value="Dabur">Dabur</option>
-          </select>
-        </div>
+        <CustomDropdown
+          label="Manufacturer"
+          value={manufacturerFilter}
+          options={manufacturerOptions}
+          onChange={onManufacturerChange}
+          minWidth="150px"
+        />
 
-        {/* Status */}
-        <div className="flex items-center gap-1.5">
-          <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider hidden lg:inline">Status</span>
-          <select
-            value={statusFilter}
-            onChange={(e) => onStatusChange(e.target.value)}
-            className="bg-slate-50/60 border border-slate-200/80 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all cursor-pointer"
-          >
-            <option value="all">All Status</option>
-            <option value="In Stock">In Stock</option>
-            <option value="Low Stock">Low Stock</option>
-            <option value="Out of Stock">Out of Stock</option>
-            <option value="Expiring Soon">Expiring Soon</option>
-          </select>
-        </div>
+        <CustomDropdown
+          label="Status"
+          value={statusFilter}
+          options={statusOptions}
+          onChange={onStatusChange}
+          minWidth="130px"
+        />
 
-        {/* Expiry */}
-        <div className="flex items-center gap-1.5">
-          <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider hidden lg:inline">Expiry</span>
-          <select
-            value={expiryFilter}
-            onChange={(e) => onExpiryChange(e.target.value)}
-            className="bg-slate-50/60 border border-slate-200/80 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all cursor-pointer"
-          >
-            <option value="all">All</option>
-            <option value="30">Within 30 Days</option>
-            <option value="60">Within 60 Days</option>
-            <option value="expired">Expired</option>
-          </select>
-        </div>
+        <CustomDropdown
+          label="Expiry"
+          value={expiryFilter}
+          options={expiryOptions}
+          onChange={onExpiryChange}
+          minWidth="130px"
+        />
+
+        {/* Far-Right [ Reset Filters ] Button */}
+        <button
+          type="button"
+          onClick={onResetFilters}
+          className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-rose-50 hover:text-rose-600 text-slate-700 font-bold text-xs border border-slate-200 transition cursor-pointer shrink-0"
+          title="Reset All Filters"
+        >
+          <RotateCcw className="w-3.5 h-3.5" />
+          <span>Reset Filters</span>
+        </button>
       </div>
     </div>
   );

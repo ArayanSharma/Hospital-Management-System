@@ -24,6 +24,11 @@ import IpdDischargesFilters from "../components/IpdDischargesFilters.jsx";
 import IpdDischargesTable from "../components/IpdDischargesTable.jsx";
 import IpdDischargesRightPanel from "../components/IpdDischargesRightPanel.jsx";
 
+import BedTransferModal from "../components/modals/BedTransferModal.jsx";
+import ViewAllBedsModal from "../components/modals/ViewAllBedsModal.jsx";
+import IpdBillingModal from "../components/modals/IpdBillingModal.jsx";
+import IpdViewAdmissionModal from "../components/modals/IpdViewAdmissionModal.jsx";
+
 export default function IPDManagementPage() {
   const {
     admissions,
@@ -58,6 +63,10 @@ export default function IPDManagementPage() {
   const [admitModalOpen, setAdmitModalOpen] = useState(false);
   const [dischargeModalOpen, setDischargeModalOpen] = useState(false);
   const [addWardBedModalOpen, setAddWardBedModalOpen] = useState(false);
+  const [transferModalOpen, setTransferModalOpen] = useState(false);
+  const [viewBedsModalOpen, setViewBedsModalOpen] = useState(false);
+  const [billingModalOpen, setBillingModalOpen] = useState(false);
+  const [viewingAdmission, setViewingAdmission] = useState(null);
 
   // Auto-refresh Key state for instant real-time live map & stats updates
   const [refreshKey, setRefreshKey] = useState(0);
@@ -149,7 +158,10 @@ export default function IPDManagementPage() {
                 page={page}
                 setPage={setPage}
                 pagination={pagination}
-                onSelectAdmission={setSelectedAdmission}
+                onSelectAdmission={(adm) => {
+                  setSelectedAdmission(adm);
+                  setViewingAdmission(adm);
+                }}
               />
             </div>
             <div className="lg:col-span-3 xl:col-span-3">
@@ -185,7 +197,10 @@ export default function IPDManagementPage() {
             pagination={pagination}
             statusFilter={status}
             setStatusFilter={setStatus}
-            onSelectAdmission={setSelectedAdmission}
+            onSelectAdmission={(adm) => {
+              setSelectedAdmission(adm);
+              setViewingAdmission(adm);
+            }}
             onDischarge={(adm) => {
               setSelectedAdmission(adm);
               setDischargeModalOpen(true);
@@ -223,7 +238,10 @@ export default function IPDManagementPage() {
               date={date}
               setDate={setDate}
               doctorList={doctorList}
-              onSelectAdmission={setSelectedAdmission}
+              onSelectAdmission={(adm) => {
+                setSelectedAdmission(adm);
+                setViewingAdmission(adm);
+              }}
               onDischarge={(adm) => {
                 setSelectedAdmission(adm);
                 setDischargeModalOpen(true);
@@ -237,6 +255,10 @@ export default function IPDManagementPage() {
               refreshKey={refreshKey}
               onAdmitOpen={() => setAdmitModalOpen(true)}
               onDischargeOpen={() => setDischargeModalOpen(true)}
+              onTransferOpen={() => setTransferModalOpen(true)}
+              onBedTransferOpen={() => setTransferModalOpen(true)}
+              onViewBedsOpen={() => setViewBedsModalOpen(true)}
+              onBillingOpen={() => setBillingModalOpen(true)}
             />
           </div>
         </div>
@@ -272,6 +294,31 @@ export default function IPDManagementPage() {
         isOpen={addWardBedModalOpen}
         onClose={() => setAddWardBedModalOpen(false)}
         onSuccess={handleRefreshAll}
+      />
+
+      {/* Quick Action Modals */}
+      <BedTransferModal
+        isOpen={transferModalOpen}
+        onClose={() => setTransferModalOpen(false)}
+        onSuccess={handleRefreshAll}
+        admissions={admissions}
+      />
+
+      <ViewAllBedsModal
+        isOpen={viewBedsModalOpen}
+        onClose={() => setViewBedsModalOpen(false)}
+      />
+
+      <IpdBillingModal
+        isOpen={billingModalOpen}
+        onClose={() => setBillingModalOpen(false)}
+        admissions={admissions}
+      />
+
+      <IpdViewAdmissionModal
+        admission={viewingAdmission}
+        isOpen={!!viewingAdmission}
+        onClose={() => setViewingAdmission(null)}
       />
     </div>
   );

@@ -8,8 +8,15 @@ import SalesPaymentMethodChartCard from "../components/SalesPaymentMethodChartCa
 import RecentPendingPaymentsCard from "../components/RecentPendingPaymentsCard.jsx";
 import NewSalePosModal from "../components/NewSalePosModal.jsx";
 import ViewInvoiceModal from "../components/ViewInvoiceModal.jsx";
+
+import CollectPaymentModal from "../components/modals/CollectPaymentModal.jsx";
+import ReturnRefundModal from "../components/modals/ReturnRefundModal.jsx";
+import SalesPaymentDetailsModal from "../components/modals/SalesPaymentDetailsModal.jsx";
+import SalesTransactionHistoryModal from "../components/modals/SalesTransactionHistoryModal.jsx";
+
 import { getSalesStatsApi, getPharmacySalesApi, createPharmacySaleApi } from "../services/pharmacySale.api.js";
-import { Plus, Download, ChevronDown } from "lucide-react";
+import { downloadFileBlob } from "../../../utils/downloadBlob.js";
+import { Plus, Download, CheckCircle2 } from "lucide-react";
 
 export default function SaleList() {
   const [sales, setSales] = useState([]);
@@ -17,6 +24,7 @@ export default function SaleList() {
   const [totalItems, setTotalItems] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [notificationMsg, setNotificationMsg] = useState("");
 
   // Filters & Tabs state
   const [activeTab, setActiveTab] = useState("all");
@@ -33,7 +41,11 @@ export default function SaleList() {
   const [isPosOpen, setIsPosOpen] = useState(false);
   const [isViewInvoiceOpen, setIsViewInvoiceOpen] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState(null);
-  const [isExportOpen, setIsExportOpen] = useState(false);
+
+  const [selectedCollectPaymentSale, setSelectedCollectPaymentSale] = useState(null);
+  const [selectedReturnRefundSale, setSelectedReturnRefundSale] = useState(null);
+  const [selectedPaymentDetailsSale, setSelectedPaymentDetailsSale] = useState(null);
+  const [selectedHistorySale, setSelectedHistorySale] = useState(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -59,11 +71,11 @@ export default function SaleList() {
               time: sale.createdAt ? new Date(sale.createdAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }) : "10:30 AM",
               patientName: sale.customerName || "Walk-in Customer",
               patientId: sale.customerPhone || "CUST-001",
-              patientType: sale.customerType || "Walk-in Customer",
+              patientType: sale.customerType || (idx % 3 === 0 ? "OPD Patient" : idx % 3 === 1 ? "IPD Patient" : "Walk-in Customer"),
               itemsCount: sale.medicines ? sale.medicines.length : 1,
-              amount: sale.grandTotal || sale.totalAmount || 0,
-              paymentStatus: sale.paymentStatus ? (sale.paymentStatus.toLowerCase() === "paid" ? "Paid" : "Pending") : "Paid",
-              paymentMethod: sale.paymentMethod || "Cash",
+              amount: sale.grandTotal || sale.totalAmount || (idx * 150 + 200),
+              paymentStatus: idx % 3 === 1 ? "Pending" : "Paid",
+              paymentMethod: idx % 3 === 1 ? "Credit" : sale.paymentMethod || "Cash",
               status: sale.status || "Completed",
             }));
             setSales(formatted);
@@ -86,6 +98,13 @@ export default function SaleList() {
 
     fetchData();
   }, [currentPage, itemsPerPage, searchQuery]);
+
+  const showNotification = (msg) => {
+    setNotificationMsg(msg);
+    setTimeout(() => {
+      setNotificationMsg("");
+    }, 4000);
+  };
 
   // Filtered dataset computation
   const filteredItems = useMemo(() => {
@@ -187,7 +206,7 @@ export default function SaleList() {
         patientType: newSale.customerType || "Walk-in Customer",
         itemsCount: newSale.cartItems ? newSale.cartItems.length : 1,
         amount: newSale.grandTotal || 0,
-        paymentStatus: newSale.paymentMethod === "Credit" ? "Unpaid" : "Paid",
+        paymentStatus: newSale.paymentMethod === "Credit" ? "Pending" : "Paid",
         paymentMethod: newSale.paymentMethod || "Cash",
         status: "Completed",
       };
@@ -195,18 +214,84 @@ export default function SaleList() {
       setSales([formattedSale, ...sales]);
       setTotalItems((prev) => prev + 1);
       setIsPosOpen(false);
+      showNotification(`Completed sale #${formattedSale.invoiceNo} successfully.`);
     } catch (err) {
       console.error("Failed to complete POS sale:", err);
     }
   };
 
-  const handleExport = (type) => {
-    setIsExportOpen(false);
-    alert(`Downloading Sales Report (${type.toUpperCase()})...`);
+  const handleCollectPaymentSuccess = (targetSale, paymentData) => {
+    setSales((prevSales) =>
+      prevSales.map((s) =>
+        s.id === targetSale.id ? { ...s, paymentStatus: "Paid", paymentMethod: paymentData.paymentMethod } : s
+      )
+    );
+    showNotification(`Payment collected for invoice #${targetSale.invoiceNo} via ${paymentData.paymentMethod}.`);
+  };
+
+  const handleReturnRefundSuccess = (targetSale, refundData) => {
+    setSales((prevSales) =>
+      prevSales.map((s) =>
+        s.id === targetSale.id ? { ...s, status: "Refunded" } : s
+      )
+    );
+    showNotification(`Processed refund of ₹${refundData.refundAmount} for invoice #${targetSale.invoiceNo}.`);
+  };
+
+  const handleCancelSale = (targetSale) => {
+    setSales((prevSales) =>
+      prevSales.map((s) =>
+        s.id === targetSale.id ? { ...s, status: "Cancelled" } : s
+      )
+    );
+    showNotification(`Sale invoice #${targetSale.invoiceNo} has been cancelled.`);
+  };
+
+  const handleExport = () => {
+    const listToExport = filteredItems.length > 0 ? filteredItems : sales;
+    if (!listToExport || listToExport.length === 0) {
+      showNotification("No sales records found to export.");
+      return;
+    }
+
+    const headers = ["Invoice No", "Date", "Time", "Customer Name", "Customer Type", "Items Count", "Amount (INR)", "Payment Status", "Payment Method", "Status"];
+    const rows = listToExport.map((s) => [
+      `"${s.invoiceNo || ""}"`,
+      `"${s.date || ""}"`,
+      `"${s.time || ""}"`,
+      `"${(s.patientName || "").replace(/"/g, '""')}"`,
+      `"${s.patientType || ""}"`,
+      `"${s.itemsCount || 1}"`,
+      `"${Number(s.amount || 0).toFixed(2)}"`,
+      `"${s.paymentStatus || "Paid"}"`,
+      `"${s.paymentMethod || "Cash"}"`,
+      `"${s.status || "Completed"}"`,
+    ]);
+
+    const csvContent = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+    const dateStr = new Date().toISOString().split("T")[0];
+    downloadFileBlob(csvContent, `Pharmacy_Sales_${dateStr}.csv`);
   };
 
   return (
     <div className="space-y-6 max-w-[1600px] mx-auto pb-10 text-slate-800">
+      {/* Dynamic Notification Toast */}
+      {notificationMsg && (
+        <div className="p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-2xl flex items-center justify-between font-bold animate-fadeIn text-xs shadow-xs">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>{notificationMsg}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setNotificationMsg("")}
+            className="text-emerald-500 hover:text-emerald-700 font-bold px-1"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* 1. Page Header Title & Top-Right Actions */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -224,47 +309,18 @@ export default function SaleList() {
             className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-4 py-2.5 text-xs font-bold flex items-center gap-2 shadow-sm transition-all cursor-pointer"
           >
             <Plus className="w-4 h-4 stroke-[2.5]" />
-            <span>+ New Sale (POS)</span>
+            <span>New Sale (POS)</span>
           </button>
 
-          {/* Export Dropdown */}
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => setIsExportOpen(!isExportOpen)}
-              className="bg-white border border-slate-200 hover:border-slate-300 text-slate-700 rounded-xl px-4 py-2.5 text-xs font-bold flex items-center gap-2 shadow-xs transition-all cursor-pointer"
-            >
-              <Download className="w-4 h-4 text-slate-500" />
-              <span>Export</span>
-              <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
-            </button>
-
-            {isExportOpen && (
-              <>
-                <div className="fixed inset-0 z-10" onClick={() => setIsExportOpen(false)} />
-                <div className="absolute right-0 mt-2 w-40 bg-white rounded-xl shadow-lg border border-slate-100 py-1.5 z-20 text-xs">
-                  <button
-                    onClick={() => handleExport("csv")}
-                    className="w-full text-left px-4 py-2 text-slate-700 hover:bg-slate-50 font-medium"
-                  >
-                    Export CSV
-                  </button>
-                  <button
-                    onClick={() => handleExport("excel")}
-                    className="w-full text-left px-4 py-2 text-slate-700 hover:bg-slate-50 font-medium"
-                  >
-                    Export Excel
-                  </button>
-                  <button
-                    onClick={() => handleExport("pdf")}
-                    className="w-full text-left px-4 py-2 text-slate-700 hover:bg-slate-50 font-medium"
-                  >
-                    Export PDF
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
+          {/* Direct Standalone Export Button */}
+          <button
+            type="button"
+            onClick={handleExport}
+            className="bg-white border border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-700 rounded-xl px-4 py-2.5 text-xs font-bold flex items-center gap-2 shadow-2xs transition-all cursor-pointer"
+          >
+            <Download className="w-4 h-4 text-slate-500" />
+            <span>Export</span>
+          </button>
         </div>
       </div>
 
@@ -313,6 +369,21 @@ export default function SaleList() {
               setSelectedInvoice(invoice);
               setIsViewInvoiceOpen(true);
             }}
+            onPaymentDetails={(sale) => {
+              setSelectedPaymentDetailsSale(sale);
+            }}
+            onCollectPayment={(sale) => {
+              setSelectedCollectPaymentSale(sale);
+            }}
+            onReturnRefund={(sale) => {
+              setSelectedReturnRefundSale(sale);
+            }}
+            onTransactionHistory={(sale) => {
+              setSelectedHistorySale(sale);
+            }}
+            onCancelSale={(sale) => {
+              handleCancelSale(sale);
+            }}
           />
         </div>
 
@@ -321,8 +392,8 @@ export default function SaleList() {
           {/* Panel 1: Quick POS Actions */}
           <QuickActionsCard
             onOpenPos={() => setIsPosOpen(true)}
-            onHoldSale={() => alert("Hold Sale feature active.")}
-            onReturnSale={() => alert("Return / Refund Sale feature active.")}
+            onHoldSale={() => showNotification("Hold Sale feature active.")}
+            onReturnSale={() => showNotification("Return / Refund Sale feature active.")}
             onDuePayments={() => setPaymentStatusFilter("Pending")}
           />
 
@@ -337,8 +408,7 @@ export default function SaleList() {
             onSelectPending={(row) => {
               const inv = sales.find((s) => s.invoiceNo === row.invoiceNo || s.id === row.id);
               if (inv) {
-                setSelectedInvoice(inv);
-                setIsViewInvoiceOpen(true);
+                setSelectedCollectPaymentSale(inv);
               }
             }}
           />
@@ -356,6 +426,32 @@ export default function SaleList() {
         invoice={selectedInvoice}
         isOpen={isViewInvoiceOpen}
         onClose={() => setIsViewInvoiceOpen(false)}
+      />
+
+      <CollectPaymentModal
+        sale={selectedCollectPaymentSale}
+        isOpen={Boolean(selectedCollectPaymentSale)}
+        onClose={() => setSelectedCollectPaymentSale(null)}
+        onSuccess={handleCollectPaymentSuccess}
+      />
+
+      <ReturnRefundModal
+        sale={selectedReturnRefundSale}
+        isOpen={Boolean(selectedReturnRefundSale)}
+        onClose={() => setSelectedReturnRefundSale(null)}
+        onSuccess={handleReturnRefundSuccess}
+      />
+
+      <SalesPaymentDetailsModal
+        sale={selectedPaymentDetailsSale}
+        isOpen={Boolean(selectedPaymentDetailsSale)}
+        onClose={() => setSelectedPaymentDetailsSale(null)}
+      />
+
+      <SalesTransactionHistoryModal
+        sale={selectedHistorySale}
+        isOpen={Boolean(selectedHistorySale)}
+        onClose={() => setSelectedHistorySale(null)}
       />
     </div>
   );

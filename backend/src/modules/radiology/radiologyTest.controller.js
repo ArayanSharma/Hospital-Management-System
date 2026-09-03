@@ -27,9 +27,8 @@ export const getById = asyncHandler(async (req, res) => {
 
 export const updateStatus = asyncHandler(async (req, res) => {
   const meta = getRequestMeta(req);
-  const { status, scheduledAt } = req.body;
-  const test = await updateRadiologyTestStatus(req.params.id, status, scheduledAt, req.user, meta);
-  return successResponse(res, 200, "Radiology test status updated successfully", test);
+  const test = await updateRadiologyTestStatus(req.params.id, req.body, req.user, meta);
+  return successResponse(res, 200, "Radiology test updated successfully", test);
 });
 
 export const remove = asyncHandler(async (req, res) => {

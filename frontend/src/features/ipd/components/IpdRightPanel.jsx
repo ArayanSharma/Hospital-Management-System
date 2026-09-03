@@ -9,7 +9,16 @@ import {
 } from "lucide-react";
 import api from "../../../lib/axios.js";
 
-export default function IpdRightPanel({ stats, onAdmitOpen, onDischargeOpen, refreshKey }) {
+export default function IpdRightPanel({
+  stats,
+  onAdmitOpen,
+  onDischargeOpen,
+  onTransferOpen,
+  onBedTransferOpen,
+  onViewBedsOpen,
+  onBillingOpen,
+  refreshKey,
+}) {
   const [wards, setWards] = useState([]);
 
   useEffect(() => {
@@ -73,7 +82,7 @@ export default function IpdRightPanel({ stats, onAdmitOpen, onDischargeOpen, ref
 
         <button
           type="button"
-          onClick={() => alert("Viewing all wards")}
+          onClick={onViewBedsOpen}
           className="w-full py-1.5 text-center text-xs font-semibold text-blue-600 hover:text-blue-700 bg-blue-50/50 hover:bg-blue-50 border border-blue-100 rounded-xl transition cursor-pointer"
         >
           View All Wards
@@ -104,7 +113,7 @@ export default function IpdRightPanel({ stats, onAdmitOpen, onDischargeOpen, ref
           </button>
 
           <button
-            onClick={() => alert("Transfer Patient option opened")}
+            onClick={onTransferOpen}
             className="p-2 bg-slate-50 hover:bg-purple-50/60 border border-slate-200/80 hover:border-purple-200 rounded-xl transition cursor-pointer flex items-center gap-1.5 text-slate-700 font-semibold truncate"
           >
             <ArrowRightLeft className="w-3.5 h-3.5 text-purple-600 shrink-0" />
@@ -112,7 +121,7 @@ export default function IpdRightPanel({ stats, onAdmitOpen, onDischargeOpen, ref
           </button>
 
           <button
-            onClick={() => alert("Bed Transfer option opened")}
+            onClick={onBedTransferOpen}
             className="p-2 bg-slate-50 hover:bg-indigo-50/60 border border-slate-200/80 hover:border-indigo-200 rounded-xl transition cursor-pointer flex items-center gap-1.5 text-slate-700 font-semibold truncate"
           >
             <BedDouble className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
@@ -120,7 +129,7 @@ export default function IpdRightPanel({ stats, onAdmitOpen, onDischargeOpen, ref
           </button>
 
           <button
-            onClick={() => alert("View All Beds option opened")}
+            onClick={onViewBedsOpen}
             className="p-2 bg-slate-50 hover:bg-cyan-50/60 border border-slate-200/80 hover:border-cyan-200 rounded-xl transition cursor-pointer flex items-center gap-1.5 text-slate-700 font-semibold truncate"
           >
             <Eye className="w-3.5 h-3.5 text-cyan-600 shrink-0" />
@@ -128,7 +137,7 @@ export default function IpdRightPanel({ stats, onAdmitOpen, onDischargeOpen, ref
           </button>
 
           <button
-            onClick={() => alert("IPD Billing option opened")}
+            onClick={onBillingOpen}
             className="p-2 bg-slate-50 hover:bg-teal-50/60 border border-slate-200/80 hover:border-teal-200 rounded-xl transition cursor-pointer flex items-center gap-1.5 text-slate-700 font-semibold truncate"
           >
             <Receipt className="w-3.5 h-3.5 text-teal-600 shrink-0" />
