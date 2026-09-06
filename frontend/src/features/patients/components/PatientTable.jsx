@@ -16,7 +16,7 @@ import {
   UserCheck,
   Trash2,
 } from "lucide-react";
-import Loading from "../../../components/common/Loading.jsx";
+import TableSkeleton from "../../../components/ui/TableSkeleton.jsx";
 import ErrorState from "../../../components/common/ErrorState.jsx";
 
 function PatientActionMenu({
@@ -239,7 +239,7 @@ export default function PatientTable({
       {/* Table Data */}
       <div className="overflow-x-auto">
         {loading ? (
-          <Loading message="Fetching database records..." />
+          <TableSkeleton rows={6} columns={10} />
         ) : error ? (
           <ErrorState message={error} />
         ) : patients.length === 0 ? (

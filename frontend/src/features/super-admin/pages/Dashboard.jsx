@@ -33,7 +33,7 @@ import {
 } from "recharts";
 import { useNavigate } from "react-router-dom";
 import { useDashboard } from "../hooks/useDashboard.js";
-import Loading from "../../../components/common/Loading.jsx";
+import DashboardSkeleton from "../components/DashboardSkeleton.jsx";
 import ErrorState from "../../../components/common/ErrorState.jsx";
 
 // Sparkline SVG Component
@@ -159,7 +159,7 @@ export default function Dashboard() {
     setIsCalendarOpen(false);
   };
 
-  if (loading) return <Loading message="Loading dynamic database stats..." />;
+  if (loading) return <DashboardSkeleton />;
   if (error) return <ErrorState message={error} />;
 
   // Dynamic MongoDB Stat Counters with Safe Fallbacks

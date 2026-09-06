@@ -177,6 +177,8 @@ function MedicineActionsDropdown({ row, onEditItem, onViewHistory, onChangeStatu
   );
 }
 
+import TableSkeleton from "../../../components/ui/TableSkeleton.jsx";
+
 export default function MedicineTable({
   items = [],
   isLoading,
@@ -192,13 +194,7 @@ export default function MedicineTable({
   onChangeStatus,
 }) {
   if (isLoading) {
-    return (
-      <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-xs animate-pulse space-y-4">
-        {[...Array(6)].map((_, i) => (
-          <div key={i} className="h-12 bg-slate-100 rounded-xl" />
-        ))}
-      </div>
-    );
+    return <TableSkeleton rows={6} columns={7} />;
   }
 
   const computedTotalItems = totalItems || items.length;

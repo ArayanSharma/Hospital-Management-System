@@ -22,7 +22,7 @@ import {
   Wind,
   Activity,
 } from "lucide-react";
-import Loading from "../../../components/common/Loading.jsx";
+import TableSkeleton from "../../../components/ui/TableSkeleton.jsx";
 import ErrorState from "../../../components/common/ErrorState.jsx";
 import CustomDropdown from "../../../components/ui/CustomDropdown.jsx";
 
@@ -298,7 +298,7 @@ export default function DepartmentTable({
       {/* Table Content */}
       <div className="overflow-x-auto">
         {loading ? (
-          <Loading message="Fetching department records..." />
+          <TableSkeleton rows={6} columns={7} />
         ) : error ? (
           <ErrorState message={error} />
         ) : departments.length === 0 ? (

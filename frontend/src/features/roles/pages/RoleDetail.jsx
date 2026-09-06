@@ -4,7 +4,7 @@ import { ArrowLeft, Lock, Check } from "lucide-react";
 import { getRoleByIdApi, updateRolePermissionsApi } from "../services/role.api.js";
 import { getPermissionsApi } from "../../permissions/services/permission.api.js";
 import Button from "../../../components/ui/Button.jsx";
-import Loading from "../../../components/common/Loading.jsx";
+import DetailSkeleton from "../../../components/ui/DetailSkeleton.jsx";
 import ErrorState from "../../../components/common/ErrorState.jsx";
 
 const ACTIONS = ["create", "read", "update", "delete"];
@@ -73,7 +73,7 @@ export default function RoleDetail() {
     }
   };
 
-  if (loading) return <Loading message="Loading role..." />;
+  if (loading) return <DetailSkeleton />;
   if (error) return <ErrorState message={error} />;
   if (!role) return null;
 

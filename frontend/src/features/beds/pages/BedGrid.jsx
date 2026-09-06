@@ -7,7 +7,7 @@ import BedCard from "../components/BedCard.jsx";
 import WardForm from "../../wards/components/WardForm.jsx";
 import Button from "../../../components/ui/Button.jsx";
 import Modal from "../../../components/ui/Modal.jsx";
-import Loading from "../../../components/common/Loading.jsx";
+import BedGridSkeleton from "../../../components/ui/BedGridSkeleton.jsx";
 import ErrorState from "../../../components/common/ErrorState.jsx";
 
 export default function BedGrid() {
@@ -87,7 +87,7 @@ export default function BedGrid() {
     }
   };
 
-  if (loading) return <Loading message="Loading ward layout..." />;
+  if (loading) return <BedGridSkeleton />;
   if (error) return <ErrorState message={error} />;
 
   return (

@@ -18,6 +18,7 @@ import { formatRupee, formatReportDate } from "../../billing/helpers/invoiceCalc
 import { POLICY_STATUSES } from "../constants/insurance.constants.js";
 import TableControls from "./common/TableControls.jsx";
 import InsuranceStatusBadge from "./common/InsuranceStatusBadge.jsx";
+import TableSkeleton from "../../../components/ui/TableSkeleton.jsx";
 
 export default function PolicyTable({
   policies = [],
@@ -82,11 +83,7 @@ export default function PolicyTable({
           </thead>
           <tbody className="divide-y divide-slate-100 font-medium text-slate-800">
             {loading ? (
-              <tr>
-                <td colSpan={9} className="py-8 text-center text-slate-400 font-medium">
-                  Loading policies from database...
-                </td>
-              </tr>
+              <TableSkeleton rows={6} columns={9} />
             ) : policies.length === 0 ? (
               <tr>
                 <td colSpan={9} className="py-8 text-center text-slate-400 font-medium">

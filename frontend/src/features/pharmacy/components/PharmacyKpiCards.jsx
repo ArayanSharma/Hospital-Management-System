@@ -2,6 +2,8 @@ import React from "react";
 import { Pill, Package, ShoppingCart, AlertTriangle, CalendarDays } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
+import StatsCardSkeleton from "../../../components/ui/StatsCardSkeleton.jsx";
+
 export default function PharmacyKpiCards({ kpis, isLoading }) {
   const navigate = useNavigate();
 
@@ -9,14 +11,7 @@ export default function PharmacyKpiCards({ kpis, isLoading }) {
     return (
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         {[...Array(5)].map((_, i) => (
-          <div key={i} className="bg-white border border-slate-100 rounded-2xl p-5 shadow-xs animate-pulse space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="h-4 w-24 bg-slate-200 rounded" />
-              <div className="w-12 h-12 rounded-full bg-slate-100" />
-            </div>
-            <div className="h-8 w-20 bg-slate-200 rounded" />
-            <div className="h-4 w-28 bg-slate-100 rounded" />
-          </div>
+          <StatsCardSkeleton key={i} />
         ))}
       </div>
     );

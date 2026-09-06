@@ -7,7 +7,7 @@ import Badge from "../../../components/ui/Badge.jsx";
 import Button from "../../../components/ui/Button.jsx";
 import Modal from "../../../components/ui/Modal.jsx";
 import AdmissionForm from "../components/AdmissionForm.jsx";
-import Loading from "../../../components/common/Loading.jsx";
+import TableSkeleton from "../../../components/ui/TableSkeleton.jsx";
 import ErrorState from "../../../components/common/ErrorState.jsx";
 
 export default function AdmissionList() {
@@ -87,7 +87,7 @@ export default function AdmissionList() {
         </Button>
       </div>
 
-      {loading ? <Loading /> : error ? <ErrorState message={error} /> : (
+      {loading ? <TableSkeleton rows={5} columns={6} /> : error ? <ErrorState message={error} /> : (
         <>
           <Table columns={columns} data={admissions} emptyMessage="No admissions found" />
           <Pagination {...pagination} page={page} onPageChange={setPage} />

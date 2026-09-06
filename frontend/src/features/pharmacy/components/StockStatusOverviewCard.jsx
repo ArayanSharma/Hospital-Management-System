@@ -17,15 +17,19 @@ const CustomTooltip = ({ active, payload }) => {
   return null;
 };
 
+import Skeleton from "../../../components/ui/Skeleton.jsx";
+
 export default function StockStatusOverviewCard({ stockData = [], isLoading }) {
   const navigate = useNavigate();
 
   if (isLoading) {
     return (
-      <div className="bg-white border border-slate-200/70 rounded-2xl p-5 shadow-xs animate-pulse h-full flex flex-col justify-between">
-        <div className="h-5 w-44 bg-slate-200 rounded mb-4" />
-        <div className="h-48 bg-slate-100 rounded-full w-48 mx-auto" />
-        <div className="h-10 bg-slate-100 rounded-xl mt-4" />
+      <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-2xs h-full flex flex-col justify-between space-y-4">
+        <Skeleton className="h-5 w-44" />
+        <div className="flex items-center justify-center py-4">
+          <Skeleton className="w-40 h-40 rounded-full" />
+        </div>
+        <Skeleton className="h-10 w-full rounded-xl" />
       </div>
     );
   }

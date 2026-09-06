@@ -25,7 +25,7 @@ import {
   Sparkles,
   Activity,
 } from "lucide-react";
-import Loading from "../../../components/common/Loading.jsx";
+import TableSkeleton from "../../../components/ui/TableSkeleton.jsx";
 import ErrorState from "../../../components/common/ErrorState.jsx";
 import CustomDropdown from "../../../components/ui/CustomDropdown.jsx";
 
@@ -272,7 +272,7 @@ export default function DoctorTable({
       {/* Table Content */}
       <div className="overflow-x-auto">
         {loading ? (
-          <Loading message="Fetching doctor directory..." />
+          <TableSkeleton rows={6} columns={8} />
         ) : error ? (
           <ErrorState message={error} />
         ) : doctors.length === 0 ? (

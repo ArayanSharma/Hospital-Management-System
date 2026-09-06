@@ -5,7 +5,7 @@ import { getRadiologyTestByIdApi, updateRadiologyTestStatusApi } from "../servic
 import { getRadiologyReportByTestIdApi, createRadiologyReportApi, finalizeRadiologyReportApi } from "../services/radiologyReport.api.js";
 import Badge from "../../../components/ui/Badge.jsx";
 import Button from "../../../components/ui/Button.jsx";
-import Loading from "../../../components/common/Loading.jsx";
+import DetailSkeleton from "../../../components/ui/DetailSkeleton.jsx";
 import ErrorState from "../../../components/common/ErrorState.jsx";
 
 export default function RadiologyTestDetail() {
@@ -75,7 +75,7 @@ export default function RadiologyTestDetail() {
     }
   };
 
-  if (loading) return <Loading message="Loading test..." />;
+  if (loading) return <DetailSkeleton />;
   if (error) return <ErrorState message={error} />;
   if (!test) return null;
 

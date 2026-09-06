@@ -13,6 +13,8 @@ import RegistrationTrendChart from "../components/RegistrationTrendChart.jsx";
 import TopMedicinesList from "../components/TopMedicinesList.jsx";
 import OccupancyBreakdown from "../components/OccupancyBreakdown.jsx";
 import StatsCard from "../../../components/ui/StatsCard.jsx";
+import ChartSkeleton from "../components/ChartSkeleton.jsx";
+import StatsCardSkeleton from "../../../components/ui/StatsCardSkeleton.jsx";
 import Loading from "../../../components/common/Loading.jsx";
 import ErrorState from "../../../components/common/ErrorState.jsx";
 import ErrorBoundary from "../../../components/common/ErrorBoundary.jsx";
@@ -62,7 +64,20 @@ export default function Reports() {
     fetchAll();
   }, [fetchAll]);
 
-  if (loading) return <Loading message="Crunching numbers..." />;
+  if (loading)
+    return (
+      <div className="space-y-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <StatsCardSkeleton key={i} />
+          ))}
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          <ChartSkeleton />
+          <ChartSkeleton />
+        </div>
+      </div>
+    );
   if (error) return <ErrorState message={error} />;
 
   return (

@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Info, Bed as BedIcon, Wrench, ChevronDown, Plus } from "lucide-react";
-import Loading from "../../../components/common/Loading.jsx";
+import BedGridSkeleton from "../../../components/ui/BedGridSkeleton.jsx";
 import { useWards } from "../hooks/useWards.js";
 
 export default function IpdBedLiveMap({ onSelectBed, selectedBed, onAddWardBedOpen, refreshKey }) {
@@ -67,7 +67,7 @@ export default function IpdBedLiveMap({ onSelectBed, selectedBed, onAddWardBedOp
 
       {/* Ward Sections */}
       {loading ? (
-        <Loading message="Loading live bed map..." />
+        <BedGridSkeleton wardsCount={2} bedsPerWard={6} />
       ) : filteredWards.length === 0 ? (
         <div className="p-8 text-center text-slate-400 text-xs font-medium">
           No ward beds found in database.

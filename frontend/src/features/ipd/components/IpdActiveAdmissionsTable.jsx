@@ -1,7 +1,7 @@
 import React from "react";
 import { Eye, MoreVertical, ChevronLeft, ChevronRight, Filter, UserCheck } from "lucide-react";
 import SearchInput from "../../../components/common/SearchInput.jsx";
-import Loading from "../../../components/common/Loading.jsx";
+import TableSkeleton from "../../../components/ui/TableSkeleton.jsx";
 import ErrorState from "../../../components/common/ErrorState.jsx";
 import { formatDate, formatTime, formatGenderAge, getInitials } from "../../../utils/formatters.js";
 
@@ -107,7 +107,7 @@ export default function IpdActiveAdmissionsTable({
       {/* Table Data */}
       <div className="overflow-x-auto">
         {loading ? (
-          <Loading message="Loading admissions..." />
+          <TableSkeleton rows={6} columns={7} />
         ) : error ? (
           <ErrorState message={error} />
         ) : admissions.length === 0 ? (

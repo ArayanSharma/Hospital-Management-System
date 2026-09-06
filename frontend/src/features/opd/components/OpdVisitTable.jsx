@@ -17,7 +17,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import Loading from "../../../components/common/Loading.jsx";
+import TableSkeleton from "../../../components/ui/TableSkeleton.jsx";
 import ErrorState from "../../../components/common/ErrorState.jsx";
 
 function OpdActionMenu({
@@ -307,7 +307,7 @@ export default function OpdVisitTable({
     <div>
       <div className="overflow-x-auto">
         {loading ? (
-          <Loading message="Loading OPD visits..." />
+          <TableSkeleton rows={6} columns={7} />
         ) : error ? (
           <ErrorState message={error} />
         ) : visits.length === 0 ? (

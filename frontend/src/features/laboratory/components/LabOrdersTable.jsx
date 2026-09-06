@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Eye, Edit2, MoreVertical, ChevronLeft, ChevronRight, TestTube, CheckCircle, FileText, Upload, Printer, History, XCircle, AlertCircle } from "lucide-react";
-import Loading from "../../../components/common/Loading.jsx";
+import TableSkeleton from "../../../components/ui/TableSkeleton.jsx";
 import ErrorState from "../../../components/common/ErrorState.jsx";
 import { formatDate, formatTime, getInitials } from "../../../utils/formatters.js";
 import LabStatusBadge from "./LabStatusBadge.jsx";
@@ -227,7 +227,7 @@ export default function LabOrdersTable({
       {/* Table Data */}
       <div className="overflow-x-auto">
         {loading ? (
-          <Loading message="Loading lab test orders..." />
+          <TableSkeleton rows={6} columns={10} />
         ) : error ? (
           <ErrorState message={error} />
         ) : tests.length === 0 ? (

@@ -12,6 +12,7 @@ import {
   Ban,
 } from "lucide-react";
 import CustomDropdown from "../../../components/ui/CustomDropdown.jsx";
+import TableSkeleton from "../../../components/ui/TableSkeleton.jsx";
 
 function SalesActionsDropdown({
   row,
@@ -200,14 +201,7 @@ export default function SalesTable({
   onCancelSale,
 }) {
   if (isLoading) {
-    return (
-      <div className="bg-white border border-slate-200/70 rounded-2xl p-5 shadow-xs animate-pulse space-y-4">
-        <div className="h-6 w-48 bg-slate-200 rounded mb-4" />
-        {[...Array(8)].map((_, i) => (
-          <div key={i} className="h-12 bg-slate-100 rounded" />
-        ))}
-      </div>
-    );
+    return <TableSkeleton rows={6} columns={9} />;
   }
 
   const computedTotalItems = totalItems || items.length;

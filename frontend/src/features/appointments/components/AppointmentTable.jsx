@@ -20,7 +20,7 @@ import {
   Sparkles,
   Wind,
 } from "lucide-react";
-import Loading from "../../../components/common/Loading.jsx";
+import TableSkeleton from "../../../components/ui/TableSkeleton.jsx";
 import ErrorState from "../../../components/common/ErrorState.jsx";
 
 const getDepartmentBadge = (deptName) => {
@@ -236,7 +236,7 @@ export default function AppointmentTable({
     <div>
       <div className="overflow-x-auto">
         {loading ? (
-          <Loading message="Fetching appointment records..." />
+          <TableSkeleton rows={6} columns={7} />
         ) : error ? (
           <ErrorState message={error} />
         ) : appointments.length === 0 ? (

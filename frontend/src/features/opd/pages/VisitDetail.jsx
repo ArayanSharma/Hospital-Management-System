@@ -7,7 +7,7 @@ import PrescriptionForm from "../../prescriptions/components/PrescriptionForm.js
 import PrescriptionCard from "../../prescriptions/components/PrescriptionCard.jsx";
 import Badge from "../../../components/ui/Badge.jsx";
 import Button from "../../../components/ui/Button.jsx";
-import Loading from "../../../components/common/Loading.jsx";
+import DetailSkeleton from "../../../components/ui/DetailSkeleton.jsx";
 import ErrorState from "../../../components/common/ErrorState.jsx";
 
 const VITAL_ICONS = {
@@ -128,7 +128,7 @@ export default function VisitDetail() {
     }
   };
 
-  if (loading) return <Loading message="Loading visit..." />;
+  if (loading) return <DetailSkeleton />;
   if (error) return <ErrorState message={error} />;
   if (!visit) return null;
 

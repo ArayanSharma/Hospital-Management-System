@@ -15,7 +15,7 @@ import InvoicePaymentHistoryModal from "../components/modals/InvoicePaymentHisto
 import InvoiceRefundModal from "../components/modals/InvoiceRefundModal.jsx";
 import InvoiceVoidModal from "../components/modals/InvoiceVoidModal.jsx";
 import InvoiceCancellationDetailsModal from "../components/modals/InvoiceCancellationDetailsModal.jsx";
-import { createInvoiceApi, voidInvoiceApi, refundInvoiceApi } from "../services/invoice.api.js";
+import TableSkeleton from "../../../components/ui/TableSkeleton.jsx";
 import { downloadRadiologyReportPdf } from "../../radiology/helpers/radiologyPdfHelper.js";
 
 export default function InvoiceList() {
@@ -131,9 +131,7 @@ export default function InvoiceList() {
           {/* 5. Main Invoices Table */}
           <div id="invoice-table-container">
             {loading ? (
-              <div className="bg-white border border-slate-200/80 rounded-2xl p-12 text-center text-slate-500 font-medium text-xs shadow-2xs">
-                Loading billing invoices from database...
-              </div>
+              <TableSkeleton rows={6} columns={8} />
             ) : error ? (
               <div className="bg-white border border-slate-200/80 rounded-2xl p-12 text-center text-rose-500 font-semibold text-xs shadow-2xs">
                 {error}

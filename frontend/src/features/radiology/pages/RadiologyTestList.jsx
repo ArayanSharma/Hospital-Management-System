@@ -11,6 +11,7 @@ import RadiologyStatusWorkflowCard from "../components/RadiologyStatusWorkflowCa
 import RadiologyTodayScheduleCard from "../components/RadiologyTodayScheduleCard.jsx";
 import RadiologyTestOrderModal from "../components/RadiologyTestOrderModal.jsx";
 import RadiologyReportSection from "../components/RadiologyReportSection.jsx";
+import TableSkeleton from "../../../components/ui/TableSkeleton.jsx";
 
 // Import 8 Radiology Action Modals
 import RadiologyViewOrderModal from "../components/modals/RadiologyViewOrderModal.jsx";
@@ -149,9 +150,7 @@ export default function RadiologyTestList() {
             />
 
             {loading ? (
-              <div className="p-12 text-center text-slate-500 font-medium text-xs">
-                Loading radiology orders from database...
-              </div>
+              <TableSkeleton rows={6} columns={8} />
             ) : (
               <RadiologyOrdersTable
                 orders={filteredOrders}

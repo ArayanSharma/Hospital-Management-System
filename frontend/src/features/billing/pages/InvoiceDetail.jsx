@@ -7,7 +7,7 @@ import Badge from "../../../components/ui/Badge.jsx";
 import Button from "../../../components/ui/Button.jsx";
 import Modal from "../../../components/ui/Modal.jsx";
 import PaymentForm from "../components/PaymentForm.jsx";
-import Loading from "../../../components/common/Loading.jsx";
+import DetailSkeleton from "../../../components/ui/DetailSkeleton.jsx";
 import ErrorState from "../../../components/common/ErrorState.jsx";
 
 export default function InvoiceDetail() {
@@ -54,7 +54,7 @@ export default function InvoiceDetail() {
     }
   };
 
-  if (loading) return <Loading message="Loading invoice..." />;
+  if (loading) return <DetailSkeleton />;
   if (error) return <ErrorState message={error} />;
   if (!invoice) return null;
 

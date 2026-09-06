@@ -5,7 +5,7 @@ import Table from "../../../components/ui/Table.jsx";
 import Pagination from "../../../components/ui/Pagination.jsx";
 import AuditLogFilters from "../components/AuditLogFilters.jsx";
 import AuditLogDetail from "../components/AuditLogDetail.jsx";
-import Loading from "../../../components/common/Loading.jsx";
+import TableSkeleton from "../../../components/ui/TableSkeleton.jsx";
 import ErrorState from "../../../components/common/ErrorState.jsx";
 
 const ACTION_BADGES = {
@@ -126,7 +126,9 @@ export default function AuditLogList() {
       <AuditLogFilters filters={filters} onChange={handleFilterChange} />
 
       {loading ? (
-        <Loading message="Loading audit trail..." />
+        <div className="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-2xs">
+          <TableSkeleton rows={8} columns={5} />
+        </div>
       ) : error ? (
         <ErrorState message={error} />
       ) : (
