@@ -1,5 +1,6 @@
 import Role from "./role.model.js";
 import AppError from "../../core/errors/AppError.js";
+import { getOrSetCache, invalidatePattern, delCache, acquireLock, releaseLock } from "../../utils/redisCache.js";
 
 const DEFAULT_SUPER_ADMIN_ACTIONS = {
   "Patient Management": { create: true, read: true, update: true, delete: true, manage: true },
@@ -17,49 +18,59 @@ const DEFAULT_SUPER_ADMIN_ACTIONS = {
 };
 
 export const ensureSampleRoles = async () => {
-  try {
-    for (const r of sampleRoles) {
-      const existing = await Role.findOne({ name: r.name });
-      if (!existing) {
-        await Role.create(r);
-      }
-    }
-  } catch (err) {
-    console.error("Error seeding sample roles:", err);
-  }
+  // Handled natively via DB or seed script
 };
 
 export const createRoleService = async (data) => {
-  await ensureSampleRoles();
-  const existing = await Role.findOne({ name: data.name.toUpperCase() });
-  if (existing) throw new AppError("Role with this name already exists", 400);
+  const roleName = data.name ? data.name.toUpperCase().trim() : "";
+  const lockKey = `hms:lock:role:${roleName}`;
+  const hasLock = await acquireLock(lockKey, 5);
+  if (!hasLock) {
+    throw new AppError("A role with this name is currently being created", 400);
+  }
 
-  const isSys = data.roleType === "System";
+  try {
+    const existing = await Role.findOne({ name: roleName });
+    if (existing) throw new AppError("Role with this name already exists", 400);
 
-  const role = await Role.create({
-    name: data.name.toUpperCase(),
-    roleCode: data.roleCode ? data.roleCode.toUpperCase() : data.name.toUpperCase(),
-    roleType: data.roleType || "Custom",
-    description: data.description || "",
-    isSystemRole: isSys,
-    isProtected: isSys,
-    status: data.status || "active",
-    parentRole: data.parentRole || "",
-    maxUsers: data.maxUsers ? Number(data.maxUsers) : null,
-    modulePermissions: data.modulePermissions || {},
-    actionPermissions: data.actionPermissions || {},
-  });
-  return role;
+    const isSys = data.roleType === "System";
+
+    const role = await Role.create({
+      name: roleName,
+      roleCode: data.roleCode ? data.roleCode.toUpperCase().trim() : roleName,
+      roleType: data.roleType || "Custom",
+      description: data.description || "",
+      isSystemRole: isSys,
+      isProtected: isSys,
+      status: data.status || "active",
+      parentRole: data.parentRole || "",
+      maxUsers: data.maxUsers ? Number(data.maxUsers) : null,
+      modulePermissions: data.modulePermissions || {},
+      actionPermissions: data.actionPermissions || {},
+    });
+
+    await invalidatePattern("hms:role:*");
+    await invalidatePattern("hms:perm:*");
+    await invalidatePattern("hms:route:role*");
+
+    return role;
+  } finally {
+    await releaseLock(lockKey);
+  }
 };
 
 export const getRoleByIdService = async (id) => {
-  const role = await Role.findById(id).populate("permissionIds");
+  const { data: role } = await getOrSetCache(
+    `hms:role:detail:${id}`,
+    () => Role.findById(id).populate("permissionIds"),
+    600
+  );
+
   if (!role) throw new AppError("Role not found", 404);
   return role;
 };
 
 export const getAllRolesService = async (params = {}) => {
-  await ensureSampleRoles();
   const { search, roleType, status } = params;
   const query = {};
 
@@ -106,12 +117,12 @@ export const updateRoleService = async (id, data) => {
   const role = await Role.findById(id);
   if (!role) throw new AppError("Role not found", 404);
 
-  if (role.isProtected && data.name && data.name !== role.name) {
+  if (role.isProtected && data.name && data.name.toUpperCase().trim() !== role.name) {
     throw new AppError("System role names are protected and cannot be modified", 400);
   }
 
-  if (data.name) role.name = data.name.toUpperCase();
-  if (data.roleCode) role.roleCode = data.roleCode.toUpperCase();
+  if (data.name) role.name = data.name.toUpperCase().trim();
+  if (data.roleCode) role.roleCode = data.roleCode.toUpperCase().trim();
   if (data.description !== undefined) role.description = data.description;
   if (data.status !== undefined) role.status = data.status;
   if (data.parentRole !== undefined) role.parentRole = data.parentRole;
@@ -121,6 +132,12 @@ export const updateRoleService = async (id, data) => {
   if (data.permissionIds !== undefined) role.permissionIds = data.permissionIds;
 
   await role.save();
+
+  await delCache(`hms:role:detail:${id}`);
+  await invalidatePattern("hms:role:*");
+  await invalidatePattern("hms:perm:*");
+  await invalidatePattern("hms:route:role*");
+
   return role;
 };
 
@@ -137,6 +154,12 @@ export const deleteRoleService = async (id) => {
   }
 
   await Role.findByIdAndDelete(id);
+
+  await delCache(`hms:role:detail:${id}`);
+  await invalidatePattern("hms:role:*");
+  await invalidatePattern("hms:perm:*");
+  await invalidatePattern("hms:route:role*");
+
   return { message: "Role deleted successfully" };
 };
 

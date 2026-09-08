@@ -19,6 +19,8 @@ import {
 import TableSkeleton from "../../../components/ui/TableSkeleton.jsx";
 import ErrorState from "../../../components/common/ErrorState.jsx";
 
+import MaskedField from "../../../components/common/MaskedField.jsx";
+
 function PatientActionMenu({
   patient,
   onEdit,
@@ -322,7 +324,7 @@ export default function PatientTable({
                       </div>
                     </td>
                     <td className="py-3 px-4 font-medium text-slate-700 whitespace-nowrap">
-                      {patient.phone}
+                      <MaskedField value={patient.phone} type="phone" />
                     </td>
                     <td className="py-3 px-4 whitespace-nowrap">
                       <span className="px-2 py-0.5 rounded-md font-bold text-xs bg-rose-50 text-rose-600 border border-rose-200">

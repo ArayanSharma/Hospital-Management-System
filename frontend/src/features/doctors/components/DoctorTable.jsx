@@ -327,6 +327,7 @@ export default function DoctorTable({
                           <img
                             src={doctor.photoUrl}
                             alt={docName}
+                            loading="lazy"
                             className="w-9 h-9 rounded-xl object-cover border border-slate-200 shrink-0"
                           />
                         ) : (

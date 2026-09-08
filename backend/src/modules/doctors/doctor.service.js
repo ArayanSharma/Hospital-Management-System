@@ -3,10 +3,12 @@ import Doctor from "./doctor.model.js";
 import User from "../users/user.model.js";
 import Role from "../roles/role.model.js";
 import Department from "../departments/department.model.js";
+import Appointment from "../appointments/appointment.model.js";
 import AppError from "../../core/errors/AppError.js";
 import { ErrorCodes } from "../../core/errors/errorCodes.js";
 import { createAuditLog } from "../audit-logs/audit-log.service.js";
 import { generateSequentialId } from "../../utils/generateId.js";
+import { getOrSetCache, invalidatePattern, delCache } from "../../utils/redisCache.js";
 
 // ---------------- CREATE (User + Doctor atomic creation with transaction safety) ----------------
 export const createDoctor = async (data, currentUser, requestMeta) => {
@@ -25,7 +27,17 @@ export const createDoctor = async (data, currentUser, requestMeta) => {
     additionalInfo,
   } = data;
 
-  const existingUser = await User.findOne({ email: email.toLowerCase() });
+  const normalizedEmail = email?.toLowerCase().trim();
+
+  // Edge Case: Check non-negative fee and experience
+  if (consultationFee !== undefined && Number(consultationFee) < 0) {
+    throw new AppError("Consultation fee cannot be negative", 400, ErrorCodes.VALIDATION_ERROR);
+  }
+  if (experience !== undefined && Number(experience) < 0) {
+    throw new AppError("Experience cannot be negative", 400, ErrorCodes.VALIDATION_ERROR);
+  }
+
+  const existingUser = await User.findOne({ email: normalizedEmail });
   if (existingUser) {
     throw new AppError("User with this email already exists", 409, ErrorCodes.USER_ALREADY_EXISTS);
   }
@@ -47,11 +59,11 @@ export const createDoctor = async (data, currentUser, requestMeta) => {
     const user = await User.create(
       [
         {
-          name,
-          email: email.toLowerCase(),
+          name: name?.trim(),
+          email: normalizedEmail,
           password: password || "Doctor@123",
           roleId: doctorRole._id,
-          phone,
+          phone: phone?.trim(),
           status: "active",
         },
       ],
@@ -66,10 +78,10 @@ export const createDoctor = async (data, currentUser, requestMeta) => {
           userId: user[0]._id,
           doctorId,
           departmentId,
-          specialization,
-          qualification: qualification || "MBBS",
-          experience: experience || 0,
-          consultationFee: consultationFee || 500,
+          specialization: specialization?.trim(),
+          qualification: qualification?.trim() || "MBBS",
+          experience: Number(experience || 0),
+          consultationFee: Number(consultationFee || 500),
           availability: availability || [{ day: "Mon - Sat", startTime: "09:00 AM", endTime: "05:00 PM" }],
           photoUrl: photoUrl || null,
           additionalInfo: additionalInfo || null,
@@ -79,6 +91,10 @@ export const createDoctor = async (data, currentUser, requestMeta) => {
     );
 
     await session.commitTransaction();
+
+    // Invalidate Redis Doctor Caches
+    await invalidatePattern("hms:doctor:*");
+    await invalidatePattern("hms:route:docs*");
 
     await createAuditLog({
       userId: currentUser.id,
@@ -99,7 +115,7 @@ export const createDoctor = async (data, currentUser, requestMeta) => {
   }
 };
 
-// ---------------- GET ALL (100% Dynamic MongoDB Stats + RegEx Safe Filtering) ----------------
+// ---------------- GET ALL DOCTORS ----------------
 export const getAllDoctors = async ({ page = 1, limit = 10, departmentId, status, search, specialization }) => {
   const query = {};
   if (departmentId && departmentId !== "all") query.departmentId = departmentId;
@@ -155,11 +171,16 @@ export const getAllDoctors = async ({ page = 1, limit = 10, departmentId, status
   };
 };
 
-// ---------------- GET BY ID ----------------
+// ---------------- GET BY ID WITH REDIS PROFILE CACHE ----------------
 export const getDoctorById = async (id) => {
-  const doctor = await Doctor.findById(id)
-    .populate("userId", "name email phone status")
-    .populate("departmentId", "name code");
+  const { data: doctor } = await getOrSetCache(
+    `hms:doctor:profile:${id}`,
+    () =>
+      Doctor.findById(id)
+        .populate("userId", "name email phone status")
+        .populate("departmentId", "name code"),
+    600 // 10 mins cache
+  );
 
   if (!doctor) {
     throw new AppError("Doctor not found", 404, ErrorCodes.NOT_FOUND);
@@ -188,6 +209,13 @@ export const updateDoctor = async (id, data, currentUser, requestMeta) => {
     status,
   } = data;
 
+  if (consultationFee !== undefined && Number(consultationFee) < 0) {
+    throw new AppError("Consultation fee cannot be negative", 400, ErrorCodes.VALIDATION_ERROR);
+  }
+  if (experience !== undefined && Number(experience) < 0) {
+    throw new AppError("Experience cannot be negative", 400, ErrorCodes.VALIDATION_ERROR);
+  }
+
   if (departmentId !== undefined) {
     const department = await Department.findById(departmentId);
     if (!department) {
@@ -196,16 +224,20 @@ export const updateDoctor = async (id, data, currentUser, requestMeta) => {
     doctor.departmentId = departmentId;
   }
 
-  if (specialization !== undefined) doctor.specialization = specialization;
-  if (qualification !== undefined) doctor.qualification = qualification;
-  if (experience !== undefined) doctor.experience = experience;
-  if (consultationFee !== undefined) doctor.consultationFee = consultationFee;
+  if (specialization !== undefined) doctor.specialization = specialization?.trim();
+  if (qualification !== undefined) doctor.qualification = qualification?.trim();
+  if (experience !== undefined) doctor.experience = Number(experience);
+  if (consultationFee !== undefined) doctor.consultationFee = Number(consultationFee);
   if (availability !== undefined) doctor.availability = availability;
   if (photoUrl !== undefined) doctor.photoUrl = photoUrl;
   if (additionalInfo !== undefined) doctor.additionalInfo = additionalInfo;
   if (status !== undefined) doctor.status = status;
 
   await doctor.save();
+
+  // Invalidate Redis Doctor Caches
+  await delCache(`hms:doctor:profile:${id}`);
+  await invalidatePattern("hms:route:docs*");
 
   await createAuditLog({
     userId: currentUser.id,
@@ -221,11 +253,29 @@ export const updateDoctor = async (id, data, currentUser, requestMeta) => {
   return doctor;
 };
 
-// ---------------- DELETE (soft) ----------------
+// ---------------- DELETE (soft) WITH APPOINTMENT CONFLICT GUARD ----------------
 export const deleteDoctor = async (id, currentUser, requestMeta) => {
   const doctor = await Doctor.findById(id);
   if (!doctor) {
     throw new AppError("Doctor not found", 404, ErrorCodes.NOT_FOUND);
+  }
+
+  // Edge Case Guard: Check if doctor has upcoming scheduled appointments
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+
+  const activeApptsCount = await Appointment.countDocuments({
+    doctorId: id,
+    status: "scheduled",
+    appointmentDate: { $gte: todayStart },
+  });
+
+  if (activeApptsCount > 0) {
+    throw new AppError(
+      `Cannot deactivate doctor with ${activeApptsCount} upcoming scheduled appointments. Please reschedule or reassign appointments first.`,
+      400,
+      ErrorCodes.VALIDATION_ERROR
+    );
   }
 
   const oldValue = doctor.toObject();
@@ -236,6 +286,10 @@ export const deleteDoctor = async (id, currentUser, requestMeta) => {
   if (doctor.userId) {
     await User.findByIdAndUpdate(doctor.userId, { status: "inactive" });
   }
+
+  // Invalidate Redis Doctor Caches
+  await delCache(`hms:doctor:profile:${id}`);
+  await invalidatePattern("hms:route:docs*");
 
   await createAuditLog({
     userId: currentUser.id,
@@ -250,6 +304,7 @@ export const deleteDoctor = async (id, currentUser, requestMeta) => {
 
   return { message: "Doctor deactivated successfully" };
 };
+
 
 // ---------------- EXPORT CSV (Backend Controlled) ----------------
 export const exportDoctorsService = async (params = {}) => {

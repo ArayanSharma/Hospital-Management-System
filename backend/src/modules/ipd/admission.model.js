@@ -89,7 +89,9 @@ const admissionSchema = new mongoose.Schema(
 
 admissionSchema.index({ patientId: 1, admissionDate: -1 });
 admissionSchema.index({ status: 1 });
-admissionSchema.index({ admissionId: 1 });
+admissionSchema.index({ wardId: 1, status: 1 });
+admissionSchema.index({ patientId: 1, status: 1 });
+admissionSchema.index({ bedId: 1, status: 1 });
 
 const Admission = mongoose.model("Admission", admissionSchema);
 

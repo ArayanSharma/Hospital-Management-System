@@ -78,25 +78,40 @@ export function useUserManagement() {
   };
 
   const handleAddUserSubmit = async (payload) => {
-    if (selectedUser) {
-      await updateUserApi(selectedUser._id, payload);
-    } else {
-      await createUserApi(payload);
+    try {
+      if (selectedUser) {
+        await updateUserApi(selectedUser._id, payload);
+      } else {
+        await createUserApi(payload);
+      }
+      setAddUserOpen(false);
+      setSelectedUser(null);
+      fetchUsers();
+    } catch (err) {
+      console.error("User save error:", err);
+      alert(err.response?.data?.message || "Failed to save user account.");
     }
-    setAddUserOpen(false);
-    setSelectedUser(null);
-    fetchUsers();
   };
 
   const handleUpdateStatus = async (userId, newStatus) => {
-    await updateUserApi(userId, { status: newStatus });
-    fetchUsers();
+    try {
+      await updateUserApi(userId, { status: newStatus });
+      fetchUsers();
+    } catch (err) {
+      console.error("User status update error:", err);
+      alert(err.response?.data?.message || "Failed to update user status.");
+    }
   };
 
   const handleDeleteUser = async (userId) => {
-    if (window.confirm("Are you sure you want to deactivate this user?")) {
-      await deleteUserApi(userId);
-      fetchUsers();
+    if (window.confirm("Are you sure you want to delete/deactivate this user?")) {
+      try {
+        await deleteUserApi(userId);
+        fetchUsers();
+      } catch (err) {
+        console.error("User deletion error:", err);
+        alert(err.response?.data?.message || "Failed to delete user account.");
+      }
     }
   };
 

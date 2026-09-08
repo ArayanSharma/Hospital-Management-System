@@ -377,6 +377,7 @@ export default function OpdVisitTable({
                           <img
                             src={patient.photoUrl}
                             alt={patientName}
+                            loading="lazy"
                             className="w-7 h-7 rounded-full object-cover shrink-0 border border-slate-200"
                           />
                         ) : (
@@ -398,6 +399,7 @@ export default function OpdVisitTable({
                           <img
                             src={doctor.photoUrl}
                             alt={doctorName}
+                            loading="lazy"
                             className="w-7 h-7 rounded-full object-cover shrink-0 border border-slate-200"
                           />
                         ) : (

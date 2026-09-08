@@ -2,6 +2,8 @@ import User from "./user.model.js";
 import Role from "../roles/role.model.js";
 import AppError from "../../core/errors/AppError.js";
 import { ErrorCodes } from "../../core/errors/errorCodes.js";
+import { acquireLock, releaseLock, getOrSetCache, delCache, invalidatePattern } from "../../utils/redisCache.js";
+import { createAuditLog } from "../audit-logs/audit-log.service.js";
 
 const sanitizeUser = (user) => {
   const userObj = user.toObject ? user.toObject() : user;
@@ -142,7 +144,7 @@ export const ensureSampleUsers = async () => {
 };
 
 // ---------------- CREATE ----------------
-export const createUser = async (data) => {
+export const createUser = async (data, currentUser, requestMeta) => {
   await ensureSampleUsers();
   const {
     name,
@@ -167,87 +169,120 @@ export const createUser = async (data) => {
     notes,
   } = data;
 
-  // 1. Full Name Validation
-  if (!name || name.trim().length < 2) {
-    throw new AppError("Full Name must be at least 2 characters long", 400, ErrorCodes.BAD_REQUEST);
-  }
-  if (!/^[a-zA-Z\s.-]+$/.test(name.trim())) {
-    throw new AppError("Full Name cannot contain numbers or special characters", 400, ErrorCodes.BAD_REQUEST);
+  const lockKey = `hms:lock:user:${(email || "").toLowerCase().trim()}`;
+  const hasLock = await acquireLock(lockKey, 5);
+  if (!hasLock) {
+    throw new AppError("Account registration for this email is currently in progress", 409, ErrorCodes.USER_ALREADY_EXISTS);
   }
 
-  // 2. Email Validation & Duplicate Check
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!email || !emailRegex.test(email.trim())) {
-    throw new AppError("Please enter a valid email address", 400, ErrorCodes.BAD_REQUEST);
-  }
-  const existingUserByEmail = await User.findOne({ email: email.trim().toLowerCase() });
-  if (existingUserByEmail) {
-    throw new AppError("User with this email address already exists", 409, ErrorCodes.USER_ALREADY_EXISTS);
-  }
+  try {
+    // 1. Full Name Validation
+    if (!name || name.trim().length < 2) {
+      throw new AppError("Full Name must be at least 2 characters long", 400, ErrorCodes.BAD_REQUEST);
+    }
+    if (!/^[a-zA-Z\s.-]+$/.test(name.trim())) {
+      throw new AppError("Full Name cannot contain numbers or special characters", 400, ErrorCodes.BAD_REQUEST);
+    }
 
-  // 3. Username Duplicate Check
-  const generatedUsername = (username || email.split("@")[0]).trim().toLowerCase();
-  const existingUserByUsername = await User.findOne({ username: generatedUsername });
-  if (existingUserByUsername) {
-    throw new AppError("Username is already taken by another account", 409, ErrorCodes.USER_ALREADY_EXISTS);
+    // 2. Email Validation & Duplicate Check
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!email || !emailRegex.test(email.trim())) {
+      throw new AppError("Please enter a valid email address", 400, ErrorCodes.BAD_REQUEST);
+    }
+    const existingUserByEmail = await User.findOne({ email: email.trim().toLowerCase() });
+    if (existingUserByEmail) {
+      throw new AppError("User with this email address already exists", 409, ErrorCodes.USER_ALREADY_EXISTS);
+    }
+
+    // 3. Username Duplicate Check
+    const generatedUsername = (username || email.split("@")[0]).trim().toLowerCase();
+    const existingUserByUsername = await User.findOne({ username: generatedUsername });
+    if (existingUserByUsername) {
+      throw new AppError("Username is already taken by another account", 409, ErrorCodes.USER_ALREADY_EXISTS);
+    }
+
+    // 4. Role Validation
+    if (!roleName || roleName.trim() === "" || roleName === "Select role") {
+      throw new AppError("Role is required", 400, ErrorCodes.BAD_REQUEST);
+    }
+
+    // 5. Department Validation for Doctor Role
+    const isDoctorRole = (roleName || "").toUpperCase() === "DOCTOR";
+    if (isDoctorRole && (!department || department.trim() === "" || department === "Select department")) {
+      throw new AppError("Department is required for Doctor role", 400, ErrorCodes.BAD_REQUEST);
+    }
+
+    // 6. Date of Birth Future Check
+    if (dateOfBirth && new Date(dateOfBirth) > new Date()) {
+      throw new AppError("Date of Birth cannot be a future date", 400, ErrorCodes.BAD_REQUEST);
+    }
+
+    let finalRoleId = roleId;
+    if (!finalRoleId) {
+      const foundRole = await Role.findOne({ name: new RegExp(roleName || "DOCTOR", "i") });
+      if (foundRole) finalRoleId = foundRole._id;
+    }
+
+    const user = await User.create({
+      name,
+      email: email.toLowerCase(),
+      username: generatedUsername,
+      password: password || "Password123!",
+      roleId: finalRoleId,
+      roleName: (roleName || "DOCTOR").toUpperCase(),
+      department: department || "General",
+      designation: designation || "Staff",
+      employeeId: employeeId || `EMP-${Math.floor(1000 + Math.random() * 9000)}`,
+      phone: phone || "+91 98765 43210",
+      countryCode: countryCode || "+91",
+      dateOfBirth: dateOfBirth || "",
+      gender: gender || "",
+      avatar: avatar || "",
+      status: (status || "active").toLowerCase(),
+      emailVerified: emailVerified || "Unverified",
+      loginAccess: loginAccess || "Allowed",
+      forcePasswordChange: forcePasswordChange !== undefined ? forcePasswordChange : true,
+      sendWelcomeEmail: sendWelcomeEmail !== undefined ? sendWelcomeEmail : false,
+      notes: notes || "",
+      lastLoginFormatted:
+        new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) +
+        " \n " +
+        new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+    });
+
+    await invalidatePattern("hms:user:*");
+    await invalidatePattern("hms:route:user*");
+
+    if (currentUser) {
+      await createAuditLog({
+        userId: currentUser.id,
+        action: "CREATE",
+        resource: "user",
+        resourceId: user._id,
+        newValue: sanitizeUser(user),
+        ipAddress: requestMeta?.ipAddress || "",
+        userAgent: requestMeta?.userAgent || "",
+      });
+    }
+
+    return sanitizeUser(user);
+  } finally {
+    await releaseLock(lockKey);
   }
-
-  // 4. Role Validation
-  if (!roleName || roleName.trim() === "" || roleName === "Select role") {
-    throw new AppError("Role is required", 400, ErrorCodes.BAD_REQUEST);
-  }
-
-  // 5. Department Validation for Doctor Role
-  const isDoctorRole = (roleName || "").toUpperCase() === "DOCTOR";
-  if (isDoctorRole && (!department || department.trim() === "" || department === "Select department")) {
-    throw new AppError("Department is required for Doctor role", 400, ErrorCodes.BAD_REQUEST);
-  }
-
-  // 6. Date of Birth Future Check
-  if (dateOfBirth && new Date(dateOfBirth) > new Date()) {
-    throw new AppError("Date of Birth cannot be a future date", 400, ErrorCodes.BAD_REQUEST);
-  }
-
-  let finalRoleId = roleId;
-  if (!finalRoleId) {
-    const foundRole = await Role.findOne({ name: new RegExp(roleName || "DOCTOR", "i") });
-    if (foundRole) finalRoleId = foundRole._id;
-  }
-
-  const user = await User.create({
-    name,
-    email: email.toLowerCase(),
-    username: generatedUsername,
-    password: password || "Password123!",
-    roleId: finalRoleId,
-    roleName: (roleName || "DOCTOR").toUpperCase(),
-    department: department || "General",
-    designation: designation || "Staff",
-    employeeId: employeeId || `EMP-${Math.floor(1000 + Math.random() * 9000)}`,
-    phone: phone || "+91 98765 43210",
-    countryCode: countryCode || "+91",
-    dateOfBirth: dateOfBirth || "",
-    gender: gender || "",
-    avatar: avatar || "",
-    status: (status || "active").toLowerCase(),
-    emailVerified: emailVerified || "Unverified",
-    loginAccess: loginAccess || "Allowed",
-    forcePasswordChange: forcePasswordChange !== undefined ? forcePasswordChange : true,
-    sendWelcomeEmail: sendWelcomeEmail !== undefined ? sendWelcomeEmail : false,
-    notes: notes || "",
-    lastLoginFormatted:
-      new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) +
-      " \n " +
-      new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-  });
-
-  return sanitizeUser(user);
 };
 
 // ---------------- GET BY ID ----------------
 export const getUserById = async (id) => {
-  const user = await User.findById(id).populate("roleId", "name permissionIds");
-  if (!user || user.status === "deleted") {
+  const { data: user } = await getOrSetCache(
+    `hms:user:detail:${id}`,
+    async () => {
+      const u = await User.findById(id).populate("roleId", "name permissionIds");
+      return u && u.status !== "deleted" ? u : null;
+    },
+    600
+  );
+
+  if (!user) {
     throw new AppError("User not found", 404, ErrorCodes.USER_NOT_FOUND);
   }
   return sanitizeUser(user);
@@ -325,7 +360,7 @@ export const getUsers = async ({ page = 1, limit = 10, status, role, department,
   });
 
   return {
-    users,
+    users: users.map(sanitizeUser),
     pagination: {
       total,
       page: Number(page),
@@ -344,14 +379,43 @@ export const getUsers = async ({ page = 1, limit = 10, status, role, department,
 };
 
 // ---------------- UPDATE ----------------
-export const updateUser = async (id, data) => {
+export const updateUser = async (id, data, currentUser, requestMeta) => {
   const user = await User.findById(id);
   if (!user || user.status === "deleted") {
     throw new AppError("User not found", 404, ErrorCodes.USER_NOT_FOUND);
   }
 
+  const oldValue = sanitizeUser(user);
+
+  // Guard: Cannot edit or change status of SUPER_ADMIN unless authorised or non-destructive
+  if (user.roleName === "SUPER_ADMIN" && data.status && data.status.toLowerCase() !== "active") {
+    throw new AppError("System Super Admin account cannot be deactivated or suspended", 403, ErrorCodes.FORBIDDEN);
+  }
+
+  // Guard: Self-action guard
+  if (currentUser && String(currentUser.id) === String(id) && data.status && data.status.toLowerCase() !== "active") {
+    throw new AppError("You cannot deactivate or suspend your own active account", 400, ErrorCodes.BAD_REQUEST);
+  }
+
+  // Uniqueness check for Email update
+  if (data.email && data.email.toLowerCase() !== user.email) {
+    const emailExists = await User.findOne({ email: data.email.toLowerCase().trim(), _id: { $ne: id } });
+    if (emailExists) {
+      throw new AppError("Another user account is already using this email address", 409, ErrorCodes.USER_ALREADY_EXISTS);
+    }
+    user.email = data.email.toLowerCase().trim();
+  }
+
+  // Uniqueness check for Username update
+  if (data.username && data.username.toLowerCase() !== user.username) {
+    const usernameExists = await User.findOne({ username: data.username.toLowerCase().trim(), _id: { $ne: id } });
+    if (usernameExists) {
+      throw new AppError("Another user account is already using this username", 409, ErrorCodes.USER_ALREADY_EXISTS);
+    }
+    user.username = data.username.toLowerCase().trim();
+  }
+
   if (data.name !== undefined) user.name = data.name;
-  if (data.username !== undefined) user.username = data.username;
   if (data.phone !== undefined) user.phone = data.phone;
   if (data.countryCode !== undefined) user.countryCode = data.countryCode;
   if (data.dateOfBirth !== undefined) user.dateOfBirth = data.dateOfBirth;
@@ -367,11 +431,30 @@ export const updateUser = async (id, data) => {
   if (data.notes !== undefined) user.notes = data.notes;
 
   await user.save();
+
+  await delCache(`hms:user:detail:${id}`);
+  await delCache(`hms:perm:${id}`);
+  await invalidatePattern("hms:user:*");
+  await invalidatePattern("hms:route:user*");
+
+  if (currentUser) {
+    await createAuditLog({
+      userId: currentUser.id,
+      action: "UPDATE",
+      resource: "user",
+      resourceId: user._id,
+      oldValue,
+      newValue: sanitizeUser(user),
+      ipAddress: requestMeta?.ipAddress || "",
+      userAgent: requestMeta?.userAgent || "",
+    });
+  }
+
   return sanitizeUser(user);
 };
 
 // ---------------- CHANGE PASSWORD ----------------
-export const changePassword = async (id, oldPassword, newPassword) => {
+export const changePassword = async (id, oldPassword, newPassword, currentUser, requestMeta) => {
   const user = await User.findById(id).select("+password");
   if (!user || user.status === "deleted") {
     throw new AppError("User not found", 404, ErrorCodes.USER_NOT_FOUND);
@@ -382,18 +465,64 @@ export const changePassword = async (id, oldPassword, newPassword) => {
   }
   user.password = newPassword;
   await user.save();
+
+  await delCache(`hms:user:detail:${id}`);
+  await delCache(`hms:perm:${id}`);
+
+  if (currentUser) {
+    await createAuditLog({
+      userId: currentUser.id,
+      action: "CHANGE_PASSWORD",
+      resource: "user",
+      resourceId: user._id,
+      oldValue: null,
+      newValue: { passwordChanged: true },
+      ipAddress: requestMeta?.ipAddress || "",
+      userAgent: requestMeta?.userAgent || "",
+    });
+  }
+
   return { message: "Password updated successfully" };
 };
 
 // ---------------- SOFT DELETE ----------------
-export const deleteUser = async (id) => {
+export const deleteUser = async (id, currentUser, requestMeta) => {
   const user = await User.findById(id);
   if (!user || user.status === "deleted") {
     throw new AppError("User not found", 404, ErrorCodes.USER_NOT_FOUND);
   }
+
+  if (user.roleName === "SUPER_ADMIN") {
+    throw new AppError("System Super Admin account cannot be deleted", 403, ErrorCodes.FORBIDDEN);
+  }
+
+  if (currentUser && String(currentUser.id) === String(id)) {
+    throw new AppError("You cannot delete your own account", 400, ErrorCodes.BAD_REQUEST);
+  }
+
+  const oldValue = sanitizeUser(user);
   user.status = "deleted";
   user.email = `deleted_${Date.now()}_${user.email}`;
   await user.save();
+
+  await delCache(`hms:user:detail:${id}`);
+  await delCache(`hms:perm:${id}`);
+  await invalidatePattern("hms:user:*");
+  await invalidatePattern("hms:route:user*");
+
+  if (currentUser) {
+    await createAuditLog({
+      userId: currentUser.id,
+      action: "DELETE",
+      resource: "user",
+      resourceId: user._id,
+      oldValue,
+      newValue: null,
+      ipAddress: requestMeta?.ipAddress || "",
+      userAgent: requestMeta?.userAgent || "",
+    });
+  }
+
   return { message: "User deleted successfully" };
 };
 

@@ -3,8 +3,9 @@ import AppError from "../../core/errors/AppError.js";
 import { ErrorCodes } from "../../core/errors/errorCodes.js";
 import { createAuditLog } from "../audit-logs/audit-log.service.js";
 import { generateSequentialId } from "../../utils/generateId.js";
+import { getOrSetCache, invalidatePattern, delCache, acquireLock, releaseLock } from "../../utils/redisCache.js";
 
-// ---------------- CREATE PATIENT ----------------
+// ---------------- CREATE PATIENT (With Redis Mutex Lock) ----------------
 export const createPatient = async (data, currentUser, requestMeta) => {
   const {
     name,
@@ -21,35 +22,58 @@ export const createPatient = async (data, currentUser, requestMeta) => {
     emergencyContact,
   } = data;
 
-  const patientId = await generateSequentialId(Patient, "PAT", "patientId");
+  const sanitizedPhone = phone ? phone.trim() : "";
+  const lockKey = `hms:lock:patient:${sanitizedPhone}`;
+  const hasLock = await acquireLock(lockKey, 5);
+  if (!hasLock) {
+    throw new AppError("A patient registration with this phone number is currently in progress", 409, ErrorCodes.VALIDATION_ERROR);
+  }
 
-  const patient = await Patient.create({
-    patientId,
-    name,
-    dateOfBirth,
-    gender,
-    phone,
-    email: email ? email.toLowerCase() : null,
-    address,
-    bloodGroup,
-    maritalStatus,
-    occupation,
-    nationality,
-    notes,
-    emergencyContact,
-  });
+  try {
+    if (sanitizedPhone) {
+      const existingPatient = await Patient.findOne({ phone: sanitizedPhone, isDeleted: { $ne: true } });
+      if (existingPatient) {
+        throw new AppError("A patient with this phone number already exists", 409, ErrorCodes.VALIDATION_ERROR);
+      }
+    }
 
-  await createAuditLog({
-    userId: currentUser.id,
-    action: "CREATE",
-    resource: "patient",
-    resourceId: patient._id,
-    newValue: patient.toObject(),
-    ipAddress: requestMeta.ipAddress,
-    userAgent: requestMeta.userAgent,
-  });
+    const patientId = await generateSequentialId(Patient, "PAT", "patientId");
 
-  return patient;
+    const patient = await Patient.create({
+      patientId,
+      name,
+      dateOfBirth,
+      gender: gender ? gender.toLowerCase() : "other",
+      phone: sanitizedPhone,
+      email: email ? email.toLowerCase() : null,
+      address,
+      bloodGroup,
+      maritalStatus: maritalStatus ? maritalStatus.toLowerCase() : "single",
+      occupation,
+      nationality,
+      notes,
+      emergencyContact,
+    });
+
+    await invalidatePattern("hms:patient:*");
+    await invalidatePattern("hms:route:patient*");
+
+    if (currentUser) {
+      await createAuditLog({
+        userId: currentUser.id,
+        action: "CREATE",
+        resource: "patient",
+        resourceId: patient._id,
+        newValue: patient.toObject(),
+        ipAddress: requestMeta?.ipAddress || "",
+        userAgent: requestMeta?.userAgent || "",
+      });
+    }
+
+    return patient;
+  } finally {
+    await releaseLock(lockKey);
+  }
 };
 
 export const ensureSamplePatients = async () => {
@@ -133,7 +157,7 @@ export const ensureSamplePatients = async () => {
   }
 };
 
-// ---------------- GET ALL (100% Dynamic MongoDB Query) ----------------
+// ---------------- GET ALL ----------------
 export const getAllPatients = async ({ page = 1, limit = 10, search, status, gender, bloodGroup }) => {
   await ensureSamplePatients();
   const query = { isDeleted: { $ne: true } };
@@ -150,12 +174,11 @@ export const getAllPatients = async ({ page = 1, limit = 10, search, status, gen
     ];
   }
 
-  const skip = (page - 1) * limit;
-
+  const skip = (Number(page) - 1) * Number(limit);
   const firstDayOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
 
   const [patients, total, activeCount, inactiveCount, newThisMonthCount] = await Promise.all([
-    Patient.find(query).skip(skip).limit(limit).sort({ createdAt: -1 }),
+    Patient.find(query).skip(skip).limit(Number(limit)).sort({ createdAt: -1 }),
     Patient.countDocuments(query),
     Patient.countDocuments({ status: "active", isDeleted: { $ne: true } }),
     Patient.countDocuments({ status: "inactive", isDeleted: { $ne: true } }),
@@ -176,15 +199,20 @@ export const getAllPatients = async ({ page = 1, limit = 10, search, status, gen
       total,
       page: Number(page),
       limit: Number(limit),
-      totalPages: Math.ceil((total || 1) / limit),
+      totalPages: Math.ceil((total || 1) / Number(limit)),
     },
   };
 };
 
-// ---------------- GET BY ID ----------------
+// ---------------- GET BY ID WITH REDIS CACHE ----------------
 export const getPatientById = async (id) => {
-  const patient = await Patient.findById(id);
-  if (!patient) {
+  const { data: patient } = await getOrSetCache(
+    `hms:patient:profile:${id}`,
+    () => Patient.findById(id),
+    600
+  );
+
+  if (!patient || patient.isDeleted) {
     throw new AppError("Patient not found", 404, ErrorCodes.NOT_FOUND);
   }
   return patient;
@@ -193,11 +221,10 @@ export const getPatientById = async (id) => {
 // ---------------- UPDATE ----------------
 export const updatePatient = async (id, data, currentUser, requestMeta) => {
   const patient = await Patient.findById(id);
-  if (!patient) {
+  if (!patient || patient.isDeleted) {
     throw new AppError("Patient not found", 404, ErrorCodes.NOT_FOUND);
   }
 
-  // Ensure stored gender matches lowercase schema enum
   if (patient.gender && typeof patient.gender === "string") {
     patient.gender = patient.gender.toLowerCase();
   }
@@ -238,16 +265,22 @@ export const updatePatient = async (id, data, currentUser, requestMeta) => {
 
   await patient.save();
 
-  await createAuditLog({
-    userId: currentUser.id,
-    action: "UPDATE",
-    resource: "patient",
-    resourceId: patient._id,
-    oldValue,
-    newValue: patient.toObject(),
-    ipAddress: requestMeta.ipAddress,
-    userAgent: requestMeta.userAgent,
-  });
+  await delCache(`hms:patient:profile:${id}`);
+  await invalidatePattern("hms:patient:*");
+  await invalidatePattern("hms:route:patient*");
+
+  if (currentUser) {
+    await createAuditLog({
+      userId: currentUser.id,
+      action: "UPDATE",
+      resource: "patient",
+      resourceId: patient._id,
+      oldValue,
+      newValue: patient.toObject(),
+      ipAddress: requestMeta?.ipAddress || "",
+      userAgent: requestMeta?.userAgent || "",
+    });
+  }
 
   return patient;
 };
@@ -255,7 +288,7 @@ export const updatePatient = async (id, data, currentUser, requestMeta) => {
 // ---------------- DELETE (Soft Delete) ----------------
 export const deletePatient = async (id, currentUser, requestMeta) => {
   const patient = await Patient.findById(id);
-  if (!patient) {
+  if (!patient || patient.isDeleted) {
     throw new AppError("Patient not found", 404, ErrorCodes.NOT_FOUND);
   }
 
@@ -270,16 +303,22 @@ export const deletePatient = async (id, currentUser, requestMeta) => {
   patient.deletedAt = new Date();
   await patient.save();
 
-  await createAuditLog({
-    userId: currentUser.id,
-    action: "DELETE",
-    resource: "patient",
-    resourceId: patient._id,
-    oldValue,
-    newValue: patient.toObject(),
-    ipAddress: requestMeta.ipAddress,
-    userAgent: requestMeta.userAgent,
-  });
+  await delCache(`hms:patient:profile:${id}`);
+  await invalidatePattern("hms:patient:*");
+  await invalidatePattern("hms:route:patient*");
+
+  if (currentUser) {
+    await createAuditLog({
+      userId: currentUser.id,
+      action: "DELETE",
+      resource: "patient",
+      resourceId: patient._id,
+      oldValue,
+      newValue: patient.toObject(),
+      ipAddress: requestMeta?.ipAddress || "",
+      userAgent: requestMeta?.userAgent || "",
+    });
+  }
 
   return { message: "Patient soft deleted successfully" };
 };
@@ -288,7 +327,7 @@ export const deletePatient = async (id, currentUser, requestMeta) => {
 export const exportPatientsService = async (params = {}) => {
   await ensureSamplePatients();
   const { status, gender, bloodGroup, search } = params;
-  const query = {};
+  const query = { isDeleted: { $ne: true } };
 
   if (status) query.status = status;
   if (gender) query.gender = new RegExp(`^${gender}$`, "i");

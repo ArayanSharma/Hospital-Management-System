@@ -101,6 +101,9 @@ patientSchema.virtual("age").get(function () {
 });
 
 patientSchema.index({ name: "text", phone: "text" });
+patientSchema.index({ isDeleted: 1, status: 1, createdAt: -1 });
+patientSchema.index({ phone: 1, isDeleted: 1 });
+patientSchema.index({ email: 1, isDeleted: 1 });
 
 const Patient = mongoose.model("Patient", patientSchema);
 

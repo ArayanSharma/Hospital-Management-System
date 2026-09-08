@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Edit, MoreVertical, ChevronLeft, ChevronRight, Eye, ShieldAlert, KeyRound, UserX, UserCheck } from "lucide-react";
 import { getRoleBadgeStyle, getStatusBadgeStyle } from "../constants/user.constants.js";
+import MaskedField from "../../../components/common/MaskedField.jsx";
 
 export default function UserTable({
   users = [],
@@ -71,6 +72,7 @@ export default function UserTable({
                           <img
                             src={u.avatar}
                             alt={u.name}
+                            loading="lazy"
                             className="w-8 h-8 rounded-full object-cover border border-slate-200"
                             onError={(e) => {
                               e.target.style.display = "none";
@@ -104,7 +106,7 @@ export default function UserTable({
 
                     {/* Phone */}
                     <td className="py-3 px-3 font-mono text-[11px] font-bold text-slate-800">
-                      {u.phone || "+91 98765 43210"}
+                      <MaskedField value={u.phone || "+91 98765 43210"} type="phone" />
                     </td>
 
                     {/* Status Badge with Dot */}

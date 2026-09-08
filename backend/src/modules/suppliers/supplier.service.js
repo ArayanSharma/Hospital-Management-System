@@ -2,61 +2,75 @@ import Supplier from "./supplier.model.js";
 import AppError from "../../core/errors/AppError.js";
 import { ErrorCodes } from "../../core/errors/errorCodes.js";
 import { createAuditLog } from "../audit-logs/audit-log.service.js";
+import { getOrSetCache, invalidatePattern, delCache, acquireLock, releaseLock } from "../../utils/redisCache.js";
 
+// ---------------- CREATE SUPPLIER (With Redis Mutex Lock) ----------------
 export const createSupplier = async (data, currentUser, requestMeta) => {
-  const supplier = await Supplier.create({
-    name: data.name || data.supplierName,
-    companyType: data.companyType,
-    gstNumber: data.gstNumber,
-    contactPerson: data.contactPerson,
-    designation: data.designation,
-    phone: data.phone || data.phoneNumber,
-    email: data.email,
-    alternatePhone: data.alternatePhone,
-    website: data.website,
-    addressLine1: data.addressLine1,
-    addressLine2: data.addressLine2,
-    city: data.city,
-    state: data.state,
-    pinCode: data.pinCode,
-    country: data.country || "India",
-    category: data.category || data.supplierCategory || "Pharmaceuticals",
-    paymentTerms: data.paymentTerms,
-    creditLimit: Number(data.creditLimit || 0),
-    outstandingBalance: Number(data.outstandingBalance || 45000),
-    preferredSupplier: data.preferredSupplier === "Yes" || data.preferredSupplier === true,
-    panNumber: data.panNumber,
-    notes: data.notes,
-    status: data.status ? data.status.toLowerCase() : "active",
-  });
+  const supplierName = data.name || data.supplierName || "";
+  const sanitizedGst = data.gstNumber ? data.gstNumber.trim().toUpperCase() : "";
 
-  if (currentUser) {
-    await createAuditLog({
-      userId: currentUser.id,
-      action: "CREATE",
-      resource: "supplier",
-      resourceId: supplier._id,
-      newValue: supplier.toObject(),
-      ipAddress: requestMeta?.ipAddress || "",
-      userAgent: requestMeta?.userAgent || "",
-    });
+  const lockKey = `hms:lock:supplier:${sanitizedGst || supplierName.replace(/\s+/g, "_")}`;
+  const hasLock = await acquireLock(lockKey, 5);
+  if (!hasLock) {
+    throw new AppError("A supplier entry with this GST/name is currently being created", 409, ErrorCodes.VALIDATION_ERROR);
   }
 
-  return supplier;
+  try {
+    if (sanitizedGst) {
+      const existing = await Supplier.findOne({ gstNumber: sanitizedGst });
+      if (existing) {
+        throw new AppError("Supplier with this GST number already exists", 409, ErrorCodes.VALIDATION_ERROR);
+      }
+    }
+
+    const supplier = await Supplier.create({
+      name: supplierName,
+      companyType: data.companyType,
+      gstNumber: sanitizedGst,
+      contactPerson: data.contactPerson,
+      designation: data.designation,
+      phone: data.phone || data.phoneNumber,
+      email: data.email ? data.email.toLowerCase().trim() : null,
+      alternatePhone: data.alternatePhone,
+      website: data.website,
+      addressLine1: data.addressLine1,
+      addressLine2: data.addressLine2,
+      city: data.city,
+      state: data.state,
+      pinCode: data.pinCode,
+      country: data.country || "India",
+      category: data.category || data.supplierCategory || "Pharmaceuticals",
+      paymentTerms: data.paymentTerms,
+      creditLimit: Number(data.creditLimit || 0),
+      outstandingBalance: Number(data.outstandingBalance || 0),
+      preferredSupplier: data.preferredSupplier === "Yes" || data.preferredSupplier === true,
+      panNumber: data.panNumber,
+      notes: data.notes,
+      status: data.status ? data.status.toLowerCase() : "active",
+    });
+
+    await invalidatePattern("hms:supplier:*");
+    await invalidatePattern("hms:route:supplier*");
+
+    if (currentUser) {
+      await createAuditLog({
+        userId: currentUser.id,
+        action: "CREATE",
+        resource: "supplier",
+        resourceId: supplier._id,
+        newValue: supplier.toObject(),
+        ipAddress: requestMeta?.ipAddress || "",
+        userAgent: requestMeta?.userAgent || "",
+      });
+    }
+
+    return supplier;
+  } finally {
+    await releaseLock(lockKey);
+  }
 };
 
 export const getAllSuppliers = async ({ status, search, category, page = 1, limit = 10 }) => {
-  // Auto-seed initial suppliers if collection is empty
-  const count = await Supplier.countDocuments();
-  if (count === 0) {
-    await Supplier.insertMany([
-      { name: "Medilife Pharma Pvt. Ltd.", companyType: "Private Limited", gstNumber: "27AAACM1234A1Z5", contactPerson: "Rajesh Kumar", designation: "Manager", phone: "9876543210", email: "rajesh@medilife.com", city: "Mumbai", state: "Maharashtra", country: "India", category: "Pharmaceuticals", paymentTerms: "Net 30", creditLimit: 500000, outstandingBalance: 45000, preferredSupplier: true, status: "active" },
-      { name: "HealthCare Distributors", companyType: "Partnership", gstNumber: "24AABCH5678B1Z2", contactPerson: "Sanjay Verma", designation: "Sales Head", phone: "9823456789", email: "sanjay@healthcare.com", city: "Ahmedabad", state: "Gujarat", country: "India", category: "Pharmaceuticals", paymentTerms: "Net 15", creditLimit: 300000, outstandingBalance: 18500, preferredSupplier: true, status: "active" },
-      { name: "MediSupplies India", companyType: "Sole Proprietorship", gstNumber: "07AAAFM9012C1Z8", contactPerson: "Anita Sharma", designation: "Proprietor", phone: "9811223344", email: "anita@medisupplies.in", city: "Delhi", state: "Delhi", country: "India", category: "Surgical", paymentTerms: "Immediate", creditLimit: 200000, outstandingBalance: 0, preferredSupplier: false, status: "active" },
-      { name: "LifeCare Enterprises", companyType: "LLP", gstNumber: "29AAACL3456D1Z4", contactPerson: "Vikram Singh", designation: "Manager", phone: "9845098765", email: "vikram@lifecare.com", city: "Bengaluru", state: "Karnataka", country: "India", category: "Equipment", paymentTerms: "Net 60", creditLimit: 800000, outstandingBalance: 120000, preferredSupplier: true, status: "active" },
-    ]);
-  }
-
   const query = {};
   if (status && status !== "all") query.status = status;
   if (category && category !== "all") query.category = category;
@@ -89,7 +103,12 @@ export const getAllSuppliers = async ({ status, search, category, page = 1, limi
 };
 
 export const getSupplierById = async (id) => {
-  const supplier = await Supplier.findById(id);
+  const { data: supplier } = await getOrSetCache(
+    `hms:supplier:detail:${id}`,
+    () => Supplier.findById(id),
+    600
+  );
+
   if (!supplier) {
     throw new AppError("Supplier not found", 404, ErrorCodes.NOT_FOUND);
   }
@@ -141,6 +160,10 @@ export const updateSupplier = async (id, data, currentUser, requestMeta) => {
 
   await supplier.save();
 
+  await delCache(`hms:supplier:detail:${id}`);
+  await invalidatePattern("hms:supplier:*");
+  await invalidatePattern("hms:route:supplier*");
+
   if (currentUser) {
     await createAuditLog({
       userId: currentUser.id,
@@ -167,6 +190,10 @@ export const deleteSupplier = async (id, currentUser, requestMeta) => {
   supplier.status = "inactive";
   await supplier.save();
 
+  await delCache(`hms:supplier:detail:${id}`);
+  await invalidatePattern("hms:supplier:*");
+  await invalidatePattern("hms:route:supplier*");
+
   if (currentUser) {
     await createAuditLog({
       userId: currentUser.id,
@@ -184,43 +211,57 @@ export const deleteSupplier = async (id, currentUser, requestMeta) => {
 };
 
 export const paySupplierOutstandingService = async (id, payAmount, paymentMode, notes, currentUser, requestMeta) => {
-  const supplier = await Supplier.findById(id);
-  if (!supplier) {
-    throw new AppError("Supplier not found", 404, ErrorCodes.NOT_FOUND);
+  const lockKey = `hms:lock:supplier:pay:${id}`;
+  const hasLock = await acquireLock(lockKey, 5);
+  if (!hasLock) {
+    throw new AppError("A payment disbursement for this supplier is currently processing", 409, ErrorCodes.VALIDATION_ERROR);
   }
 
-  const amt = Number(payAmount || 0);
-  if (amt <= 0) {
-    throw new AppError("Payment amount must be greater than 0", 400, ErrorCodes.VALIDATION_ERROR);
-  }
+  try {
+    const supplier = await Supplier.findById(id);
+    if (!supplier) {
+      throw new AppError("Supplier not found", 404, ErrorCodes.NOT_FOUND);
+    }
 
-  const oldValue = supplier.toObject();
-  supplier.outstandingBalance = Math.max(0, (supplier.outstandingBalance || 0) - amt);
-  supplier.paymentHistory = supplier.paymentHistory || [];
-  supplier.paymentHistory.push({
-    payAmount: amt,
-    paymentMode: paymentMode || "Bank Transfer",
-    notes: notes || "Vendor Outstanding Disbursed",
-    date: new Date(),
-    processedBy: currentUser?.name || "Finance Admin",
-  });
+    const amt = Number(payAmount || 0);
+    if (amt <= 0) {
+      throw new AppError("Payment amount must be greater than 0", 400, ErrorCodes.VALIDATION_ERROR);
+    }
 
-  await supplier.save();
-
-  if (currentUser) {
-    await createAuditLog({
-      userId: currentUser.id,
-      action: "PAY_SUPPLIER",
-      resource: "supplier",
-      resourceId: supplier._id,
-      oldValue,
-      newValue: supplier.toObject(),
-      ipAddress: requestMeta?.ipAddress || "",
-      userAgent: requestMeta?.userAgent || "",
+    const oldValue = supplier.toObject();
+    supplier.outstandingBalance = Math.max(0, (supplier.outstandingBalance || 0) - amt);
+    supplier.paymentHistory = supplier.paymentHistory || [];
+    supplier.paymentHistory.push({
+      payAmount: amt,
+      paymentMode: paymentMode || "Bank Transfer",
+      notes: notes || "Vendor Outstanding Disbursed",
+      date: new Date(),
+      processedBy: currentUser?.name || "Finance Admin",
     });
-  }
 
-  return { message: `Payment of ₹${amt} disbursed successfully to ${supplier.name}`, supplier };
+    await supplier.save();
+
+    await delCache(`hms:supplier:detail:${id}`);
+    await invalidatePattern("hms:supplier:*");
+    await invalidatePattern("hms:route:supplier*");
+
+    if (currentUser) {
+      await createAuditLog({
+        userId: currentUser.id,
+        action: "PAY_SUPPLIER",
+        resource: "supplier",
+        resourceId: supplier._id,
+        oldValue,
+        newValue: supplier.toObject(),
+        ipAddress: requestMeta?.ipAddress || "",
+        userAgent: requestMeta?.userAgent || "",
+      });
+    }
+
+    return { message: `Payment of ₹${amt} disbursed successfully to ${supplier.name}`, supplier };
+  } finally {
+    await releaseLock(lockKey);
+  }
 };
 
 export const toggleSupplierStatusService = async (id, currentUser, requestMeta) => {
@@ -232,6 +273,10 @@ export const toggleSupplierStatusService = async (id, currentUser, requestMeta) 
   const oldValue = supplier.toObject();
   supplier.status = supplier.status === "active" ? "inactive" : "active";
   await supplier.save();
+
+  await delCache(`hms:supplier:detail:${id}`);
+  await invalidatePattern("hms:supplier:*");
+  await invalidatePattern("hms:route:supplier*");
 
   if (currentUser) {
     await createAuditLog({
@@ -258,6 +303,10 @@ export const toggleSupplierArchiveService = async (id, currentUser, requestMeta)
   const oldValue = supplier.toObject();
   supplier.status = supplier.status === "archived" ? "active" : "archived";
   await supplier.save();
+
+  await delCache(`hms:supplier:detail:${id}`);
+  await invalidatePattern("hms:supplier:*");
+  await invalidatePattern("hms:route:supplier*");
 
   if (currentUser) {
     await createAuditLog({

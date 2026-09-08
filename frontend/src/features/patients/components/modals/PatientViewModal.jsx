@@ -1,5 +1,6 @@
 import React from "react";
 import Modal from "../../../../components/ui/Modal.jsx";
+import MaskedField from "../../../../components/common/MaskedField.jsx";
 
 export default function PatientViewModal({ viewingPatient, onClose }) {
   return (
@@ -37,7 +38,9 @@ export default function PatientViewModal({ viewingPatient, onClose }) {
             </div>
             <div>
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Phone Number</span>
-              <p className="font-extrabold text-slate-800 mt-0.5">{viewingPatient.phone || "N/A"}</p>
+              <div className="mt-0.5">
+                <MaskedField value={viewingPatient.phone} type="phone" className="text-xs" />
+              </div>
             </div>
             <div>
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Date of Birth</span>

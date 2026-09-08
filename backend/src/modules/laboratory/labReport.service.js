@@ -2,9 +2,9 @@ import LabReport from "./labReport.model.js";
 import LabTest from "./labTest.model.js";
 import AppError from "../../core/errors/AppError.js";
 import { ErrorCodes } from "../../core/errors/errorCodes.js";
-import { createAuditLog } from "../audit-logs/audit-log.service.js";
-import { createNotification } from "../notifications/notification.service.js";
+import { notifyLabResultEvent } from "../../utils/notificationDispatcher.js";
 import Doctor from "../doctors/doctor.model.js";
+import { invalidatePattern, delCache } from "../../utils/redisCache.js";
 
 // ---------------- CREATE / UPSERT DRAFT REPORT ----------------
 export const createLabReport = async (data, currentUser, requestMeta) => {
@@ -36,6 +36,9 @@ export const createLabReport = async (data, currentUser, requestMeta) => {
 
     await existingReport.save();
 
+    await invalidatePattern("hms:lab:*");
+    await invalidatePattern("hms:route:lab*");
+
     if (currentUser) {
       await createAuditLog({
         userId: currentUser.id,
@@ -60,6 +63,9 @@ export const createLabReport = async (data, currentUser, requestMeta) => {
     reportFile: reportFile || null,
     status: "draft",
   });
+
+  await invalidatePattern("hms:lab:*");
+  await invalidatePattern("hms:route:lab*");
 
   if (currentUser) {
     await createAuditLog({
@@ -99,6 +105,10 @@ export const finalizeLabReport = async (id, currentUser, requestMeta) => {
     { new: true }
   );
 
+  await delCache(`hms:lab:test:${report.labTestId}`);
+  await invalidatePattern("hms:lab:*");
+  await invalidatePattern("hms:route:lab*");
+
   if (currentUser) {
     await createAuditLog({
       userId: currentUser.id,
@@ -116,15 +126,11 @@ export const finalizeLabReport = async (id, currentUser, requestMeta) => {
   if (labTest && labTest.doctorId) {
     try {
       const doctor = await Doctor.findById(labTest.doctorId);
-      if (doctor && doctor.userId) {
-        await createNotification({
+        await notifyLabResultEvent({
           userId: doctor.userId,
-          type: "lab_result",
-          title: "Lab Report Ready",
-          message: `Lab report for "${labTest.testName}" is now available`,
-          metadata: { labTestId: labTest._id, labReportId: report._id },
+          reportId: report._id,
+          testName: labTest.testName,
         });
-      }
     } catch (err) {
       console.error("Error sending lab report notification:", err);
     }
@@ -165,6 +171,9 @@ export const updateLabReport = async (id, data, currentUser, requestMeta) => {
   if (reportFile !== undefined) report.reportFile = reportFile;
 
   await report.save();
+
+  await invalidatePattern("hms:lab:*");
+  await invalidatePattern("hms:route:lab*");
 
   if (currentUser) {
     await createAuditLog({

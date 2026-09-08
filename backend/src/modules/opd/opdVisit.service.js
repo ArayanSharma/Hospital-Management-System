@@ -6,71 +6,88 @@ import AppError from "../../core/errors/AppError.js";
 import { ErrorCodes } from "../../core/errors/errorCodes.js";
 import { createAuditLog } from "../audit-logs/audit-log.service.js";
 import { generateSequentialId } from "../../utils/generateId.js";
+import { getOrSetCache, invalidatePattern, delCache, acquireLock, releaseLock } from "../../utils/redisCache.js";
 
-// ---------------- CREATE ----------------
+// ---------------- CREATE (With Redis Mutex Lock) ----------------
 export const createOPDVisit = async (data, currentUser, requestMeta) => {
   const { patientId, doctorId, appointmentId, symptoms, notes, vitals, visitType, visitDate } = data;
 
-  const [patient, doctor] = await Promise.all([
-    Patient.findById(patientId),
-    Doctor.findById(doctorId),
-  ]);
-
-  if (!patient || patient.status === "inactive") {
-    throw new AppError("Patient not found", 404, ErrorCodes.NOT_FOUND);
-  }
-  if (!doctor || doctor.status === "inactive") {
-    throw new AppError("Doctor not found or inactive", 404, ErrorCodes.NOT_FOUND);
+  const lockKey = `hms:lock:opd:${patientId}:${doctorId}`;
+  const hasLock = await acquireLock(lockKey, 5);
+  if (!hasLock) {
+    throw new AppError("An OPD visit is currently being created for this patient", 409, ErrorCodes.VALIDATION_ERROR);
   }
 
-  if (appointmentId) {
-    const appointment = await Appointment.findById(appointmentId);
-    if (!appointment) {
-      throw new AppError("Appointment not found", 404, ErrorCodes.NOT_FOUND);
+  try {
+    const [patient, doctor] = await Promise.all([
+      Patient.findById(patientId),
+      Doctor.findById(doctorId),
+    ]);
+
+    if (!patient || patient.status === "inactive") {
+      throw new AppError("Patient not found or inactive", 404, ErrorCodes.NOT_FOUND);
     }
+    if (!doctor || doctor.status === "inactive") {
+      throw new AppError("Doctor not found or inactive", 404, ErrorCodes.NOT_FOUND);
+    }
+
+    if (appointmentId) {
+      const appointment = await Appointment.findById(appointmentId);
+      if (!appointment) {
+        throw new AppError("Appointment not found", 404, ErrorCodes.NOT_FOUND);
+      }
+    }
+
+    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+    const visitId = await generateSequentialId(OPDVisit, `VIS-${dateStr}`, "visitId");
+
+    const resolvedVisitType = visitType || (appointmentId ? "appointment" : "walk-in");
+    const initialStatus = resolvedVisitType === "walk-in" ? "walk-in" : "in-progress";
+
+    const opdVisit = await OPDVisit.create({
+      visitId,
+      patientId,
+      doctorId,
+      appointmentId: appointmentId || null,
+      visitType: resolvedVisitType,
+      symptoms: symptoms || "Routine OPD Consultation",
+      notes: notes || "",
+      vitals: vitals || {
+        temperature: 98.6,
+        bloodPressure: "120/80",
+        pulse: 78,
+        weight: 65.2,
+        height: 165,
+        spO2: 98,
+      },
+      visitDate: visitDate ? new Date(visitDate) : new Date(),
+      status: initialStatus,
+    });
+
+    if (appointmentId) {
+      await Appointment.findByIdAndUpdate(appointmentId, { status: "completed" });
+      await invalidatePattern("hms:appointment:*");
+    }
+
+    await invalidatePattern("hms:opd:*");
+    await invalidatePattern("hms:route:opd*");
+
+    if (currentUser) {
+      await createAuditLog({
+        userId: currentUser.id,
+        action: "CREATE",
+        resource: "opd_visit",
+        resourceId: opdVisit._id,
+        newValue: opdVisit.toObject(),
+        ipAddress: requestMeta?.ipAddress || "",
+        userAgent: requestMeta?.userAgent || "",
+      });
+    }
+
+    return opdVisit;
+  } finally {
+    await releaseLock(lockKey);
   }
-
-  const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-  const visitId = await generateSequentialId(OPDVisit, `VIS-${dateStr}`, "visitId");
-
-  const resolvedVisitType = visitType || (appointmentId ? "appointment" : "walk-in");
-  const initialStatus = resolvedVisitType === "walk-in" ? "walk-in" : "in-progress";
-
-  const opdVisit = await OPDVisit.create({
-    visitId,
-    patientId,
-    doctorId,
-    appointmentId: appointmentId || null,
-    visitType: resolvedVisitType,
-    symptoms: symptoms || "Routine OPD Consultation",
-    notes: notes || "",
-    vitals: vitals || {
-      temperature: 98.6,
-      bloodPressure: "120/80",
-      pulse: 78,
-      weight: 65.2,
-      height: 165,
-      spO2: 98,
-    },
-    visitDate: visitDate ? new Date(visitDate) : new Date(),
-    status: initialStatus,
-  });
-
-  if (appointmentId) {
-    await Appointment.findByIdAndUpdate(appointmentId, { status: "completed" });
-  }
-
-  await createAuditLog({
-    userId: currentUser.id,
-    action: "CREATE",
-    resource: "opd_visit",
-    resourceId: opdVisit._id,
-    newValue: opdVisit.toObject(),
-    ipAddress: requestMeta.ipAddress,
-    userAgent: requestMeta.userAgent,
-  });
-
-  return opdVisit;
 };
 
 // ---------------- GET ALL (Dynamic MongoDB Stats & Tab Filtering) ----------------
@@ -112,7 +129,7 @@ export const getAllOPDVisits = async ({
   }
 
   const safeSearch = search ? search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") : "";
-  const skip = (page - 1) * limit;
+  const skip = (Number(page) - 1) * Number(limit);
 
   const [visits, total, todayCount, inProgressCount, completedCount, walkInCount] = await Promise.all([
     OPDVisit.find(query)
@@ -127,7 +144,7 @@ export const getAllOPDVisits = async ({
       })
       .populate("appointmentId", "appointmentId appointmentDate startTime")
       .skip(skip)
-      .limit(limit)
+      .limit(Number(limit))
       .sort({ visitDate: -1 }),
     OPDVisit.countDocuments(query),
     OPDVisit.countDocuments({ visitDate: { $gte: todayStart, $lte: todayEnd } }),
@@ -160,24 +177,29 @@ export const getAllOPDVisits = async ({
       total,
       page: Number(page),
       limit: Number(limit),
-      totalPages: Math.ceil((total || 1) / limit),
+      totalPages: Math.ceil((total || 1) / Number(limit)),
     },
   };
 };
 
-// ---------------- GET BY ID ----------------
+// ---------------- GET BY ID WITH REDIS CACHE ----------------
 export const getOPDVisitById = async (id) => {
-  const visit = await OPDVisit.findById(id)
-    .populate("patientId", "name patientId phone email bloodGroup gender dateOfBirth photoUrl")
-    .populate({
-      path: "doctorId",
-      select: "doctorId specialization photoUrl userId departmentId",
-      populate: [
-        { path: "userId", select: "name" },
-        { path: "departmentId", select: "name code" },
-      ],
-    })
-    .populate("appointmentId", "appointmentId appointmentDate startTime");
+  const { data: visit } = await getOrSetCache(
+    `hms:opd:visit:${id}`,
+    () =>
+      OPDVisit.findById(id)
+        .populate("patientId", "name patientId phone email bloodGroup gender dateOfBirth photoUrl")
+        .populate({
+          path: "doctorId",
+          select: "doctorId specialization photoUrl userId departmentId",
+          populate: [
+            { path: "userId", select: "name" },
+            { path: "departmentId", select: "name code" },
+          ],
+        })
+        .populate("appointmentId", "appointmentId appointmentDate startTime"),
+    600
+  );
 
   if (!visit) {
     throw new AppError("OPD visit not found", 404, ErrorCodes.NOT_FOUND);
@@ -206,16 +228,22 @@ export const updateOPDVisit = async (id, data, currentUser, requestMeta) => {
 
   await visit.save();
 
-  await createAuditLog({
-    userId: currentUser.id,
-    action: "UPDATE",
-    resource: "opd_visit",
-    resourceId: visit._id,
-    oldValue,
-    newValue: visit.toObject(),
-    ipAddress: requestMeta.ipAddress,
-    userAgent: requestMeta.userAgent,
-  });
+  await delCache(`hms:opd:visit:${id}`);
+  await invalidatePattern("hms:opd:*");
+  await invalidatePattern("hms:route:opd*");
+
+  if (currentUser) {
+    await createAuditLog({
+      userId: currentUser.id,
+      action: "UPDATE",
+      resource: "opd_visit",
+      resourceId: visit._id,
+      oldValue,
+      newValue: visit.toObject(),
+      ipAddress: requestMeta?.ipAddress || "",
+      userAgent: requestMeta?.userAgent || "",
+    });
+  }
 
   return visit;
 };

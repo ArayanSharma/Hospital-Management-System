@@ -7,10 +7,11 @@ import Ward from "../wards/ward.model.js";
 import AppError from "../../core/errors/AppError.js";
 import { ErrorCodes } from "../../core/errors/errorCodes.js";
 import { createAuditLog } from "../audit-logs/audit-log.service.js";
-import { createNotification } from "../notifications/notification.service.js";
 import { generateSequentialId } from "../../utils/generateId.js";
+import { notifyAdmissionEvent } from "../../utils/notificationDispatcher.js";
+import { getOrSetCache, invalidatePattern, delCache, acquireLock, releaseLock } from "../../utils/redisCache.js";
 
-// ---------------- CREATE (Admission + Bed occupy — transaction) ----------------
+// ---------------- CREATE (Admission + Bed occupy — transaction with REDIS ATOMIC LOCK) ----------------
 export const createAdmission = async (data, currentUser, requestMeta) => {
   const {
     patientId,
@@ -28,107 +29,121 @@ export const createAdmission = async (data, currentUser, requestMeta) => {
     bedType,
   } = data;
 
-  const [patient, doctor, bed] = await Promise.all([
-    Patient.findById(patientId),
-    Doctor.findById(doctorId),
-    Bed.findById(bedId),
-  ]);
-
-  if (!patient || patient.status === "inactive") {
-    throw new AppError("Patient not found", 404, ErrorCodes.NOT_FOUND);
+  const lockKey = `hms:lock:bed:${bedId}`;
+  const hasLock = await acquireLock(lockKey, 10);
+  if (!hasLock) {
+    throw new AppError("Bed is currently being processed for admission by another staff member", 409, ErrorCodes.VALIDATION_ERROR);
   }
-  if (!doctor || doctor.status === "inactive") {
-    throw new AppError("Doctor not found or inactive", 404, ErrorCodes.NOT_FOUND);
-  }
-  if (!bed) {
-    throw new AppError("Bed not found", 404, ErrorCodes.NOT_FOUND);
-  }
-  if (bed.status !== "available") {
-    throw new AppError(
-      `Bed is currently ${bed.status} and not available for admission`,
-      409,
-      ErrorCodes.VALIDATION_ERROR
-    );
-  }
-
-  const existingAdmission = await Admission.findOne({
-    patientId,
-    status: "admitted",
-  });
-  if (existingAdmission) {
-    throw new AppError(
-      "Patient is already admitted. Discharge first before new admission.",
-      409,
-      ErrorCodes.VALIDATION_ERROR
-    );
-  }
-
-  const year = new Date().getFullYear();
-  const admissionId = await generateSequentialId(Admission, `ADM-${year}`, "admissionId");
-
-  const session = await mongoose.startSession();
-  session.startTransaction();
 
   try {
-    const admission = await Admission.create(
-      [
-        {
-          admissionId,
-          patientId,
-          doctorId,
-          wardId,
-          bedId,
-          reason,
-          diagnosis: diagnosis || provisionalDiagnosis || "",
-          provisionalDiagnosis: provisionalDiagnosis || "",
-          allergies: allergies || "",
-          medicalHistory: medicalHistory || "",
-          notes: notes || "",
-          admissionDate: admissionDate ? new Date(admissionDate) : new Date(),
-          dailyRent: dailyRent || 1500,
-          bedType: bedType || "Standard Bed",
-          status: "admitted",
-        },
-      ],
-      { session }
-    );
+    const [patient, doctor, bed] = await Promise.all([
+      Patient.findById(patientId),
+      Doctor.findById(doctorId),
+      Bed.findById(bedId),
+    ]);
 
-    await Bed.findByIdAndUpdate(
-      bedId,
-      { status: "occupied", currentPatientId: patientId },
-      { session }
-    );
+    if (!patient || patient.status === "inactive") {
+      throw new AppError("Patient not found or inactive", 404, ErrorCodes.NOT_FOUND);
+    }
+    if (!doctor || doctor.status === "inactive") {
+      throw new AppError("Doctor not found or inactive", 404, ErrorCodes.NOT_FOUND);
+    }
+    if (!bed) {
+      throw new AppError("Bed not found", 404, ErrorCodes.NOT_FOUND);
+    }
+    if (bed.status !== "available") {
+      throw new AppError(
+        `Bed is currently ${bed.status} and not available for admission`,
+        409,
+        ErrorCodes.VALIDATION_ERROR
+      );
+    }
 
-    await session.commitTransaction();
-    session.endSession();
-
-    await createAuditLog({
-      userId: currentUser.id,
-      action: "CREATE",
-      resource: "admission",
-      resourceId: admission[0]._id,
-      newValue: admission[0].toObject(),
-      ipAddress: requestMeta.ipAddress,
-      userAgent: requestMeta.userAgent,
+    const existingAdmission = await Admission.findOne({
+      patientId,
+      status: "admitted",
     });
+    if (existingAdmission) {
+      throw new AppError(
+        "Patient is already admitted. Discharge first before new admission.",
+        409,
+        ErrorCodes.VALIDATION_ERROR
+      );
+    }
 
-    await createNotification({
-      userId: doctor.userId,
-      type: "admission",
-      title: "New Patient Admission",
-      message: `Patient ${patient.name} has been admitted under your care. Bed: ${bed.bedNumber}`,
-      metadata: { admissionId: admission[0]._id },
-    });
+    const year = new Date().getFullYear();
+    const admissionId = await generateSequentialId(Admission, `ADM-${year}`, "admissionId");
 
-    return admission[0];
-  } catch (err) {
-    await session.abortTransaction();
-    session.endSession();
-    throw err;
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+      const admission = await Admission.create(
+        [
+          {
+            admissionId,
+            patientId,
+            doctorId,
+            wardId,
+            bedId,
+            reason: reason?.trim(),
+            diagnosis: diagnosis?.trim() || provisionalDiagnosis?.trim() || "",
+            provisionalDiagnosis: provisionalDiagnosis?.trim() || "",
+            allergies: allergies?.trim() || "",
+            medicalHistory: medicalHistory?.trim() || "",
+            notes: notes?.trim() || "",
+            admissionDate: admissionDate ? new Date(admissionDate) : new Date(),
+            dailyRent: Number(dailyRent || 1500),
+            bedType: bedType?.trim() || "Standard Bed",
+            status: "admitted",
+          },
+        ],
+        { session }
+      );
+
+      await Bed.findByIdAndUpdate(
+        bedId,
+        { status: "occupied", currentPatientId: patientId },
+        { session }
+      );
+
+      await session.commitTransaction();
+      session.endSession();
+
+      // Invalidate Redis IPD and Bed Caches
+      await invalidatePattern("hms:beds:*");
+      await invalidatePattern("hms:ipd:*");
+      await invalidatePattern("hms:route:ipd*");
+
+      await createAuditLog({
+        userId: currentUser.id,
+        action: "CREATE",
+        resource: "admission",
+        resourceId: admission[0]._id,
+        newValue: admission[0].toObject(),
+        ipAddress: requestMeta.ipAddress,
+        userAgent: requestMeta.userAgent,
+      });
+
+      await notifyAdmissionEvent({
+        userId: doctor.userId,
+        admissionId: admission[0]._id,
+        bedNumber: bed.bedNumber,
+        action: "admitted",
+      });
+
+      return admission[0];
+    } catch (err) {
+      await session.abortTransaction();
+      session.endSession();
+      throw err;
+    }
+  } finally {
+    await releaseLock(lockKey);
   }
 };
 
-// ---------------- GET ALL (100% Dynamic MongoDB Query + IPD Stats) ----------------
+// ---------------- GET ALL ADMISSIONS ----------------
 export const getAllAdmissions = async ({
   page = 1,
   limit = 10,
@@ -242,20 +257,25 @@ export const getAllAdmissions = async ({
   };
 };
 
-// ---------------- GET BY ID ----------------
+// ---------------- GET BY ID WITH REDIS CACHE ----------------
 export const getAdmissionById = async (id) => {
-  const admission = await Admission.findById(id)
-    .populate("patientId", "name patientId phone dateOfBirth gender photoUrl bloodGroup")
-    .populate({
-      path: "doctorId",
-      select: "doctorId specialization photoUrl userId departmentId",
-      populate: [
-        { path: "userId", select: "name" },
-        { path: "departmentId", select: "name" },
-      ],
-    })
-    .populate("wardId", "name type floor capacity")
-    .populate("bedId", "bedNumber status");
+  const { data: admission } = await getOrSetCache(
+    `hms:ipd:admission:${id}`,
+    () =>
+      Admission.findById(id)
+        .populate("patientId", "name patientId phone dateOfBirth gender photoUrl bloodGroup")
+        .populate({
+          path: "doctorId",
+          select: "doctorId specialization photoUrl userId departmentId",
+          populate: [
+            { path: "userId", select: "name" },
+            { path: "departmentId", select: "name" },
+          ],
+        })
+        .populate("wardId", "name type floor capacity")
+        .populate("bedId", "bedNumber status"),
+    600
+  );
 
   if (!admission) {
     throw new AppError("Admission not found", 404, ErrorCodes.NOT_FOUND);
@@ -291,6 +311,9 @@ export const updateAdmission = async (id, data, currentUser, requestMeta) => {
 
   await admission.save();
 
+  await delCache(`hms:ipd:admission:${id}`);
+  await invalidatePattern("hms:route:ipd*");
+
   await createAuditLog({
     userId: currentUser.id,
     action: "UPDATE",
@@ -307,62 +330,74 @@ export const updateAdmission = async (id, data, currentUser, requestMeta) => {
 
 // ---------------- DISCHARGE (Admission close + Bed free) ----------------
 export const dischargePatient = async (id, dischargeSummary, currentUser, requestMeta) => {
-  const admission = await Admission.findById(id);
-  if (!admission) {
-    throw new AppError("Admission not found", 404, ErrorCodes.NOT_FOUND);
+  const lockKey = `hms:lock:adm:${id}`;
+  const hasLock = await acquireLock(lockKey, 5);
+  if (!hasLock) {
+    throw new AppError("Discharge transaction for this patient is currently processing", 409, ErrorCodes.VALIDATION_ERROR);
   }
-
-  if (admission.status === "discharged") {
-    throw new AppError("Patient is already discharged", 400, ErrorCodes.VALIDATION_ERROR);
-  }
-
-  const oldValue = admission.toObject();
-
-  const session = await mongoose.startSession();
-  session.startTransaction();
 
   try {
-    admission.status = "discharged";
-    admission.dischargeDate = new Date();
-    admission.dischargeSummary = dischargeSummary || "Discharged in stable condition.";
-    await admission.save({ session });
-
-    await Bed.findByIdAndUpdate(
-      admission.bedId,
-      { status: "available", currentPatientId: null },
-      { session }
-    );
-
-    await session.commitTransaction();
-    session.endSession();
-
-    await createAuditLog({
-      userId: currentUser.id,
-      action: "UPDATE",
-      resource: "admission",
-      resourceId: admission._id,
-      oldValue,
-      newValue: admission.toObject(),
-      ipAddress: requestMeta.ipAddress,
-      userAgent: requestMeta.userAgent,
-    });
-
-    const doctor = await Doctor.findById(admission.doctorId);
-    if (doctor) {
-      await createNotification({
-        userId: doctor.userId,
-        type: "admission",
-        title: "Patient Discharged",
-        message: `Patient has been discharged. Discharge summary recorded.`,
-        metadata: { admissionId: admission._id },
-      });
+    const admission = await Admission.findById(id);
+    if (!admission) {
+      throw new AppError("Admission not found", 404, ErrorCodes.NOT_FOUND);
     }
 
-    return admission;
-  } catch (err) {
-    await session.abortTransaction();
-    session.endSession();
-    throw err;
+    if (admission.status === "discharged") {
+      throw new AppError("Patient is already discharged", 400, ErrorCodes.VALIDATION_ERROR);
+    }
+
+    const oldValue = admission.toObject();
+
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+      admission.status = "discharged";
+      admission.dischargeDate = new Date();
+      admission.dischargeSummary = dischargeSummary || "Discharged in stable condition.";
+      await admission.save({ session });
+
+      await Bed.findByIdAndUpdate(
+        admission.bedId,
+        { status: "available", currentPatientId: null },
+        { session }
+      );
+
+      await session.commitTransaction();
+      session.endSession();
+
+      // Invalidate Redis IPD and Bed Caches
+      await invalidatePattern("hms:beds:*");
+      await invalidatePattern("hms:ipd:*");
+      await invalidatePattern("hms:route:ipd*");
+
+      await createAuditLog({
+        userId: currentUser.id,
+        action: "UPDATE",
+        resource: "admission",
+        resourceId: admission._id,
+        oldValue,
+        newValue: admission.toObject(),
+        ipAddress: requestMeta.ipAddress,
+        userAgent: requestMeta.userAgent,
+      });
+
+      if (doctor?.userId) {
+        await notifyAdmissionEvent({
+          userId: doctor.userId,
+          admissionId: admission._id,
+          action: "discharged",
+        });
+      }
+
+      return admission;
+    } catch (err) {
+      await session.abortTransaction();
+      session.endSession();
+      throw err;
+    }
+  } finally {
+    await releaseLock(lockKey);
   }
 };
 
@@ -376,59 +411,79 @@ export const transferBed = async (id, { newWardId, newBedId, transferReason }, c
     throw new AppError("Cannot transfer a discharged patient", 400, ErrorCodes.VALIDATION_ERROR);
   }
 
-  const targetBed = await Bed.findById(newBedId);
-  if (!targetBed) {
-    throw new AppError("Target bed not found", 404, ErrorCodes.NOT_FOUND);
-  }
-  if (targetBed.status !== "available" && targetBed._id.toString() !== admission.bedId.toString()) {
-    throw new AppError(`Target bed is currently ${targetBed.status}`, 409, ErrorCodes.VALIDATION_ERROR);
+  // Edge Case Guard: Check if transfer target is same bed
+  if (admission.bedId && admission.bedId.toString() === newBedId.toString()) {
+    throw new AppError("Patient is already currently assigned to this bed", 400, ErrorCodes.VALIDATION_ERROR);
   }
 
-  const oldBedId = admission.bedId;
-  const oldValue = admission.toObject();
-
-  const session = await mongoose.startSession();
-  session.startTransaction();
+  const targetLockKey = `hms:lock:bed:${newBedId}`;
+  const hasLock = await acquireLock(targetLockKey, 5);
+  if (!hasLock) {
+    throw new AppError("Target bed is currently being processed for transfer by another user", 409, ErrorCodes.VALIDATION_ERROR);
+  }
 
   try {
-    // 1. Free old bed
-    if (oldBedId && oldBedId.toString() !== newBedId.toString()) {
-      await Bed.findByIdAndUpdate(oldBedId, { status: "available", currentPatientId: null }, { session });
+    const targetBed = await Bed.findById(newBedId);
+    if (!targetBed) {
+      throw new AppError("Target bed not found", 404, ErrorCodes.NOT_FOUND);
+    }
+    if (targetBed.status !== "available") {
+      throw new AppError(`Target bed is currently ${targetBed.status}`, 409, ErrorCodes.VALIDATION_ERROR);
     }
 
-    // 2. Occupy new bed
-    await Bed.findByIdAndUpdate(newBedId, { status: "occupied", currentPatientId: admission.patientId }, { session });
+    const oldBedId = admission.bedId;
+    const oldValue = admission.toObject();
 
-    // 3. Update admission
-    admission.wardId = newWardId || targetBed.wardId;
-    admission.bedId = newBedId;
-    if (transferReason) {
-      admission.notes = `${admission.notes || ""}\n[Bed Transfer ${new Date().toLocaleDateString()}]: ${transferReason}`.trim();
-    }
-    await admission.save({ session });
-
-    await session.commitTransaction();
-    session.endSession();
+    const session = await mongoose.startSession();
+    session.startTransaction();
 
     try {
-      await createAuditLog({
-        userId: currentUser.id,
-        action: "UPDATE",
-        resource: "admission",
-        resourceId: admission._id,
-        oldValue,
-        newValue: admission.toObject(),
-        ipAddress: requestMeta.ipAddress,
-        userAgent: requestMeta.userAgent,
-      });
-    } catch (auditErr) {
-      console.error("Audit log error on bed transfer:", auditErr);
-    }
+      // 1. Free old bed
+      if (oldBedId) {
+        await Bed.findByIdAndUpdate(oldBedId, { status: "available", currentPatientId: null }, { session });
+      }
 
-    return admission;
-  } catch (err) {
-    await session.abortTransaction();
-    session.endSession();
-    throw err;
+      // 2. Occupy new bed
+      await Bed.findByIdAndUpdate(newBedId, { status: "occupied", currentPatientId: admission.patientId }, { session });
+
+      // 3. Update admission
+      admission.wardId = newWardId || targetBed.wardId;
+      admission.bedId = newBedId;
+      if (transferReason) {
+        admission.notes = `${admission.notes || ""}\n[Bed Transfer ${new Date().toLocaleDateString()}]: ${transferReason}`.trim();
+      }
+      await admission.save({ session });
+
+      await session.commitTransaction();
+      session.endSession();
+
+      // Invalidate Redis IPD and Bed Caches
+      await invalidatePattern("hms:beds:*");
+      await invalidatePattern("hms:ipd:*");
+      await invalidatePattern("hms:route:ipd*");
+
+      try {
+        await createAuditLog({
+          userId: currentUser.id,
+          action: "UPDATE",
+          resource: "admission",
+          resourceId: admission._id,
+          oldValue,
+          newValue: admission.toObject(),
+          ipAddress: requestMeta.ipAddress,
+          userAgent: requestMeta.userAgent,
+        });
+      } catch (auditErr) {
+        console.error("Audit log error on bed transfer:", auditErr);
+      }
+
+      return admission;
+    } catch (err) {
+      await session.abortTransaction();
+      session.endSession();
+      throw err;
+    }
+  } finally {
+    await releaseLock(targetLockKey);
   }
 };

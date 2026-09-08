@@ -3,6 +3,8 @@ import InsuranceClaim from "./insuranceClaim.model.js";
 import Patient from "../patients/patient.model.js";
 import AppError from "../../core/errors/AppError.js";
 import { ErrorCodes } from "../../core/errors/errorCodes.js";
+import { getOrSetCache, invalidatePattern, delCache, acquireLock, releaseLock } from "../../utils/redisCache.js";
+import { notifyInsuranceClaimEvent } from "../../utils/notificationDispatcher.js";
 
 // Helper to seed initial DB claims if count is 0
 export const ensureSampleClaims = async () => {
@@ -44,98 +46,6 @@ export const ensureSampleClaims = async () => {
         expectedReviewDate: "07 Jun 2025",
         lastUpdatedDate: "29 May 2025",
       },
-      {
-        claimNumber: "CLM-2025-000102",
-        patientId: patient._id,
-        patientName: "Ramesh Kumar",
-        uhid: "UHID12347",
-        policyNumber: "HDFCERGO/563214",
-        providerName: "HDFC ERGO Health Insurance",
-        tpaName: "Medi Assist TPA Services",
-        invoiceNumber: "INV-2025-000568",
-        admissionType: "Inpatient (IPD)",
-        treatmentDate: "30 May 2025",
-        claimType: "Cashless",
-        claimAmount: 240000,
-        approvedAmount: 0,
-        settledAmount: 0,
-        patientPayable: 240000,
-        status: "Under Review",
-        submittedDate: "30 May 2025",
-        expectedReviewDate: "08 Jun 2025",
-        lastUpdatedDate: "30 May 2025",
-      },
-      {
-        claimNumber: "CLM-2025-000103",
-        patientId: patient._id,
-        patientName: "Anita Sharma",
-        uhid: "UHID12348",
-        policyNumber: "MAXBUPA/774512",
-        providerName: "Max Bupa Health Insurance",
-        tpaName: "Heritage Health TPA",
-        invoiceNumber: "INV-2025-000569",
-        admissionType: "Outpatient (OPD)",
-        treatmentDate: "28 May 2025",
-        claimType: "Reimbursement",
-        claimAmount: 95000,
-        approvedAmount: 0,
-        settledAmount: 0,
-        patientPayable: 95000,
-        status: "Rejected",
-        rejectionReason: "Non-covered procedure per policy terms",
-        submittedDate: "28 May 2025",
-        expectedReviewDate: "05 Jun 2025",
-        lastUpdatedDate: "28 May 2025",
-      },
-      {
-        claimNumber: "CLM-2025-000104",
-        patientId: patient._id,
-        patientName: "Vikram Singh",
-        uhid: "UHID12349",
-        policyNumber: "AB/KA/2025/112233",
-        providerName: "Ayushman Bharat",
-        tpaName: "Direct Settlement",
-        invoiceNumber: "INV-2025-000570",
-        admissionType: "Inpatient (IPD)",
-        treatmentDate: "27 May 2025",
-        claimType: "Cashless",
-        claimAmount: 50000,
-        approvedAmount: 50000,
-        settledAmount: 50000,
-        patientPayable: 0,
-        status: "Settled",
-        settlementDetails: {
-          utrNumber: "UTR99281745",
-          bankName: "HDFC Bank Ltd.",
-          settlementDate: "27 May 2025",
-          settledAmount: 50000,
-          paymentMode: "NEFT",
-        },
-        submittedDate: "27 May 2025",
-        expectedReviewDate: "04 Jun 2025",
-        lastUpdatedDate: "27 May 2025",
-      },
-      {
-        claimNumber: "CLM-2025-000105",
-        patientId: patient._id,
-        patientName: "Sneha Reddy",
-        uhid: "UHID12350",
-        policyNumber: "ICICI Lombard",
-        providerName: "ICICI Lombard General Insurance",
-        tpaName: "Health India TPA",
-        invoiceNumber: "INV-2025-000571",
-        admissionType: "Outpatient (OPD)",
-        treatmentDate: "31 May 2025",
-        claimType: "Cashless",
-        claimAmount: 175000,
-        approvedAmount: 0,
-        settledAmount: 0,
-        patientPayable: 175000,
-        status: "Submitted",
-        submittedDate: "31 May 2025",
-        expectedReviewDate: "09 Jun 2025",
-        lastUpdatedDate: "31 May 2025",
-      },
     ];
 
     await InsuranceClaim.insertMany(sampleClaims);
@@ -159,6 +69,10 @@ export const createClaimService = async (data) => {
   }
 
   const claimAmount = Number(data.claimAmount || data.estimatedAmount || 0);
+
+  if (claimAmount <= 0) {
+    throw new AppError("Claim amount must be greater than 0", 400, ErrorCodes.VALIDATION_ERROR);
+  }
 
   const claim = await InsuranceClaim.create({
     claimNumber,
@@ -187,7 +101,21 @@ export const createClaimService = async (data) => {
     lastUpdatedDate: new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
   });
 
-  return claim;
+  // Invalidate Redis Claim Caches
+  await invalidatePattern("hms:insurance:*");
+  await invalidatePattern("hms:route:insurance*");
+
+    if (claim.patientId) {
+      await notifyInsuranceClaimEvent({
+        userId: claim.patientId,
+        claimId: claim._id,
+        claimNumber: claim.claimNumber,
+        status: claim.status,
+        claimAmount: claim.claimAmount,
+      });
+    }
+
+    return claim;
 };
 
 export const getAllClaimsService = async ({ search, status } = {}) => {
@@ -220,7 +148,12 @@ const findClaimByIdOrNumber = async (idOrNumber) => {
 };
 
 export const getClaimByIdService = async (id) => {
-  const claim = await findClaimByIdOrNumber(id);
+  const { data: claim } = await getOrSetCache(
+    `hms:insurance:claim:${id}`,
+    () => findClaimByIdOrNumber(id),
+    600
+  );
+
   if (!claim) {
     throw new AppError("Claim not found", 404, ErrorCodes.NOT_FOUND);
   }
@@ -236,42 +169,76 @@ export const updateClaimService = async (id, updateData) => {
   Object.assign(claim, updateData);
   claim.lastUpdatedDate = new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
   await claim.save();
+
+  await delCache(`hms:insurance:claim:${id}`);
+  await invalidatePattern("hms:route:insurance*");
+
   return claim;
 };
 
 export const updateClaimStatusService = async (id, payload) => {
-  const claim = await findClaimByIdOrNumber(id);
-  if (!claim) {
-    throw new AppError("Claim not found", 404, ErrorCodes.NOT_FOUND);
+  const lockKey = `hms:lock:claim:${id}`;
+  const hasLock = await acquireLock(lockKey, 5);
+  if (!hasLock) {
+    throw new AppError("Claim status update currently in progress by another TPA officer", 409, ErrorCodes.VALIDATION_ERROR);
   }
 
-  const { status, approvedAmount, rejectionReason, settlementDetails, remarks } = payload;
-  if (status) claim.status = status;
-
-  if (approvedAmount !== undefined) {
-    claim.approvedAmount = Number(approvedAmount);
-    claim.patientPayable = Math.max(0, claim.claimAmount - claim.approvedAmount);
-  }
-
-  if (status === "Settled" || status === "settled") {
-    claim.settledAmount = claim.approvedAmount || claim.claimAmount;
-    if (settlementDetails) {
-      claim.settlementDetails = { ...claim.settlementDetails, ...settlementDetails };
+  try {
+    const claim = await findClaimByIdOrNumber(id);
+    if (!claim) {
+      throw new AppError("Claim not found", 404, ErrorCodes.NOT_FOUND);
     }
-  }
 
-  if (rejectionReason) {
-    claim.rejectionReason = rejectionReason;
-  }
+    const { status, approvedAmount, rejectionReason, settlementDetails, remarks } = payload;
+    if (status) claim.status = status;
 
-  if (remarks) {
-    claim.remarks = remarks;
-  }
+    if (approvedAmount !== undefined) {
+      const appAmt = Number(approvedAmount);
+      // Edge Case Guard: Approved amount cannot exceed total claim amount
+      if (appAmt > claim.claimAmount) {
+        throw new AppError(`Approved amount (₹${appAmt}) cannot exceed total claim amount (₹${claim.claimAmount})`, 400, ErrorCodes.VALIDATION_ERROR);
+      }
+      claim.approvedAmount = appAmt;
+      claim.patientPayable = Math.max(0, claim.claimAmount - claim.approvedAmount);
+    }
 
-  claim.lastUpdatedDate = new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
-  await claim.save();
-  return claim;
+    if (status === "Settled" || status === "settled") {
+      claim.settledAmount = claim.approvedAmount || claim.claimAmount;
+      if (settlementDetails) {
+        claim.settlementDetails = { ...claim.settlementDetails, ...settlementDetails };
+      }
+    }
+
+    if (rejectionReason) {
+      claim.rejectionReason = rejectionReason;
+    }
+
+    if (remarks) {
+      claim.remarks = remarks;
+    }
+
+    claim.lastUpdatedDate = new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+    await claim.save();
+
+    await delCache(`hms:insurance:claim:${id}`);
+    await invalidatePattern("hms:route:insurance*");
+
+    if (claim.patientId) {
+      await notifyInsuranceClaimEvent({
+        userId: claim.patientId,
+        claimId: claim._id,
+        claimNumber: claim.claimNumber,
+        status: claim.status,
+        claimAmount: claim.approvedAmount || claim.claimAmount,
+      });
+    }
+
+    return claim;
+  } finally {
+    await releaseLock(lockKey);
+  }
 };
+
 
 export const addClaimNoteService = async (id, noteText, author = "TPA Admin") => {
   const claim = await findClaimByIdOrNumber(id);

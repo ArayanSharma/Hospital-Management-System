@@ -89,6 +89,38 @@ const userSchema = new mongoose.Schema(
       default: "",
     },
 
+    bloodGroup: {
+      type: String,
+      enum: ["A+", "A-", "B+", "B-", "O+", "O-", "AB+", "AB-", ""],
+      default: "",
+    },
+
+    maritalStatus: {
+      type: String,
+      enum: ["Single", "Married", "Divorced", "Widowed", ""],
+      default: "",
+    },
+
+    nationality: {
+      type: String,
+      default: "Indian",
+    },
+
+    currentAddress: {
+      type: String,
+      default: "",
+    },
+
+    joiningDate: {
+      type: String,
+      default: "",
+    },
+
+    isProfileComplete: {
+      type: Boolean,
+      default: false,
+    },
+
     status: {
       type: String,
       enum: ["active", "inactive", "suspended", "blocked", "deleted"],
@@ -156,7 +188,6 @@ userSchema.methods.isPasswordMatch = async function (enteredPassword) {
   return bcrypt.compare(enteredPassword, this.password);
 };
 
-userSchema.index({ email: 1 });
 userSchema.index({ username: 1 });
 userSchema.index({ status: 1 });
 userSchema.index({ department: 1 });

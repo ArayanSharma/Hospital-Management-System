@@ -6,15 +6,14 @@ import AppError from "../../core/errors/AppError.js";
 import { ErrorCodes } from "../../core/errors/errorCodes.js";
 import { createAuditLog } from "../audit-logs/audit-log.service.js";
 import { isTimeOverlapping } from "../../utils/timeOverlap.js";
-import { createNotification } from "../notifications/notification.service.js";
-import { generateSequentialId } from "../../utils/generateId.js";
+import { notifyAppointmentEvent } from "../../utils/notificationDispatcher.js";
 
 // Helper: conflict check
 const checkDoctorConflict = async (doctorId, appointmentDate, startTime, endTime, excludeId = null) => {
   const query = {
     doctorId,
     appointmentDate,
-    status: { $in: ["scheduled"] },
+    status: { $in: ["scheduled", "checked_in", "in_consultation"] },
   };
 
   if (excludeId) {
@@ -30,7 +29,7 @@ const checkDoctorConflict = async (doctorId, appointmentDate, startTime, endTime
   return hasConflict;
 };
 
-// ---------------- CREATE ----------------
+// ---------------- CREATE WITH REDIS ATOMIC LOCK & EDGE CASE GUARDS ----------------
 export const createAppointment = async (data, currentUser, requestMeta) => {
   const {
     patientId,
@@ -44,66 +43,112 @@ export const createAppointment = async (data, currentUser, requestMeta) => {
     sendNotification,
   } = data;
 
-  const [patient, doctor] = await Promise.all([
-    Patient.findById(patientId),
-    Doctor.findById(doctorId),
-  ]);
-
-  if (!patient || patient.status === "inactive") {
-    throw new AppError("Patient not found", 404, ErrorCodes.NOT_FOUND);
-  }
-  if (!doctor || doctor.status === "inactive") {
-    throw new AppError("Doctor not found or inactive", 404, ErrorCodes.NOT_FOUND);
+  // 1. Time Format Validation (HH:mm)
+  const timeRegex = /^([0-1][0-9]|2[0-3]):[0-5][0-9]$/;
+  if (!timeRegex.test(startTime) || !timeRegex.test(endTime)) {
+    throw new AppError("Invalid time format. Time must be in HH:mm 24-hour format (e.g. 09:30, 14:00)", 400, ErrorCodes.VALIDATION_ERROR);
   }
 
   if (startTime >= endTime) {
-    throw new AppError("End time must be after start time", 400, ErrorCodes.VALIDATION_ERROR);
+    throw new AppError("End time must be strictly after start time", 400, ErrorCodes.VALIDATION_ERROR);
   }
 
-  const hasConflict = await checkDoctorConflict(doctorId, appointmentDate, startTime, endTime);
-  if (hasConflict) {
-    throw new AppError("Doctor already has an appointment in this time slot", 409, ErrorCodes.VALIDATION_ERROR);
+  // 2. Past Date & Past Time Edge Case Guard
+  const apptDateObj = new Date(appointmentDate);
+  if (isNaN(apptDateObj.getTime())) {
+    throw new AppError("Invalid appointment date format", 400, ErrorCodes.VALIDATION_ERROR);
   }
 
-  const dateStr = new Date(appointmentDate).toISOString().slice(0, 10).replace(/-/g, "");
-  const appointmentId = await generateSequentialId(Appointment, `APT-${dateStr}`, "appointmentId");
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const apptDayStart = new Date(apptDateObj.getFullYear(), apptDateObj.getMonth(), apptDateObj.getDate());
 
-  const appointment = await Appointment.create({
-    appointmentId,
-    patientId,
-    doctorId,
-    departmentId: departmentId || doctor.departmentId,
-    appointmentDate,
-    startTime,
-    endTime,
-    reason,
-    notes: notes || null,
-    sendNotification: sendNotification !== false,
-    status: "scheduled",
-  });
+  if (apptDayStart < todayStart) {
+    throw new AppError("Cannot schedule an appointment for a past date", 400, ErrorCodes.VALIDATION_ERROR);
+  }
 
-  await createAuditLog({
-    userId: currentUser.id,
-    action: "CREATE",
-    resource: "appointment",
-    resourceId: appointment._id,
-    newValue: appointment.toObject(),
-    ipAddress: requestMeta.ipAddress,
-    userAgent: requestMeta.userAgent,
-  });
+  if (apptDayStart.getTime() === todayStart.getTime()) {
+    const currentHHMM = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+    if (startTime < currentHHMM) {
+      throw new AppError("Cannot schedule an appointment for a past time slot today", 400, ErrorCodes.VALIDATION_ERROR);
+    }
+  }
 
-  if (sendNotification !== false) {
-    await createNotification({
-      userId: doctor.userId,
-      type: "appointment",
-      title: "New Appointment Scheduled",
-      message: `You have a new appointment on ${new Date(appointmentDate).toLocaleDateString()} at ${startTime}`,
-      metadata: { appointmentId: appointment._id },
+  const formattedDate = apptDateObj.toISOString().slice(0, 10);
+  const lockKey = `hms:lock:appt:${doctorId}:${formattedDate}:${startTime}`;
+
+  // 3. Acquire True Atomic Redis Mutex Lock (SET NX EX)
+  const hasLock = await acquireLock(lockKey, 10);
+  if (!hasLock) {
+    throw new AppError("This slot is currently being processed for booking by another user. Please try again in a few seconds.", 409, ErrorCodes.VALIDATION_ERROR);
+  }
+
+  try {
+    const [patient, doctor] = await Promise.all([
+      Patient.findById(patientId),
+      Doctor.findById(doctorId),
+    ]);
+
+    if (!patient || patient.status === "inactive") {
+      throw new AppError("Patient not found or inactive", 404, ErrorCodes.NOT_FOUND);
+    }
+    if (!doctor || doctor.status === "inactive") {
+      throw new AppError("Doctor not found or inactive", 404, ErrorCodes.NOT_FOUND);
+    }
+
+    const hasConflict = await checkDoctorConflict(doctorId, appointmentDate, startTime, endTime);
+    if (hasConflict) {
+      throw new AppError("Doctor already has a scheduled appointment in this time slot", 409, ErrorCodes.VALIDATION_ERROR);
+    }
+
+    const dateStr = formattedDate.replace(/-/g, "");
+    const appointmentId = await generateSequentialId(Appointment, `APT-${dateStr}`, "appointmentId");
+
+    const appointment = await Appointment.create({
+      appointmentId,
+      patientId,
+      doctorId,
+      departmentId: departmentId || doctor.departmentId,
+      appointmentDate,
+      startTime,
+      endTime,
+      reason,
+      notes: notes || null,
+      sendNotification: sendNotification !== false,
+      status: "scheduled",
     });
-  }
 
-  return appointment;
+    // Invalidate cached stats
+    await delCache("hms:stats:appointments");
+
+    await createAuditLog({
+      userId: currentUser.id,
+      action: "CREATE",
+      resource: "appointment",
+      resourceId: appointment._id,
+      newValue: appointment.toObject(),
+      ipAddress: requestMeta.ipAddress,
+      userAgent: requestMeta.userAgent,
+    });
+
+    if (sendNotification !== false && doctor?.userId) {
+      await notifyAppointmentEvent({
+        userId: doctor.userId,
+        appointmentId: appointment._id,
+        doctorName: currentUser?.name,
+        date: new Date(appointmentDate).toLocaleDateString(),
+        status: "scheduled",
+      });
+    }
+
+    return appointment;
+  } finally {
+    // Release Atomic Redis Lock
+    await releaseLock(lockKey);
+  }
 };
+
+
 
 // ---------------- GET ALL (Dynamic MongoDB Query & Stats) ----------------
 export const getAllAppointments = async ({
@@ -267,6 +312,8 @@ export const updateAppointment = async (id, data, currentUser, requestMeta) => {
 
   await appointment.save();
 
+  await delCache("hms:stats:appointments");
+
   await createAuditLog({
     userId: currentUser.id,
     action: "UPDATE",
@@ -309,6 +356,9 @@ export const changeAppointmentStatus = async (id, newStatus, cancelledReason, cu
   }
 
   await appointment.save();
+
+  await delCache("hms:stats:appointments");
+
 
   // Audit Log & Notification (Safe Execution)
   try {

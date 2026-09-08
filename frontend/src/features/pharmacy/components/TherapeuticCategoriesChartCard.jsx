@@ -68,11 +68,11 @@ export default function TherapeuticCategoriesChartCard({ categories = [], onView
                 fill={slice.color}
                 onMouseEnter={() => setHoveredIdx(slice.idx)}
                 onMouseLeave={() => setHoveredIdx(null)}
-                className="transition-opacity duration-200 cursor-pointer hover:opacity-85 stroke-white stroke-2"
+                className="transition-opacity duration-200 cursor-pointer hover:opacity-85 stroke-white dark:stroke-slate-900 stroke-2"
               />
             ))}
             {/* Center Donut Hole */}
-            <circle cx="50" cy="50" r="24" fill="white" />
+            <circle cx="50" cy="50" r="24" className="fill-white dark:fill-slate-900" />
           </svg>
 
           {/* Hover Tooltip Overlay in Center */}

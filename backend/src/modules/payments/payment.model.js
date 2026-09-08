@@ -57,7 +57,6 @@ const paymentSchema = new mongoose.Schema(
 
 paymentSchema.index({ invoiceId: 1 });
 paymentSchema.index({ patientId: 1, createdAt: -1 });
-paymentSchema.index({ receiptNumber: 1 });
 
 const Payment = mongoose.model("Payment", paymentSchema);
 

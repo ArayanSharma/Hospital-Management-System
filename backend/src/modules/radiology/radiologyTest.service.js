@@ -5,8 +5,9 @@ import AppError from "../../core/errors/AppError.js";
 import { ErrorCodes } from "../../core/errors/errorCodes.js";
 import { createAuditLog } from "../audit-logs/audit-log.service.js";
 import { generateSequentialId } from "../../utils/generateId.js";
+import { getOrSetCache, invalidatePattern, delCache, acquireLock, releaseLock } from "../../utils/redisCache.js";
 
-// ---------------- CREATE RADIOLOGY TEST ----------------
+// ---------------- CREATE RADIOLOGY TEST (With Redis Mutex Lock) ----------------
 export const createRadiologyTest = async (data, currentUser, requestMeta) => {
   const {
     patientId,
@@ -26,57 +27,70 @@ export const createRadiologyTest = async (data, currentUser, requestMeta) => {
     requestedAt,
   } = data;
 
-  const [patient, doctor] = await Promise.all([
-    Patient.findById(patientId),
-    Doctor.findById(doctorId),
-  ]);
-
-  if (!patient || patient.status === "inactive") {
-    throw new AppError("Patient not found", 404, ErrorCodes.NOT_FOUND);
-  }
-  if (!doctor || doctor.status === "inactive") {
-    throw new AppError("Doctor not found or inactive", 404, ErrorCodes.NOT_FOUND);
-  }
-
-  const year = new Date().getFullYear();
-  const orderId = await generateSequentialId(RadiologyTest, `RO-${year}`, "orderId");
-
   const resolvedModality = modality || testType || "X-Ray";
   const resolvedBodyRegion = bodyRegion || bodyPart || "Chest";
 
-  const test = await RadiologyTest.create({
-    orderId,
-    patientId,
-    doctorId,
-    visitId: visitId || null,
-    visitType: visitType || "OPD Visit",
-    modality: resolvedModality,
-    bodyRegion: resolvedBodyRegion,
-    testType: resolvedModality,
-    bodyPart: resolvedBodyRegion,
-    priority: priority || "routine",
-    status: scheduledAt ? "scheduled" : "pending",
-    clinicalInstructions: clinicalInstructions || "",
-    additionalTests: Array.isArray(additionalTests) ? additionalTests : [],
-    scheduledAt: scheduledAt ? new Date(scheduledAt) : null,
-    locationRoom: locationRoom || "Radiology Room 1",
-    attachmentUrl: attachmentUrl || null,
-    requestedAt: requestedAt ? new Date(requestedAt) : new Date(),
-  });
-
-  if (currentUser) {
-    await createAuditLog({
-      userId: currentUser.id,
-      action: "CREATE",
-      resource: "radiology_test",
-      resourceId: test._id,
-      newValue: test.toObject(),
-      ipAddress: requestMeta?.ipAddress || "",
-      userAgent: requestMeta?.userAgent || "",
-    });
+  const lockKey = `hms:lock:radtest:${patientId}:${resolvedModality}`;
+  const hasLock = await acquireLock(lockKey, 5);
+  if (!hasLock) {
+    throw new AppError("A radiology scan request for this patient is currently being processed", 409, ErrorCodes.VALIDATION_ERROR);
   }
 
-  return test;
+  try {
+    const [patient, doctor] = await Promise.all([
+      Patient.findById(patientId),
+      Doctor.findById(doctorId),
+    ]);
+
+    if (!patient || patient.status === "inactive") {
+      throw new AppError("Patient not found or inactive", 404, ErrorCodes.NOT_FOUND);
+    }
+    if (!doctor || doctor.status === "inactive") {
+      throw new AppError("Doctor not found or inactive", 404, ErrorCodes.NOT_FOUND);
+    }
+
+    const year = new Date().getFullYear();
+    const orderId = await generateSequentialId(RadiologyTest, `RO-${year}`, "orderId");
+
+    const test = await RadiologyTest.create({
+      orderId,
+      patientId,
+      doctorId,
+      visitId: visitId || null,
+      visitType: visitType || "OPD Visit",
+      modality: resolvedModality,
+      bodyRegion: resolvedBodyRegion,
+      testType: resolvedModality,
+      bodyPart: resolvedBodyRegion,
+      priority: priority || "routine",
+      status: scheduledAt ? "scheduled" : "pending",
+      clinicalInstructions: clinicalInstructions || "",
+      additionalTests: Array.isArray(additionalTests) ? additionalTests : [],
+      scheduledAt: scheduledAt ? new Date(scheduledAt) : null,
+      locationRoom: locationRoom || "Radiology Room 1",
+      attachmentUrl: attachmentUrl || null,
+      requestedAt: requestedAt ? new Date(requestedAt) : new Date(),
+    });
+
+    await invalidatePattern("hms:radiology:*");
+    await invalidatePattern("hms:route:radiology*");
+
+    if (currentUser) {
+      await createAuditLog({
+        userId: currentUser.id,
+        action: "CREATE",
+        resource: "radiology_test",
+        resourceId: test._id,
+        newValue: test.toObject(),
+        ipAddress: requestMeta?.ipAddress || "",
+        userAgent: requestMeta?.userAgent || "",
+      });
+    }
+
+    return test;
+  } finally {
+    await releaseLock(lockKey);
+  }
 };
 
 // ---------------- GET ALL RADIOLOGY TESTS ----------------
@@ -183,15 +197,20 @@ export const getAllRadiologyTests = async ({
   }
 };
 
-// ---------------- GET BY ID ----------------
+// ---------------- GET BY ID WITH REDIS CACHE ----------------
 export const getRadiologyTestById = async (id) => {
-  const test = await RadiologyTest.findById(id)
-    .populate("patientId", "name patientId phone dateOfBirth gender photoUrl bloodGroup")
-    .populate({
-      path: "doctorId",
-      select: "doctorId specialization photoUrl userId",
-      populate: { path: "userId", select: "name" },
-    });
+  const { data: test } = await getOrSetCache(
+    `hms:radiology:test:${id}`,
+    () =>
+      RadiologyTest.findById(id)
+        .populate("patientId", "name patientId phone dateOfBirth gender photoUrl bloodGroup")
+        .populate({
+          path: "doctorId",
+          select: "doctorId specialization photoUrl userId",
+          populate: { path: "userId", select: "name" },
+        }),
+    600
+  );
 
   if (!test) {
     throw new AppError("Radiology test not found", 404, ErrorCodes.NOT_FOUND);
@@ -208,6 +227,14 @@ export const updateRadiologyTestStatus = async (id, payload, currentUser, reques
   }
 
   const updateData = typeof payload === "string" ? { status: payload } : payload || {};
+
+  if (test.status === "completed" && updateData.status && updateData.status !== "completed") {
+    throw new AppError("Cannot change status of a completed radiology test", 400, ErrorCodes.VALIDATION_ERROR);
+  }
+  if (test.status === "cancelled" && updateData.status && updateData.status !== "cancelled") {
+    throw new AppError("Cannot change status of a cancelled radiology test", 400, ErrorCodes.VALIDATION_ERROR);
+  }
+
   const oldValue = test.toObject();
 
   if (updateData.status) test.status = updateData.status;
@@ -229,6 +256,10 @@ export const updateRadiologyTestStatus = async (id, payload, currentUser, reques
   if (updateData.notes !== undefined) test.notes = updateData.notes;
 
   await test.save();
+
+  await delCache(`hms:radiology:test:${id}`);
+  await invalidatePattern("hms:radiology:*");
+  await invalidatePattern("hms:route:radiology*");
 
   if (currentUser) {
     await createAuditLog({
@@ -254,6 +285,10 @@ export const deleteRadiologyTest = async (id, currentUser, requestMeta) => {
   }
 
   await RadiologyTest.findByIdAndDelete(id);
+
+  await delCache(`hms:radiology:test:${id}`);
+  await invalidatePattern("hms:radiology:*");
+  await invalidatePattern("hms:route:radiology*");
 
   if (currentUser) {
     await createAuditLog({

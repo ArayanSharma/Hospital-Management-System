@@ -77,17 +77,17 @@ export default function Sidebar() {
   );
 
   return (
-    <aside className="w-64 bg-white border-r border-slate-200/90 flex flex-col shrink-0 min-h-screen select-none">
+    <aside className="w-64 bg-white dark:bg-slate-900 border-r border-slate-200/90 dark:border-slate-800 flex flex-col shrink-0 min-h-screen select-none transition-colors duration-300">
       {/* Brand Header */}
-      <div className="flex items-center gap-3 px-6 py-5 border-b border-slate-100">
+      <div className="flex items-center gap-3 px-6 py-5 border-b border-slate-100 dark:border-slate-800">
         <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-sm shadow-blue-500/20 shrink-0">
           <Plus className="w-5 h-5 stroke-[2.5]" />
         </div>
         <div className="min-w-0">
-          <h1 className="text-slate-900 font-bold text-base leading-tight tracking-tight">
+          <h1 className="text-slate-900 dark:text-slate-100 font-bold text-base leading-tight tracking-tight">
             CityCare
           </h1>
-          <p className="text-xs font-medium text-slate-400 leading-none mt-0.5">
+          <p className="text-xs font-medium text-slate-400 dark:text-slate-400 leading-none mt-0.5">
             Hospital
           </p>
         </div>
@@ -104,7 +104,7 @@ export default function Sidebar() {
 
           return (
             <div key={section.title} className="space-y-1">
-              <p className="px-3 text-[10px] font-extrabold uppercase tracking-wider text-slate-400 mb-1.5">
+              <p className="px-3 text-[10px] font-extrabold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-1.5">
                 {section.title}
               </p>
               {sectionItems.map((item) => {
@@ -129,8 +129,8 @@ export default function Sidebar() {
                           isCustomActive
                             ? "bg-blue-600 text-white shadow-sm shadow-blue-500/25 font-semibold"
                             : isParentActive
-                            ? "bg-blue-50 text-blue-600 font-semibold"
-                            : "text-slate-600 hover:bg-slate-100/80 hover:text-slate-900"
+                            ? "bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 font-semibold"
+                            : "text-slate-600 dark:text-slate-300 hover:bg-slate-100/80 dark:hover:bg-slate-800/80 hover:text-slate-900 dark:hover:text-slate-100"
                         }`;
                       }}
                     >
@@ -145,8 +145,8 @@ export default function Sidebar() {
                                   isCustomActive
                                     ? "text-white"
                                     : isParentActive
-                                    ? "text-blue-600"
-                                    : "text-slate-400 group-hover:text-slate-700"
+                                    ? "text-blue-600 dark:text-blue-400"
+                                    : "text-slate-400 dark:text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-200"
                                 }`}
                               />
                               <span className="truncate">{item.label}</span>
@@ -157,13 +157,13 @@ export default function Sidebar() {
                                 <button
                                   type="button"
                                   onClick={(e) => toggleSubMenu(item.path, e)}
-                                  className="p-1 hover:bg-black/10 rounded-md transition-colors cursor-pointer"
+                                  className="p-1 hover:bg-black/10 dark:hover:bg-white/10 rounded-md transition-colors cursor-pointer"
                                   title={isSubMenuOpen ? "Collapse menu" : "Expand menu"}
                                 >
                                   <ChevronDown
                                     className={`w-3.5 h-3.5 transition-transform duration-200 ${
                                       isSubMenuOpen ? "rotate-180" : ""
-                                    } ${isCustomActive ? "text-white/90" : "text-slate-500"}`}
+                                    } ${isCustomActive ? "text-white/90" : "text-slate-500 dark:text-slate-400"}`}
                                   />
                                 </button>
                               )}
@@ -199,13 +199,13 @@ export default function Sidebar() {
                               end={sub.path === "/pharmacy"}
                               className={`flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-[11.5px] font-medium transition-all duration-150 ${
                                 isSubActive
-                                  ? "bg-blue-50 text-blue-600 font-semibold"
-                                  : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
+                                  ? "bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 font-semibold"
+                                  : "text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-200"
                               }`}
                             >
                               <SubIcon
                                 className={`w-3.5 h-3.5 shrink-0 ${
-                                  isSubActive ? "text-blue-600" : "text-slate-400"
+                                  isSubActive ? "text-blue-600 dark:text-blue-400" : "text-slate-400 dark:text-slate-400"
                                 }`}
                               />
                               <span>{sub.label}</span>
@@ -223,14 +223,14 @@ export default function Sidebar() {
       </nav>
 
       {/* Support Card */}
-      <div className="p-4 m-3 bg-gradient-to-b from-blue-50/90 to-blue-50/40 border border-blue-100 rounded-2xl">
+      <div className="p-4 m-3 bg-gradient-to-b from-blue-50/90 to-blue-50/40 dark:from-slate-800/90 dark:to-slate-800/40 border border-blue-100 dark:border-slate-700/60 rounded-2xl">
         <div className="flex items-start gap-3">
-          <div className="p-2 rounded-xl bg-blue-100 text-blue-600 shrink-0">
+          <div className="p-2 rounded-xl bg-blue-100 dark:bg-slate-700 text-blue-600 dark:text-blue-400 shrink-0">
             <Headset className="w-5 h-5" />
           </div>
           <div>
-            <h4 className="text-xs font-bold text-slate-900">Need Help?</h4>
-            <p className="text-[11px] text-slate-500 leading-snug mt-0.5">
+            <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100">Need Help?</h4>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-snug mt-0.5">
               We're here to help you
             </p>
           </div>
@@ -244,7 +244,7 @@ export default function Sidebar() {
       </div>
 
       {/* Footer */}
-      <div className="px-5 py-3 text-[11px] text-slate-400 border-t border-slate-100">
+      <div className="px-5 py-3 text-[11px] text-slate-400 dark:text-slate-500 border-t border-slate-100 dark:border-slate-800">
         © 2025 CityCare Hospital<br />All rights reserved.
       </div>
     </aside>

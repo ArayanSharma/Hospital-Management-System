@@ -3,13 +3,21 @@ import Doctor from "../doctors/doctor.model.js";
 import AppError from "../../core/errors/AppError.js";
 import { ErrorCodes } from "../../core/errors/errorCodes.js";
 import { createAuditLog } from "../audit-logs/audit-log.service.js";
+import { getOrSetCache, invalidatePattern } from "../../utils/redisCache.js";
 
 // ---------------- CREATE DEPARTMENT ----------------
 export const createDepartment = async (data, currentUser, requestMeta) => {
   const { name, code, description, headDoctorId, status } = data;
 
+  const trimmedName = name?.trim();
+  const trimmedCode = code?.toUpperCase().trim();
+
+  // Edge Case: Case-insensitive unique check for Name and Code
   const existing = await Department.findOne({
-    $or: [{ name }, { code: code.toUpperCase() }],
+    $or: [
+      { name: new RegExp(`^${trimmedName}$`, "i") },
+      { code: trimmedCode },
+    ],
   });
   if (existing) {
     throw new AppError(
@@ -19,10 +27,18 @@ export const createDepartment = async (data, currentUser, requestMeta) => {
     );
   }
 
+  // Edge Case: Validate HOD Doctor if provided
+  if (headDoctorId) {
+    const headDoctor = await Doctor.findById(headDoctorId);
+    if (!headDoctor || headDoctor.status === "inactive") {
+      throw new AppError("Assigned Head Doctor not found or inactive", 404, ErrorCodes.NOT_FOUND);
+    }
+  }
+
   const department = await Department.create({
-    name,
-    code: code.toUpperCase(),
-    description,
+    name: trimmedName,
+    code: trimmedCode,
+    description: description?.trim() || "",
     headDoctorId: headDoctorId || null,
     status: status || "active",
   });
@@ -30,6 +46,10 @@ export const createDepartment = async (data, currentUser, requestMeta) => {
   if (headDoctorId) {
     await Doctor.findByIdAndUpdate(headDoctorId, { departmentId: department._id });
   }
+
+  // Invalidate Department Redis Caches
+  await invalidatePattern("hms:dept:*");
+  await invalidatePattern("hms:route:depts*");
 
   await createAuditLog({
     userId: currentUser.id,
@@ -44,7 +64,7 @@ export const createDepartment = async (data, currentUser, requestMeta) => {
   return department;
 };
 
-// ---------------- GET ALL (100% Pure MongoDB Dynamic Query) ----------------
+// ---------------- GET ALL DEPARTMENTS ----------------
 export const getAllDepartments = async ({ page = 1, limit = 10, status, search, hodDoctorId }) => {
   const query = {};
   if (status && status !== "all") query.status = status;
@@ -120,18 +140,34 @@ export const updateDepartment = async (id, data, currentUser, requestMeta) => {
   const oldValue = department.toObject();
   const { name, description, headDoctorId, status, code } = data;
 
-  if (name !== undefined) department.name = name;
-  if (code !== undefined) department.code = code.toUpperCase();
-  if (description !== undefined) department.description = description;
+  // Edge Case Guard: Check if status is set to inactive while active doctors are assigned
+  if (status === "inactive" && department.status !== "inactive") {
+    const assignedDoctorCount = await Doctor.countDocuments({ departmentId: id, status: "active" });
+    if (assignedDoctorCount > 0) {
+      throw new AppError(`Cannot deactivate department with ${assignedDoctorCount} active doctors assigned. Reassign doctors first.`, 400, ErrorCodes.VALIDATION_ERROR);
+    }
+  }
+
+  if (name !== undefined) department.name = name.trim();
+  if (code !== undefined) department.code = code.toUpperCase().trim();
+  if (description !== undefined) department.description = description.trim();
   if (headDoctorId !== undefined) {
-    department.headDoctorId = headDoctorId || null;
     if (headDoctorId) {
+      const headDoctor = await Doctor.findById(headDoctorId);
+      if (!headDoctor || headDoctor.status === "inactive") {
+        throw new AppError("Assigned Head Doctor not found or inactive", 404, ErrorCodes.NOT_FOUND);
+      }
       await Doctor.findByIdAndUpdate(headDoctorId, { departmentId: department._id });
     }
+    department.headDoctorId = headDoctorId || null;
   }
   if (status !== undefined) department.status = status;
 
   await department.save();
+
+  // Invalidate Department Redis Caches
+  await invalidatePattern("hms:dept:*");
+  await invalidatePattern("hms:route:depts*");
 
   await createAuditLog({
     userId: currentUser.id,
@@ -153,10 +189,20 @@ export const deleteDepartment = async (id, currentUser, requestMeta) => {
     throw new AppError("Department not found", 404, ErrorCodes.NOT_FOUND);
   }
 
+  // Edge Case Guard: Check active doctors before deactivation
+  const assignedDoctorCount = await Doctor.countDocuments({ departmentId: id, status: "active" });
+  if (assignedDoctorCount > 0) {
+    throw new AppError(`Cannot deactivate department with ${assignedDoctorCount} active doctors assigned. Reassign doctors first.`, 400, ErrorCodes.VALIDATION_ERROR);
+  }
+
   const oldValue = department.toObject();
 
   department.status = "inactive";
   await department.save();
+
+  // Invalidate Department Redis Caches
+  await invalidatePattern("hms:dept:*");
+  await invalidatePattern("hms:route:depts*");
 
   await createAuditLog({
     userId: currentUser.id,

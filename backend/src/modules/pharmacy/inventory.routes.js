@@ -7,14 +7,16 @@ import {
   restoreBatchController,
   quarantineBatchController,
 } from "./inventory.controller.js";
+import { authenticate } from "../../middleware/auth.middleware.js";
+import { routeCache } from "../../middleware/cache.middleware.js";
 
 const router = express.Router();
 
-router.patch("/:id/adjust", adjustStockController);
-router.get("/:id/history", getStockHistoryController);
-router.patch("/:id/reorder-level", setReorderLevelController);
-router.patch("/:id/archive", archiveBatchController);
-router.patch("/:id/restore", restoreBatchController);
-router.patch("/:id/quarantine", quarantineBatchController);
+router.patch("/:id/adjust", authenticate, adjustStockController);
+router.get("/:id/history", authenticate, routeCache(60, "hms:route:inventory", true), getStockHistoryController);
+router.patch("/:id/reorder-level", authenticate, setReorderLevelController);
+router.patch("/:id/archive", authenticate, archiveBatchController);
+router.patch("/:id/restore", authenticate, restoreBatchController);
+router.patch("/:id/quarantine", authenticate, quarantineBatchController);
 
 export default router;

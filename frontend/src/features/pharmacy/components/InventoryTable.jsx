@@ -17,6 +17,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 import TableSkeleton from "../../../components/ui/TableSkeleton.jsx";
+import CustomDropdown from "../../../components/ui/CustomDropdown.jsx";
 
 function InventoryActionsDropdown({
   row,

@@ -22,9 +22,27 @@ export const useNotifications = () => {
 
   useEffect(() => {
     fetchNotifications();
-    // Poll every 60s — naye notifications ke liye (simple approach, WebSocket ke bina)
+    
+    // Listen for realtime Socket.io notification event
+    const handleNewNotification = (e) => {
+      const newNotif = e.detail;
+      if (newNotif) {
+        setNotifications((prev) => [newNotif, ...prev.slice(0, 9)]);
+        setUnreadCount((prev) => prev + 1);
+      }
+    };
+
+    window.addEventListener("hms:notification:new", handleNewNotification);
+    window.addEventListener("hms:notification:sync", fetchNotifications);
+
+    // Fallback polling every 60s
     const interval = setInterval(fetchNotifications, 60000);
-    return () => clearInterval(interval);
+
+    return () => {
+      window.removeEventListener("hms:notification:new", handleNewNotification);
+      window.removeEventListener("hms:notification:sync", fetchNotifications);
+      clearInterval(interval);
+    };
   }, [fetchNotifications]);
 
   const markRead = async (id) => {

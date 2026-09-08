@@ -3,6 +3,7 @@ import InsurancePolicy from "./insurancePolicy.model.js";
 import Patient from "../patients/patient.model.js";
 import AppError from "../../core/errors/AppError.js";
 import { ErrorCodes } from "../../core/errors/errorCodes.js";
+import { getOrSetCache, invalidatePattern, delCache } from "../../utils/redisCache.js";
 
 // Helper to seed initial DB policies if count is 0
 export const ensureSamplePolicies = async () => {
@@ -61,44 +62,6 @@ export const ensureSamplePolicies = async () => {
         status: "Active",
         relationship: "Self",
       },
-      {
-        patientId: patient._id,
-        patientName: "Anita Sharma",
-        uhid: "UHID12348",
-        dateOfBirth: "05 May 1978",
-        mobileNumber: "9988776655",
-        providerName: "Max Bupa Health",
-        policyNumber: "MAXBUPA/774512",
-        policyType: "Senior Citizen",
-        tpaName: "Heritage Health TPA",
-        coverageAmount: 750000,
-        sumInsured: 750000,
-        currency: "INR",
-        validFrom: new Date("2024-02-10"),
-        validUntil: new Date("2025-02-09"),
-        renewalDate: new Date("2025-02-10"),
-        status: "Expired",
-        relationship: "Self",
-      },
-      {
-        patientId: patient._id,
-        patientName: "Vikram Singh",
-        uhid: "UHID12349",
-        dateOfBirth: "22 Nov 1992",
-        mobileNumber: "9811223344",
-        providerName: "Ayushman Bharat",
-        policyNumber: "AB/KA/2025/112233",
-        policyType: "Government Scheme",
-        tpaName: "Direct Settlement",
-        coverageAmount: 500000,
-        sumInsured: 500000,
-        currency: "INR",
-        validFrom: new Date("2025-04-01"),
-        validUntil: new Date("2026-03-31"),
-        renewalDate: new Date("2026-04-01"),
-        status: "Active",
-        relationship: "Self",
-      },
     ];
 
     await InsurancePolicy.insertMany(samplePolicies);
@@ -109,7 +72,11 @@ export const ensureSamplePolicies = async () => {
 
 export const createPolicyService = async (data) => {
   await ensureSamplePolicies();
-  const existing = await InsurancePolicy.findOne({ policyNumber: data.policyNumber });
+  const trimmedPolicyNumber = data.policyNumber?.trim();
+
+  const existing = await InsurancePolicy.findOne({
+    policyNumber: new RegExp(`^${trimmedPolicyNumber}$`, "i"),
+  });
   if (existing) {
     throw new AppError("Policy number already exists.", 400, ErrorCodes.VALIDATION_ERROR);
   }
@@ -122,6 +89,13 @@ export const createPolicyService = async (data) => {
     patient = await Patient.findOne({ name: new RegExp(data.patientName, "i") });
   }
 
+  const validFromDate = new Date(data.validFrom);
+  const validUntilDate = new Date(data.validUntil);
+
+  if (validFromDate >= validUntilDate) {
+    throw new AppError("Policy validUntil date must be strictly after validFrom date", 400, ErrorCodes.VALIDATION_ERROR);
+  }
+
   const policy = await InsurancePolicy.create({
     patientId: patient ? patient._id : null,
     patientName: data.patientName || (patient ? patient.name : "Patient"),
@@ -129,15 +103,15 @@ export const createPolicyService = async (data) => {
     dateOfBirth: data.dateOfBirth || "16 Aug 1990",
     mobileNumber: data.mobileNumber || "9876543210",
     providerName: data.providerName || "Star Health & Allied Insurance Co. Ltd.",
-    policyNumber: data.policyNumber,
+    policyNumber: trimmedPolicyNumber,
     memberId: data.memberId || "",
     policyType: data.policyType || "Family Floater",
     tpaName: data.tpaName || "Health India TPA Services Pvt. Ltd.",
-    coverageAmount: Number(data.coverageAmount || 0),
-    sumInsured: Number(data.sumInsured || data.coverageAmount || 0),
+    coverageAmount: Math.max(0, Number(data.coverageAmount || 0)),
+    sumInsured: Math.max(0, Number(data.sumInsured || data.coverageAmount || 0)),
     currency: data.currency || "INR",
-    validFrom: new Date(data.validFrom),
-    validUntil: new Date(data.validUntil),
+    validFrom: validFromDate,
+    validUntil: validUntilDate,
     renewalDate: data.renewalDate ? new Date(data.renewalDate) : null,
     status: data.status || "Active",
     employer: data.employer || "",
@@ -145,6 +119,10 @@ export const createPolicyService = async (data) => {
     notes: data.notes || "",
     documents: data.documents || {},
   });
+
+  // Invalidate Redis Insurance Caches
+  await invalidatePattern("hms:insurance:*");
+  await invalidatePattern("hms:route:insurance*");
 
   return policy;
 };
@@ -178,7 +156,12 @@ const findPolicyByIdOrNumber = async (idOrNumber) => {
 };
 
 export const getPolicyByIdService = async (id) => {
-  const policy = await findPolicyByIdOrNumber(id);
+  const { data: policy } = await getOrSetCache(
+    `hms:insurance:policy:${id}`,
+    () => findPolicyByIdOrNumber(id),
+    600
+  );
+
   if (!policy) {
     throw new AppError("Policy not found", 404, ErrorCodes.NOT_FOUND);
   }
@@ -202,6 +185,11 @@ export const updatePolicyService = async (id, data, currentUser) => {
 
   Object.assign(policy, data);
   await policy.save();
+
+  // Invalidate Redis Caches
+  await delCache(`hms:insurance:policy:${id}`);
+  await invalidatePattern("hms:route:insurance*");
+
   return policy;
 };
 
@@ -215,6 +203,10 @@ export const togglePolicyStatusService = async (id) => {
   const nextStatus = currentStatus === "active" ? "Inactive" : "Active";
   policy.status = nextStatus;
   await policy.save();
+
+  await delCache(`hms:insurance:policy:${id}`);
+  await invalidatePattern("hms:route:insurance*");
+
   return { message: `Policy status updated to ${nextStatus}`, policy };
 };
 
@@ -228,6 +220,10 @@ export const togglePolicyArchiveService = async (id) => {
   const nextStatus = isArchived ? "Active" : "Archived";
   policy.status = nextStatus;
   await policy.save();
+
+  await delCache(`hms:insurance:policy:${id}`);
+  await invalidatePattern("hms:route:insurance*");
+
   return { message: `Policy ${isArchived ? "restored" : "archived"} successfully`, policy };
 };
 
@@ -238,6 +234,10 @@ export const deletePolicyService = async (id) => {
   }
   policy.status = "Inactive";
   await policy.save();
+
+  await delCache(`hms:insurance:policy:${id}`);
+  await invalidatePattern("hms:route:insurance*");
+
   return { message: "Policy deactivated successfully" };
 };
 

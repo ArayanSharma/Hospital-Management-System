@@ -8,6 +8,7 @@ import {
   updateRolePermissionsSchema,
   roleIdParamSchema,
 } from "./role.validation.js";
+import { routeCache } from "../../middleware/cache.middleware.js";
 
 const router = Router();
 
@@ -18,12 +19,13 @@ router.post(
   validate(createRoleSchema),
   create
 );
-router.get("/", authenticate, checkPermission("role:read"), getAll);
+router.get("/", authenticate, checkPermission("role:read"), routeCache(60, "hms:route:role", true), getAll);
 router.get(
   "/:id",
   authenticate,
   checkPermission("role:read"),
   validate(roleIdParamSchema),
+  routeCache(300, "hms:route:role", true),
   getById
 );
 router.patch(

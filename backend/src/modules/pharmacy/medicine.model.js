@@ -139,6 +139,9 @@ const medicineSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+medicineSchema.index({ category: 1, status: 1 });
+medicineSchema.index({ status: 1, availableStock: 1 });
+
 const Medicine = mongoose.model("Medicine", medicineSchema);
 
 export default Medicine;

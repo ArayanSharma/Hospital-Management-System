@@ -4,6 +4,8 @@ import { authenticate } from "../../middleware/auth.middleware.js";
 import { checkPermission } from "../../middleware/permission.middleware.js";
 import { validate } from "../../middleware/validation.middleware.js";
 import { createPatientSchema, updatePatientSchema } from "./patient.validation.js";
+import { routeCache } from "../../middleware/cache.middleware.js";
+import { sensitiveRateLimiter } from "../../middleware/rateLimiter.middleware.js";
 
 const router = Router();
 
@@ -14,9 +16,9 @@ router.post(
   validate(createPatientSchema),
   create
 );
-router.get("/export", authenticate, checkPermission("patient:read"), exportCSV);
-router.get("/", authenticate, checkPermission("patient:read"), getAll);
-router.get("/:id", authenticate, checkPermission("patient:read"), getById);
+router.get("/export", authenticate, checkPermission("patient:read"), sensitiveRateLimiter, exportCSV);
+router.get("/", authenticate, checkPermission("patient:read"), routeCache(60, "hms:route:patient", true), getAll);
+router.get("/:id", authenticate, checkPermission("patient:read"), routeCache(300, "hms:route:patient", true), getById);
 router.patch(
   "/:id",
   authenticate,

@@ -75,6 +75,8 @@ const opdVisitSchema = new mongoose.Schema(
 
 opdVisitSchema.index({ patientId: 1, visitDate: -1 });
 opdVisitSchema.index({ doctorId: 1, visitDate: -1 });
+opdVisitSchema.index({ doctorId: 1, status: 1, visitDate: -1 });
+opdVisitSchema.index({ status: 1, visitDate: -1 });
 
 const OPDVisit = mongoose.model("OPDVisit", opdVisitSchema);
 

@@ -11,12 +11,13 @@ import {
 } from "./supplier.controller.js";
 import { authenticate } from "../../middleware/auth.middleware.js";
 import { checkPermission } from "../../middleware/permission.middleware.js";
+import { routeCache } from "../../middleware/cache.middleware.js";
 
 const router = Router();
 
 router.post("/", authenticate, checkPermission("supplier:create"), create);
-router.get("/", authenticate, checkPermission("supplier:read"), getAll);
-router.get("/:id", authenticate, checkPermission("supplier:read"), getById);
+router.get("/", authenticate, checkPermission("supplier:read"), routeCache(60, "hms:route:supplier", true), getAll);
+router.get("/:id", authenticate, checkPermission("supplier:read"), routeCache(300, "hms:route:supplier", true), getById);
 router.put("/:id", authenticate, checkPermission("supplier:update"), update);
 router.delete("/:id", authenticate, checkPermission("supplier:delete"), remove);
 

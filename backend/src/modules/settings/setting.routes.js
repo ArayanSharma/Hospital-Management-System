@@ -5,10 +5,11 @@ import { checkPermission } from "../../middleware/permission.middleware.js";
 import { validate } from "../../middleware/validation.middleware.js";
 import { updateSettingSchema } from "./setting.validation.js";
 import { uploadHospitalLogo, handleUploadError } from "../../middleware/upload.middleware.js";
+import { routeCache } from "../../middleware/cache.middleware.js";
 
 const router = Router();
 
-router.get("/", authenticate, checkPermission("setting:read"), get);
+router.get("/", authenticate, checkPermission("setting:read"), routeCache(3600, "hms:route:setting", true), get);
 router.patch("/", authenticate, checkPermission("setting:update"), validate(updateSettingSchema), update);
 router.patch(
   "/logo",

@@ -4,6 +4,7 @@ import { authenticate } from "../../middleware/auth.middleware.js";
 import { checkPermission } from "../../middleware/permission.middleware.js";
 import { validate } from "../../middleware/validation.middleware.js";
 import { createRadiologyTestSchema, updateRadiologyTestStatusSchema } from "./radiology.validation.js";
+import { routeCache } from "../../middleware/cache.middleware.js";
 
 const router = Router();
 
@@ -14,8 +15,8 @@ router.post(
   validate(createRadiologyTestSchema),
   create
 );
-router.get("/", authenticate, checkPermission("radiology_test:read"), getAll);
-router.get("/:id", authenticate, checkPermission("radiology_test:read"), getById);
+router.get("/", authenticate, checkPermission("radiology_test:read"), routeCache(60, "hms:route:radiology", true), getAll);
+router.get("/:id", authenticate, checkPermission("radiology_test:read"), routeCache(300, "hms:route:radiology", true), getById);
 router.patch(
   "/:id",
   authenticate,

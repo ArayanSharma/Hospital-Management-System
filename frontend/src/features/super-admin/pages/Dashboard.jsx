@@ -256,88 +256,55 @@ export default function Dashboard() {
     RECEPTIONIST: "#EC4899",
     SUPER_ADMIN: "#8B5CF6",
     ADMIN: "#64748B",
+    PATIENT: "#3B82F6",
+    ACCOUNTANT: "#10B981",
   };
 
   const dbRoles = stats?.users?.byRole || [];
-  const totalUsersCount = stats?.users?.total || 1;
+  const totalUsersCount = stats?.users?.total || 0;
 
-  const staffDistribution = dbRoles.length > 0
-    ? dbRoles.map((r) => ({
-        name: r._id || "Other",
-        value: r.count,
-        percentage: `${Math.round((r.count / totalUsersCount) * 100)}%`,
-        color: roleColors[r._id] || "#3B82F6",
-      }))
-    : [
-        { name: "Doctors", value: 128, percentage: "27%", color: "#2563EB" },
-        { name: "Nurses", value: 185, percentage: "39%", color: "#10B981" },
-        { name: "Pharmacists", value: 45, percentage: "10%", color: "#F59E0B" },
-        { name: "Lab Techs", value: 56, percentage: "12%", color: "#06B6D4" },
-        { name: "Receptionists", value: 54, percentage: "12%", color: "#EC4899" },
-      ];
+  const staffDistribution = dbRoles.map((r) => ({
+    name: r._id ? String(r._id).toUpperCase() : "Other",
+    value: r.count,
+    percentage: totalUsersCount > 0 ? `${Math.round((r.count / totalUsersCount) * 100)}%` : "0%",
+    color: roleColors[String(r._id).toUpperCase()] || "#3B82F6",
+  }));
 
   // 3. Revenue Breakdown Data
   const dbRevenueMethods = stats?.finance?.revenueByMethod || [];
-  const revenueBreakdown = dbRevenueMethods.length > 0
-    ? dbRevenueMethods.map((m, i) => ({
-        name: m._id || "Other",
-        percentage: 25,
-        amount: `₹ ${Number(m.total).toLocaleString()}`,
-        color: ["#10B981", "#3B82F6", "#8B5CF6", "#F59E0B"][i % 4],
-      }))
-    : [
-        { name: "Cash", percentage: 35, amount: "₹ 8,69,862", color: "#10B981" },
-        { name: "Card", percentage: 25, amount: "₹ 6,21,330", color: "#3B82F6" },
-        { name: "UPI", percentage: 30, amount: "₹ 7,45,596", color: "#8B5CF6" },
-        { name: "NetBanking", percentage: 10, amount: "₹ 2,48,532", color: "#F59E0B" },
-      ];
+  const revenueBreakdown = dbRevenueMethods.map((m, i) => {
+    const totalRev = Number(monthlyRevenue) || 0;
+    const methodTotal = Number(m.total) || 0;
+    const pct = totalRev > 0 ? Math.round((methodTotal / totalRev) * 100) : 0;
+    return {
+      name: m._id ? String(m._id).toUpperCase() : "Other",
+      percentage: pct,
+      amount: `₹ ${methodTotal.toLocaleString()}`,
+      color: ["#10B981", "#3B82F6", "#8B5CF6", "#F59E0B", "#EC4899"][i % 5],
+    };
+  });
 
   // 4. Ward & Bed Occupancy List from DB
   const dbOccupancy = stats?.occupancy || [];
-  const wardOccupancy = dbOccupancy.length > 0
-    ? dbOccupancy.map((w, i) => ({
-        name: w._id || "Ward",
-        occupied: w.occupied,
-        total: w.capacity || 20,
-        percentage: Math.round((w.occupied / (w.capacity || 20)) * 100),
-        color: ["bg-emerald-500", "bg-blue-500", "bg-purple-500", "bg-amber-500"][i % 4],
-      }))
-    : [
-        { name: "ICU", occupied: 8, total: 10, percentage: 80, color: "bg-emerald-500" },
-        { name: "General Ward", occupied: 15, total: 20, percentage: 75, color: "bg-blue-500" },
-        { name: "Private Room", occupied: 12, total: 15, percentage: 80, color: "bg-purple-500" },
-        { name: "Pediatrics", occupied: 7, total: 10, percentage: 70, color: "bg-amber-500" },
-      ];
+  const wardOccupancy = dbOccupancy.map((w, i) => ({
+    name: w._id || "Ward",
+    occupied: w.occupied || 0,
+    total: w.capacity || 20,
+    percentage: w.capacity ? Math.round((w.occupied / w.capacity) * 100) : 0,
+    color: ["bg-emerald-500", "bg-blue-500", "bg-purple-500", "bg-amber-500"][i % 4],
+  }));
 
   // 5. Top Selling Medicines from DB
   const dbTopMeds = stats?.pharmacy?.topMedicines || [];
-  const topMedicines = dbTopMeds.length > 0
-    ? dbTopMeds.map((m, i) => ({
-        id: i + 1,
-        name: m.name,
-        revenue: `₹ ${Number(m.totalRevenue).toLocaleString()}`,
-      }))
-    : [
-        { id: 1, name: "Paracetamol 650mg", revenue: "₹ 45,230" },
-        { id: 2, name: "Amoxicillin 500mg", revenue: "₹ 38,920" },
-        { id: 3, name: "Azithromycin 250mg", revenue: "₹ 32,550" },
-        { id: 4, name: "Pantoprazole 40mg", revenue: "₹ 28,430" },
-        { id: 5, name: "Dolo 650mg", revenue: "₹ 25,610" },
-      ];
+  const topMedicines = dbTopMeds.map((m, i) => ({
+    id: i + 1,
+    name: m.name || "Medicine",
+    revenue: `₹ ${Number(m.totalRevenue || 0).toLocaleString()}`,
+  }));
 
   // 6. Patient Registration Trend Data from DB
   const dbTrend = stats?.trends?.patientRegistration || [];
-  const patientTrendData = dbTrend.length > 0
-    ? dbTrend.map((t) => ({ date: t._id, count: t.count }))
-    : [
-        { date: "20 Aug", count: 120 },
-        { date: "21 Aug", count: 132 },
-        { date: "22 Aug", count: 101 },
-        { date: "23 Aug", count: 143 },
-        { date: "24 Aug", count: 160 },
-        { date: "25 Aug", count: 174 },
-        { date: "26 Aug", count: 152 },
-      ];
+  const patientTrendData = dbTrend.map((t) => ({ date: t._id, count: t.count }));
 
   // 7. Appointment Status Donut Data from DB
   const dbApptStatus = stats?.appointments?.statusBreakdown || [];
@@ -346,78 +313,37 @@ export default function Dashboard() {
     completed: "#10B981",
     cancelled: "#EF4444",
     "no-show": "#F59E0B",
+    in_consultation: "#8B5CF6",
+    checked_in: "#06B6D4",
   };
 
-  const appointmentStatus = dbApptStatus.length > 0
-    ? dbApptStatus.map((s) => ({
-        name: s._id ? s._id.charAt(0).toUpperCase() + s._id.slice(1) : "Scheduled",
-        value: s.count,
-        percentage: `${Math.round((s.count / (todayAppointments || 1)) * 100)}%`,
-        color: statusColors[s._id] || "#3B82F6",
-      }))
-    : [
-        { name: "Scheduled", value: 62, percentage: "41%", color: "#3B82F6" },
-        { name: "Completed", value: 50, percentage: "33%", color: "#10B981" },
-        { name: "Cancelled", value: 22, percentage: "14%", color: "#EF4444" },
-        { name: "No-Show", value: 18, percentage: "12%", color: "#F59E0B" },
-      ];
+  const totalApptsCount = dbApptStatus.reduce((acc, curr) => acc + curr.count, 0);
+
+  const appointmentStatus = dbApptStatus.map((s) => ({
+    name: s._id ? String(s._id).replace("_", " ").toUpperCase() : "Scheduled",
+    value: s.count,
+    percentage: totalApptsCount > 0 ? `${Math.round((s.count / totalApptsCount) * 100)}%` : "0%",
+    color: statusColors[s._id] || "#3B82F6",
+  }));
 
   // 8. Low Stock & Expiring Inventory Items from DB
   const dbLowStock = stats?.inventory?.lowStock || [];
   const dbExpiring = stats?.inventory?.expiring || [];
 
   // 9. Recent Activity Feed from DB Audit Logs
-  const recentFeed = activity && activity.length > 0
-    ? activity.slice(0, 5).map((act, i) => ({
-        id: act.id || i,
-        icon: [Stethoscope, Calendar, FlaskConical, Receipt, AlertTriangle][i % 5],
-        iconBg: [
-          "bg-slate-100 text-slate-700",
-          "bg-blue-50 text-blue-600",
-          "bg-purple-50 text-purple-600",
-          "bg-emerald-50 text-emerald-600",
-          "bg-amber-50 text-amber-600",
-        ][i % 5],
-        text: act.description || `${act.userName} ${act.action} ${act.resource}`,
-        time: act.timestamp ? new Date(act.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "Just now",
-      }))
-    : [
-        {
-          id: 1,
-          icon: Stethoscope,
-          iconBg: "bg-slate-100 text-slate-700",
-          text: "Dr. Verma created a new Prescription for Patient PAT-20260826-0012",
-          time: "2 mins ago",
-        },
-        {
-          id: 2,
-          icon: Calendar,
-          iconBg: "bg-blue-50 text-blue-600",
-          text: "Receptionist Priya booked an appointment for Patient PAT-2026...",
-          time: "10 mins ago",
-        },
-        {
-          id: 3,
-          icon: FlaskConical,
-          iconBg: "bg-purple-50 text-purple-600",
-          text: "Lab Tech Amit uploaded test results for Patient PAT-20260825-0098",
-          time: "25 mins ago",
-        },
-        {
-          id: 4,
-          icon: Receipt,
-          iconBg: "bg-emerald-50 text-emerald-600",
-          text: "Payment of ₹5,230 received from Patient PAT-20260826-0008",
-          time: "45 mins ago",
-        },
-        {
-          id: 5,
-          icon: AlertTriangle,
-          iconBg: "bg-amber-50 text-amber-600",
-          text: "Low stock alert: Disprin 300mg Stock is below reorder level",
-          time: "1 hr ago",
-        },
-      ];
+  const recentFeed = (activity || []).slice(0, 5).map((act, i) => ({
+    id: act.id || i,
+    icon: [Stethoscope, Calendar, FlaskConical, Receipt, AlertTriangle][i % 5],
+    iconBg: [
+      "bg-slate-100 text-slate-700",
+      "bg-blue-50 text-blue-600",
+      "bg-purple-50 text-purple-600",
+      "bg-emerald-50 text-emerald-600",
+      "bg-amber-50 text-amber-600",
+    ][i % 5],
+    text: act.description || `${act.userName} ${act.action} ${act.resource}`,
+    time: act.timestamp ? new Date(act.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "Just now",
+  }));
 
   return (
     <div className="space-y-6 pb-12">
@@ -707,24 +633,30 @@ export default function Dashboard() {
               <span>Medicine</span>
               <span>Revenue</span>
             </div>
-            {topMedicines.map((item) => (
-              <div
-                key={item.id}
-                className="flex items-center justify-between py-1.5 text-xs"
-              >
-                <div className="flex items-center gap-2 truncate pr-2">
-                  <span className="text-slate-400 font-medium">
-                    {item.id}.
-                  </span>
-                  <span className="font-semibold text-slate-800 truncate">
-                    {item.name}
+            {topMedicines.length > 0 ? (
+              topMedicines.map((item) => (
+                <div
+                  key={item.id}
+                  className="flex items-center justify-between py-1.5 text-xs"
+                >
+                  <div className="flex items-center gap-2 truncate pr-2">
+                    <span className="text-slate-400 font-medium">
+                      {item.id}.
+                    </span>
+                    <span className="font-semibold text-slate-800 truncate">
+                      {item.name}
+                    </span>
+                  </div>
+                  <span className="font-bold text-slate-900 shrink-0">
+                    {item.revenue}
                   </span>
                 </div>
-                <span className="font-bold text-slate-900 shrink-0">
-                  {item.revenue}
-                </span>
+              ))
+            ) : (
+              <div className="py-6 text-center text-slate-400 text-xs italic">
+                No pharmacy sales recorded yet.
               </div>
-            ))}
+            )}
           </div>
           <button
             type="button"
@@ -759,20 +691,7 @@ export default function Dashboard() {
                     </div>
                   ))
                 ) : (
-                  <>
-                    <div className="flex justify-between">
-                      <span>Disprin 300mg</span>
-                      <span className="font-bold">Stock: 28</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Cetirizine 10mg</span>
-                      <span className="font-bold">Stock: 34</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Ranitidine 150mg</span>
-                      <span className="font-bold">Stock: 15</span>
-                    </div>
-                  </>
+                  <p className="text-[11px] text-amber-700 italic">All items in optimal stock level.</p>
                 )}
               </div>
             </div>
@@ -794,20 +713,7 @@ export default function Dashboard() {
                     </div>
                   ))
                 ) : (
-                  <>
-                    <div className="flex justify-between">
-                      <span>Augmentin 625mg</span>
-                      <span className="font-bold">Exp: 15 Sep 2025</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Metronidazole 400mg</span>
-                      <span className="font-bold">Exp: 20 Sep 2025</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Cefixime 200mg</span>
-                      <span className="font-bold">Exp: 05 Sep 2025</span>
-                    </div>
-                  </>
+                  <p className="text-[11px] text-rose-700 italic">No items expiring in next 30 days.</p>
                 )}
               </div>
             </div>

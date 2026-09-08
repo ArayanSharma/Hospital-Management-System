@@ -88,7 +88,6 @@ const radiologyTestSchema = new mongoose.Schema(
 
 radiologyTestSchema.index({ patientId: 1, createdAt: -1 });
 radiologyTestSchema.index({ status: 1 });
-radiologyTestSchema.index({ orderId: 1 });
 
 const RadiologyTest = mongoose.model("RadiologyTest", radiologyTestSchema);
 

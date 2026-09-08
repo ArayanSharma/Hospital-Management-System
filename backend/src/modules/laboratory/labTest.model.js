@@ -79,7 +79,6 @@ const labTestSchema = new mongoose.Schema(
 
 labTestSchema.index({ patientId: 1, createdAt: -1 });
 labTestSchema.index({ status: 1 });
-labTestSchema.index({ orderId: 1 });
 
 const LabTest = mongoose.model("LabTest", labTestSchema);
 

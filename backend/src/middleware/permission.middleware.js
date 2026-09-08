@@ -2,6 +2,7 @@ import User from "../modules/users/user.model.js";
 import Role from "../modules/roles/role.model.js";
 import AppError from "../core/errors/AppError.js";
 import { ErrorCodes } from "../core/errors/errorCodes.js";
+import { getCache, setCache } from "../utils/redisCache.js";
 
 // Mapping between backend permission resource names and frontend module names
 const MODULE_NAME_MAP = {
@@ -142,25 +143,38 @@ export const checkPermission = (requiredPermission) => {
         throw new AppError("Authentication required", 401, ErrorCodes.AUTH_UNAUTHORIZED);
       }
 
-      // Fetch user with role
-      let user = await User.findById(req.user.id).populate("roleId");
+      const cacheKey = `hms:perm:${req.user.id}`;
+      let cachedUserRoleData = await getCache(cacheKey);
+      let userRole;
+      let roleCode;
 
-      if (!user) {
-        throw new AppError("User not found", 404, ErrorCodes.USER_NOT_FOUND);
+      if (cachedUserRoleData) {
+        userRole = cachedUserRoleData.userRole;
+        roleCode = cachedUserRoleData.roleCode;
+      } else {
+        // Fetch user with role from Database
+        let user = await User.findById(req.user.id).populate("roleId");
+
+        if (!user) {
+          throw new AppError("User not found", 404, ErrorCodes.USER_NOT_FOUND);
+        }
+
+        // If user has no populated roleId, look up Role by roleName
+        userRole = user.roleId;
+        if (!userRole && user.roleName) {
+          userRole = await Role.findOne({ name: user.roleName.toUpperCase() });
+        }
+
+        roleCode = (
+          userRole?.name ||
+          userRole?.roleCode ||
+          user.roleName ||
+          ""
+        ).toUpperCase();
+
+        // Cache role and permission data in Redis for 1 hour (3600s)
+        await setCache(cacheKey, { userRole, roleCode }, 3600);
       }
-
-      // If user has no populated roleId, look up Role by roleName
-      let userRole = user.roleId;
-      if (!userRole && user.roleName) {
-        userRole = await Role.findOne({ name: user.roleName.toUpperCase() });
-      }
-
-      const roleCode = (
-        userRole?.name ||
-        userRole?.roleCode ||
-        user.roleName ||
-        ""
-      ).toUpperCase();
 
       // 1. SUPER_ADMIN and ADMIN always have full access
       if (roleCode === "SUPER_ADMIN" || roleCode === "ADMIN") {

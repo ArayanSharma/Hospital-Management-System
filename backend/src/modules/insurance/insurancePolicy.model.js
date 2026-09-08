@@ -102,7 +102,6 @@ const insurancePolicySchema = new mongoose.Schema(
 );
 
 insurancePolicySchema.index({ patientId: 1 });
-insurancePolicySchema.index({ policyNumber: 1 });
 insurancePolicySchema.index({ status: 1 });
 
 const InsurancePolicy = mongoose.model("InsurancePolicy", insurancePolicySchema);

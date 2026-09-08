@@ -155,7 +155,6 @@ const insuranceClaimSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-insuranceClaimSchema.index({ claimNumber: 1 });
 insuranceClaimSchema.index({ patientId: 1 });
 insuranceClaimSchema.index({ status: 1 });
 
