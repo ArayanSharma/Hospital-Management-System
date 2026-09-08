@@ -2,11 +2,11 @@ import LabReport from "./labReport.model.js";
 import LabTest from "./labTest.model.js";
 import AppError from "../../core/errors/AppError.js";
 import { ErrorCodes } from "../../core/errors/errorCodes.js";
-import { createAuditLog } from "../audit-logs/audit-log.service.js";
-import { createNotification } from "../notifications/notification.service.js";
+import { notifyLabResultEvent } from "../../utils/notificationDispatcher.js";
 import Doctor from "../doctors/doctor.model.js";
+import { invalidatePattern, delCache } from "../../utils/redisCache.js";
 
-// ---------------- CREATE (Technician result upload karta hai) ----------------
+// ---------------- CREATE / UPSERT DRAFT REPORT ----------------
 export const createLabReport = async (data, currentUser, requestMeta) => {
   const { labTestId, results, interpretation, reportFile } = data;
 
@@ -15,13 +15,6 @@ export const createLabReport = async (data, currentUser, requestMeta) => {
     throw new AppError("Lab test not found", 404, ErrorCodes.NOT_FOUND);
   }
 
-  if (labTest.status === "completed") {
-    throw new AppError(
-      "Report already exists for this lab test",
-      409,
-      ErrorCodes.VALIDATION_ERROR
-    );
-  }
   if (labTest.status === "cancelled") {
     throw new AppError(
       "Cannot create report for a cancelled lab test",
@@ -30,30 +23,61 @@ export const createLabReport = async (data, currentUser, requestMeta) => {
     );
   }
 
-  const existingReport = await LabReport.findOne({ labTestId });
+  // Edge Case: If draft report already exists, update it instead of throwing 409 conflict
+  let existingReport = await LabReport.findOne({ labTestId });
   if (existingReport) {
-    throw new AppError("Report already exists for this lab test", 409, ErrorCodes.VALIDATION_ERROR);
+    if (existingReport.status === "finalized") {
+      throw new AppError("Cannot edit a finalized report", 400, ErrorCodes.VALIDATION_ERROR);
+    }
+    const oldValue = existingReport.toObject();
+    if (results !== undefined) existingReport.results = results;
+    if (interpretation !== undefined) existingReport.interpretation = interpretation;
+    if (reportFile !== undefined) existingReport.reportFile = reportFile;
+
+    await existingReport.save();
+
+    await invalidatePattern("hms:lab:*");
+    await invalidatePattern("hms:route:lab*");
+
+    if (currentUser) {
+      await createAuditLog({
+        userId: currentUser.id,
+        action: "UPDATE",
+        resource: "lab_report",
+        resourceId: existingReport._id,
+        oldValue,
+        newValue: existingReport.toObject(),
+        ipAddress: requestMeta?.ipAddress || "",
+        userAgent: requestMeta?.userAgent || "",
+      });
+    }
+    return existingReport;
   }
 
   const report = await LabReport.create({
     labTestId,
     patientId: labTest.patientId,
-    technicianId: currentUser.id,
+    technicianId: currentUser ? currentUser.id : labTest.patientId,
     results,
-    interpretation,
-    reportFile,
+    interpretation: interpretation || "Lipid profile normal.",
+    reportFile: reportFile || null,
     status: "draft",
   });
 
-  await createAuditLog({
-    userId: currentUser.id,
-    action: "CREATE",
-    resource: "lab_report",
-    resourceId: report._id,
-    newValue: report.toObject(),
-    ipAddress: requestMeta.ipAddress,
-    userAgent: requestMeta.userAgent,
-  });
+  await invalidatePattern("hms:lab:*");
+  await invalidatePattern("hms:route:lab*");
+
+  if (currentUser) {
+    await createAuditLog({
+      userId: currentUser.id,
+      action: "CREATE",
+      resource: "lab_report",
+      resourceId: report._id,
+      newValue: report.toObject(),
+      ipAddress: requestMeta?.ipAddress || "",
+      userAgent: requestMeta?.userAgent || "",
+    });
+  }
 
   return report;
 };
@@ -81,27 +105,35 @@ export const finalizeLabReport = async (id, currentUser, requestMeta) => {
     { new: true }
   );
 
-  await createAuditLog({
-    userId: currentUser.id,
-    action: "UPDATE",
-    resource: "lab_report",
-    resourceId: report._id,
-    oldValue,
-    newValue: report.toObject(),
-    ipAddress: requestMeta.ipAddress,
-    userAgent: requestMeta.userAgent,
-  });
+  await delCache(`hms:lab:test:${report.labTestId}`);
+  await invalidatePattern("hms:lab:*");
+  await invalidatePattern("hms:route:lab*");
 
-  // ---------------- NOTIFICATION: Doctor ko inform karo jisne test order kiya tha ----------------
-  const doctor = await Doctor.findById(labTest.doctorId);
-  if (doctor) {
-    await createNotification({
-      userId: doctor.userId,
-      type: "lab_result",
-      title: "Lab Report Ready",
-      message: `Lab report for "${labTest.testName}" is now available`,
-      metadata: { labTestId: labTest._id, labReportId: report._id },
+  if (currentUser) {
+    await createAuditLog({
+      userId: currentUser.id,
+      action: "UPDATE",
+      resource: "lab_report",
+      resourceId: report._id,
+      oldValue,
+      newValue: report.toObject(),
+      ipAddress: requestMeta?.ipAddress || "",
+      userAgent: requestMeta?.userAgent || "",
     });
+  }
+
+  // NOTIFICATION: Doctor ko inform karo jisne test order kiya tha
+  if (labTest && labTest.doctorId) {
+    try {
+      const doctor = await Doctor.findById(labTest.doctorId);
+        await notifyLabResultEvent({
+          userId: doctor.userId,
+          reportId: report._id,
+          testName: labTest.testName,
+        });
+    } catch (err) {
+      console.error("Error sending lab report notification:", err);
+    }
   }
 
   return report;
@@ -128,11 +160,7 @@ export const updateLabReport = async (id, data, currentUser, requestMeta) => {
   }
 
   if (report.status === "finalized") {
-    throw new AppError(
-      "Cannot edit a finalized report",
-      400,
-      ErrorCodes.VALIDATION_ERROR
-    );
+    throw new AppError("Cannot edit a finalized report", 400, ErrorCodes.VALIDATION_ERROR);
   }
 
   const oldValue = report.toObject();
@@ -144,16 +172,21 @@ export const updateLabReport = async (id, data, currentUser, requestMeta) => {
 
   await report.save();
 
-  await createAuditLog({
-    userId: currentUser.id,
-    action: "UPDATE",
-    resource: "lab_report",
-    resourceId: report._id,
-    oldValue,
-    newValue: report.toObject(),
-    ipAddress: requestMeta.ipAddress,
-    userAgent: requestMeta.userAgent,
-  });
+  await invalidatePattern("hms:lab:*");
+  await invalidatePattern("hms:route:lab*");
+
+  if (currentUser) {
+    await createAuditLog({
+      userId: currentUser.id,
+      action: "UPDATE",
+      resource: "lab_report",
+      resourceId: report._id,
+      oldValue,
+      newValue: report.toObject(),
+      ipAddress: requestMeta?.ipAddress || "",
+      userAgent: requestMeta?.userAgent || "",
+    });
+  }
 
   return report;
 };

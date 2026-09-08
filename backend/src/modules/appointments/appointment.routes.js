@@ -9,6 +9,7 @@ import {
 import { authenticate } from "../../middleware/auth.middleware.js";
 import { checkPermission } from "../../middleware/permission.middleware.js";
 import { validate } from "../../middleware/validation.middleware.js";
+import { routeCache } from "../../middleware/cache.middleware.js";
 import {
   createAppointmentSchema,
   updateAppointmentSchema,
@@ -24,8 +25,9 @@ router.post(
   validate(createAppointmentSchema),
   create
 );
-router.get("/", authenticate, checkPermission("appointment:read"), getAll);
-router.get("/:id", authenticate, checkPermission("appointment:read"), getById);
+router.get("/", authenticate, checkPermission("appointment:read"), routeCache(60, "hms:route:appts", true), getAll);
+router.get("/:id", authenticate, checkPermission("appointment:read"), routeCache(60, "hms:route:appt", true), getById);
+
 router.patch(
   "/:id",
   authenticate,

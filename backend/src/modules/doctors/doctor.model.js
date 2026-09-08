@@ -7,14 +7,12 @@ const doctorSchema = new mongoose.Schema(
       ref: "User",
       required: true,
       unique: true,
-      // Ek User sirf ek hi Doctor profile rakh sakta hai
     },
     doctorId: {
       type: String,
       required: true,
       unique: true,
       trim: true,
-      // Human-readable ID, e.g. "DOC-0001"
     },
     departmentId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -34,7 +32,6 @@ const doctorSchema = new mongoose.Schema(
       type: Number,
       default: 0,
       min: 0,
-      // Years of experience
     },
     consultationFee: {
       type: Number,
@@ -45,12 +42,16 @@ const doctorSchema = new mongoose.Schema(
       {
         day: {
           type: String,
-          enum: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
         },
-        startTime: String, // "09:00"
-        endTime: String, // "17:00"
+        startTime: String,
+        endTime: String,
       },
     ],
+    additionalInfo: {
+      type: String,
+      trim: true,
+      default: null,
+    },
     photoUrl: {
       type: String,
       default: null,
@@ -63,6 +64,10 @@ const doctorSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+doctorSchema.index({ departmentId: 1, status: 1 });
+doctorSchema.index({ specialization: 1, status: 1 });
+doctorSchema.index({ status: 1, createdAt: -1 });
 
 const Doctor = mongoose.model("Doctor", doctorSchema);
 

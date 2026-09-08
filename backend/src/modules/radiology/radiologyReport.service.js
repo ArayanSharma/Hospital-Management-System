@@ -2,12 +2,32 @@ import RadiologyReport from "./radiologyReport.model.js";
 import RadiologyTest from "./radiologyTest.model.js";
 import AppError from "../../core/errors/AppError.js";
 import { ErrorCodes } from "../../core/errors/errorCodes.js";
-import { createAuditLog } from "../audit-logs/audit-log.service.js";
-import { createNotification } from "../notifications/notification.service.js";
+import { notifyRadiologyEvent } from "../../utils/notificationDispatcher.js";
 import Doctor from "../doctors/doctor.model.js";
+import { invalidatePattern, delCache, getOrSetCache } from "../../utils/redisCache.js";
 
 export const createRadiologyReport = async (data, currentUser, requestMeta) => {
-  const { testId, findings, impression, images, reportFile } = data;
+  const {
+    testId,
+    findings,
+    technique,
+    impression,
+    recommendations,
+    additionalNotes,
+    technicianName,
+    checkedByName,
+    studyReviewed,
+    clinicalIndication,
+    relevantHistory,
+    examinationTechnique,
+    bodyPart,
+    views,
+    contrast,
+    imageQuality,
+    images,
+    reportFile,
+    status = "draft",
+  } = data;
 
   const test = await RadiologyTest.findById(testId);
   if (!test) {
@@ -39,11 +59,40 @@ export const createRadiologyReport = async (data, currentUser, requestMeta) => {
     patientId: test.patientId,
     radiologistId: currentUser.id,
     findings,
+    technique,
     impression,
+    recommendations,
+    additionalNotes,
+    technicianName,
+    checkedByName,
+    studyReviewed,
+    clinicalIndication,
+    relevantHistory,
+    examinationTechnique,
+    bodyPart,
+    views,
+    contrast,
+    imageQuality,
     images,
     reportFile,
-    status: "draft",
+    status,
   });
+
+  // If created directly in finalized status, mark RadiologyTest as completed & send notification
+  if (status === "finalized") {
+    await RadiologyTest.findByIdAndUpdate(test._id, { status: "completed" });
+    if (doctor?.userId) {
+      await notifyRadiologyEvent({
+        userId: doctor.userId,
+        reportId: report._id,
+        scanType: test.testType,
+      });
+    }
+  }
+
+  await delCache(`hms:radiology:test:${testId}`);
+  await invalidatePattern("hms:radiology:*");
+  await invalidatePattern("hms:route:radiology*");
 
   await createAuditLog({
     userId: currentUser.id,
@@ -64,8 +113,9 @@ export const finalizeRadiologyReport = async (id, currentUser, requestMeta) => {
     throw new AppError("Radiology report not found", 404, ErrorCodes.NOT_FOUND);
   }
 
+  // Idempotent check: if already finalized, return report gracefully
   if (report.status === "finalized") {
-    throw new AppError("Report is already finalized", 400, ErrorCodes.VALIDATION_ERROR);
+    return report;
   }
 
   const oldValue = report.toObject();
@@ -77,6 +127,10 @@ export const finalizeRadiologyReport = async (id, currentUser, requestMeta) => {
     { status: "completed" },
     { new: true }
   );
+
+  await delCache(`hms:radiology:test:${report.testId}`);
+  await invalidatePattern("hms:radiology:*");
+  await invalidatePattern("hms:route:radiology*");
 
   await createAuditLog({
     userId: currentUser.id,
@@ -90,24 +144,29 @@ export const finalizeRadiologyReport = async (id, currentUser, requestMeta) => {
   });
 
   // ---------------- NOTIFICATION ----------------
-  const doctor = await Doctor.findById(test.doctorId);
-  if (doctor) {
-    await createNotification({
-      userId: doctor.userId,
-      type: "lab_result",
-      title: "Radiology Report Ready",
-      message: `Radiology report for "${test.testType}" is now available`,
-      metadata: { testId: test._id, reportId: report._id },
-    });
+  if (test) {
+    const doctor = await Doctor.findById(test.doctorId);
+    if (doctor?.userId) {
+      await notifyRadiologyEvent({
+        userId: doctor.userId,
+        reportId: report._id,
+        scanType: test.testType,
+      });
+    }
   }
 
   return report;
 };
 
 export const getRadiologyReportByTestId = async (testId) => {
-  const report = await RadiologyReport.findOne({ testId })
-    .populate("patientId", "name patientId")
-    .populate("radiologistId", "name");
+  const { data: report } = await getOrSetCache(
+    `hms:radiology:report:test:${testId}`,
+    () =>
+      RadiologyReport.findOne({ testId })
+        .populate("patientId", "name patientId")
+        .populate("radiologistId", "name"),
+    600
+  );
 
   if (!report) {
     throw new AppError("Radiology report not found", 404, ErrorCodes.NOT_FOUND);
@@ -127,25 +186,51 @@ export const updateRadiologyReport = async (id, data, currentUser, requestMeta) 
   }
 
   const oldValue = report.toObject();
-  const { findings, impression, images, reportFile } = data;
+  const allowedFields = [
+    "findings",
+    "technique",
+    "impression",
+    "recommendations",
+    "additionalNotes",
+    "technicianName",
+    "checkedByName",
+    "studyReviewed",
+    "clinicalIndication",
+    "relevantHistory",
+    "examinationTechnique",
+    "bodyPart",
+    "views",
+    "contrast",
+    "imageQuality",
+    "images",
+    "reportFile",
+    "status",
+  ];
 
-  if (findings !== undefined) report.findings = findings;
-  if (impression !== undefined) report.impression = impression;
-  if (images !== undefined) report.images = images;
-  if (reportFile !== undefined) report.reportFile = reportFile;
+  allowedFields.forEach((field) => {
+    if (data[field] !== undefined) {
+      report[field] = data[field];
+    }
+  });
 
   await report.save();
 
-  await createAuditLog({
-    userId: currentUser.id,
-    action: "UPDATE",
-    resource: "radiology_report",
-    resourceId: report._id,
-    oldValue,
-    newValue: report.toObject(),
-    ipAddress: requestMeta.ipAddress,
-    userAgent: requestMeta.userAgent,
-  });
+  await delCache(`hms:radiology:report:test:${report.testId}`);
+  await invalidatePattern("hms:radiology:*");
+  await invalidatePattern("hms:route:radiology*");
+
+  if (currentUser) {
+    await createAuditLog({
+      userId: currentUser.id,
+      action: "UPDATE",
+      resource: "radiology_report",
+      resourceId: report._id,
+      oldValue,
+      newValue: report.toObject(),
+      ipAddress: requestMeta.ipAddress,
+      userAgent: requestMeta.userAgent,
+    });
+  }
 
   return report;
 };

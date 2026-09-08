@@ -2,19 +2,22 @@ import {
   createRole,
   getAllRoles,
   getRoleById,
+  updateRole,
   updateRolePermissions,
   deleteRole,
 } from "./role.service.js";
 import { successResponse } from "../../core/responses/apiResponse.js";
 import { asyncHandler } from "../../utils/asyncHandler.js";
+import { invalidatePattern } from "../../utils/redisCache.js";
 
 export const create = asyncHandler(async (req, res) => {
   const role = await createRole(req.body);
+  await invalidatePattern("hms:perm:*");
   return successResponse(res, 201, "Role created successfully", role);
 });
 
 export const getAll = asyncHandler(async (req, res) => {
-  const roles = await getAllRoles();
+  const roles = await getAllRoles(req.query);
   return successResponse(res, 200, "Roles fetched successfully", roles);
 });
 
@@ -23,13 +26,21 @@ export const getById = asyncHandler(async (req, res) => {
   return successResponse(res, 200, "Role fetched successfully", role);
 });
 
+export const update = asyncHandler(async (req, res) => {
+  const role = await updateRole(req.params.id, req.body);
+  await invalidatePattern("hms:perm:*");
+  return successResponse(res, 200, "Role updated successfully", role);
+});
+
 export const updatePermissions = asyncHandler(async (req, res) => {
   const { permissionIds } = req.body;
   const role = await updateRolePermissions(req.params.id, permissionIds);
+  await invalidatePattern("hms:perm:*");
   return successResponse(res, 200, "Role permissions updated successfully", role);
 });
 
 export const remove = asyncHandler(async (req, res) => {
   const result = await deleteRole(req.params.id);
+  await invalidatePattern("hms:perm:*");
   return successResponse(res, 200, result.message);
 });

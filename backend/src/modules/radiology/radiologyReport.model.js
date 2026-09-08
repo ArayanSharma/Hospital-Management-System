@@ -23,20 +23,82 @@ const radiologyReportSchema = new mongoose.Schema(
       required: [true, "Findings are required"],
       trim: true,
     },
+    technique: {
+      type: String,
+      trim: true,
+      default: "",
+    },
     impression: {
       type: String,
       trim: true,
-      // Doctor ke liye summary conclusion
+      default: "",
+    },
+    recommendations: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    additionalNotes: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    technicianName: {
+      type: String,
+      trim: true,
+      default: "Rakesh Kumar",
+    },
+    checkedByName: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    studyReviewed: {
+      type: Boolean,
+      default: false,
+    },
+    clinicalIndication: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    relevantHistory: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    examinationTechnique: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    bodyPart: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    views: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    contrast: {
+      type: String,
+      trim: true,
+      default: "Not Used",
+    },
+    imageQuality: {
+      type: String,
+      trim: true,
+      default: "Diagnostic",
     },
     images: {
       type: [String],
       default: [],
-      // Cloudinary URLs — multiple images ho sakti hain (X-ray ke multiple angles)
     },
     reportFile: {
       type: String,
       default: null,
-      // Final PDF report URL
     },
     status: {
       type: String,

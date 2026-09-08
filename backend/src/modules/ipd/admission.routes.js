@@ -1,15 +1,16 @@
 import { Router } from "express";
-import { create, getAll, getById, update, discharge } from "./admission.controller.js";
+import { create, getAll, getById, update, discharge, transfer } from "./admission.controller.js";
 import { authenticate } from "../../middleware/auth.middleware.js";
 import { checkPermission } from "../../middleware/permission.middleware.js";
 import { validate } from "../../middleware/validation.middleware.js";
 import { createAdmissionSchema, updateAdmissionSchema, dischargeSchema } from "./admission.validation.js";
+import { routeCache } from "../../middleware/cache.middleware.js";
 
 const router = Router();
 
 router.post("/", authenticate, checkPermission("admission:create"), validate(createAdmissionSchema), create);
-router.get("/", authenticate, checkPermission("admission:read"), getAll);
-router.get("/:id", authenticate, checkPermission("admission:read"), getById);
+router.get("/", authenticate, checkPermission("admission:read"), routeCache(60, "hms:route:ipd", true), getAll);
+router.get("/:id", authenticate, checkPermission("admission:read"), routeCache(300, "hms:route:ipd", true), getById);
 router.patch("/:id", authenticate, checkPermission("admission:update"), validate(updateAdmissionSchema), update);
 router.patch(
   "/:id/discharge",
@@ -18,5 +19,6 @@ router.patch(
   validate(dischargeSchema),
   discharge
 );
+router.patch("/:id/transfer", authenticate, checkPermission("admission:update"), transfer);
 
 export default router;

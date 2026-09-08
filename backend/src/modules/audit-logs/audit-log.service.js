@@ -1,4 +1,5 @@
 import AuditLog from "./audit-log.model.js";
+import { getOrSetCache, delCache } from "../../utils/redisCache.js";
 
 // ---------------- CREATE (internal use — dusre modules yeh call karenge) ----------------
 export const createAuditLog = async ({
@@ -12,7 +13,7 @@ export const createAuditLog = async ({
   userAgent = null,
 }) => {
   try {
-    await AuditLog.create({
+    const newLog = await AuditLog.create({
       userId,
       action,
       resource,
@@ -22,10 +23,19 @@ export const createAuditLog = async ({
       ipAddress,
       userAgent,
     });
+
+    // Invalidate cached audit logs for this specific resource
+    if (resourceId) {
+      delCache(`hms:audit:res:${resourceId}`).catch((err) =>
+        console.warn("⚠️ [Audit Cache Invalidate Warning]:", err.message)
+      );
+    }
+
+    return newLog;
   } catch (err) {
     // IMPORTANT: audit logging kabhi bhi main business logic ko fail nahi karni chahiye
-    // Agar log save na ho paye, sirf console mein error print karo, throw mat karo
     console.error("Audit log creation failed:", err.message);
+    return null;
   }
 };
 
@@ -76,7 +86,17 @@ export const getAuditLogs = async ({
 };
 
 export const getAuditLogsByResourceId = async (resourceId) => {
-  return AuditLog.find({ resourceId })
-    .populate("userId", "name email")
-    .sort({ createdAt: -1 });
-};
+  if (!resourceId) return [];
+
+  // Cache audit timeline history per resource in Redis for 10 minutes (600s)
+  const { data: logs } = await getOrSetCache(
+    `hms:audit:res:${resourceId}`,
+    () =>
+      AuditLog.find({ resourceId })
+        .populate("userId", "name email")
+        .sort({ createdAt: -1 }),
+    600
+  );
+
+  return logs || [];
+};

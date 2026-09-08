@@ -1,117 +1,355 @@
 @import "tailwindcss";
-@config "../tailwind.config.js";
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
 
-:root {
-  --text: #6b6375;
-  --text-h: #08060d;
-  --bg: #fff;
-  --border: #e5e4e7;
-  --code-bg: #f4f3ec;
-  --accent: #aa3bff;
-  --accent-bg: rgba(170, 59, 255, 0.1);
-  --accent-border: rgba(170, 59, 255, 0.5);
-  --social-bg: rgba(244, 243, 236, 0.5);
-  --shadow:
-    rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
+@variant dark (&:where(.dark, .dark *));
 
-  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --mono: ui-monospace, Consolas, monospace;
-
-  font: 18px/145% var(--sans);
-  letter-spacing: 0.18px;
-  color-scheme: light dark;
-  color: var(--text);
-  background: var(--bg);
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-
-  @media (max-width: 1024px) {
-    font-size: 16px;
-  }
-}
-
-@media (prefers-color-scheme: dark) {
+@layer base {
   :root {
-    --text: #9ca3af;
-    --text-h: #f3f4f6;
-    --bg: #16171d;
-    --border: #2e303a;
-    --code-bg: #1f2028;
-    --accent: #c084fc;
-    --accent-bg: rgba(192, 132, 252, 0.15);
-    --accent-border: rgba(192, 132, 252, 0.5);
-    --social-bg: rgba(47, 48, 58, 0.5);
-    --shadow:
-      rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
+    --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   }
 
-  #social .button-icon {
-    filter: invert(1) brightness(2);
+  * {
+    border-color: #E2E8F0;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    background-color: #F8FAFC;
+    color: #1E293B;
+    margin: 0;
+    padding: 0;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    transition: background-color 0.2s ease, color 0.2s ease;
+  }
+
+  html.dark body {
+    background-color: #0B0F19 !important;
+    color: #F9FAFB !important;
   }
 }
 
-body {
-  margin: 0;
+/* ==========================================================================
+   MASTER SENIOR UI/UX DARK MODE ENGINE (Linear / Vercel / Stripe Grade)
+   ========================================================================== */
+
+html.dark * {
+  border-color: #1E293B;
 }
 
-#root {
-  width: 1126px;
-  max-width: 100%;
-  margin: 0 auto;
-  text-align: center;
-  border-inline: 1px solid var(--border);
-  min-height: 100svh;
-  display: flex;
-  flex-direction: column;
-  box-sizing: border-box;
+/* Main Surface Cards & Panels */
+html.dark .bg-white {
+  background-color: #111827 !important;
+  color: #F9FAFB;
+  border-color: #1F2937 !important;
 }
 
-h1,
-h2 {
-  font-family: var(--heading);
-  font-weight: 500;
-  color: var(--text-h);
+/* Catch ALL Slate/Gray Backgrounds including opacity variants like bg-slate-50/70 */
+html.dark [class*="bg-slate-50"],
+html.dark [class*="bg-gray-50"],
+html.dark [class*="bg-slate-100"],
+html.dark [class*="bg-gray-100"] {
+  background-color: #162032 !important;
+  border-color: #1F2937 !important;
+  color: #F9FAFB !important;
 }
 
-h1 {
-  font-size: 56px;
-  letter-spacing: -1.68px;
-  margin: 32px 0;
-  @media (max-width: 1024px) {
-    font-size: 36px;
-    margin: 20px 0;
-  }
-}
-h2 {
-  font-size: 24px;
-  line-height: 118%;
-  letter-spacing: -0.24px;
-  margin: 0 0 8px;
-  @media (max-width: 1024px) {
-    font-size: 20px;
-  }
-}
-p {
-  margin: 0;
+html.dark [class*="bg-gray-200"],
+html.dark [class*="bg-slate-200"] {
+  background-color: #374151 !important;
 }
 
-code,
-.counter {
-  font-family: var(--mono);
-  display: inline-flex;
-  border-radius: 4px;
-  color: var(--text-h);
+/* Selected Table Rows (Fixes OPD Visits & Roles Selected Row Light Overlay) */
+html.dark tr[class*="bg-blue-50"],
+html.dark tr.bg-blue-50\/80,
+html.dark tr.bg-blue-50\/70,
+html.dark tr.bg-blue-50\/50,
+html.dark tr.bg-blue-50 {
+  background-color: #1B2E4A !important;
+  border-color: rgba(59, 130, 246, 0.4) !important;
 }
 
-code {
-  font-size: 15px;
-  line-height: 135%;
-  padding: 4px 8px;
-  background: var(--code-bg);
+html.dark tr[class*="bg-blue-50"] td,
+html.dark tr[class*="bg-blue-50"] p,
+html.dark tr[class*="bg-blue-50"] span {
+  color: #F9FAFB !important;
+}
+
+html.dark tr[class*="bg-blue-50"] p.text-slate-400,
+html.dark tr[class*="bg-blue-50"] p.text-slate-500,
+html.dark tr[class*="bg-blue-50"] td.text-slate-400,
+html.dark tr[class*="bg-blue-50"] td.text-slate-500 {
+  color: #9CA3AF !important;
+}
+
+/* Hover States for Unselected Table Rows */
+html.dark tr[class*="hover:bg-slate-50"]:hover,
+html.dark tbody tr:hover {
+  background-color: rgba(30, 41, 59, 0.6) !important;
+}
+
+/* Stat Box & Tint Fills with Opacity Suffix Support */
+html.dark [class*="bg-emerald-50"] {
+  background-color: #132724 !important;
+  border-color: rgba(16, 185, 129, 0.35) !important;
+}
+
+html.dark [class*="bg-rose-50"],
+html.dark [class*="bg-red-50"] {
+  background-color: #2D1822 !important;
+  border-color: rgba(244, 63, 94, 0.35) !important;
+}
+
+html.dark [class*="bg-amber-50"],
+html.dark [class*="bg-yellow-50"] {
+  background-color: #2B2113 !important;
+  border-color: rgba(245, 158, 11, 0.35) !important;
+}
+
+html.dark [class*="bg-orange-50"] {
+  background-color: #2D1C13 !important;
+  border-color: rgba(249, 115, 22, 0.35) !important;
+}
+
+html.dark [class*="bg-purple-50"] {
+  background-color: #241833 !important;
+  border-color: rgba(168, 85, 247, 0.35) !important;
+}
+
+html.dark [class*="bg-indigo-50"] {
+  background-color: #1A1F3B !important;
+  border-color: rgba(99, 102, 241, 0.35) !important;
+}
+
+html.dark [class*="bg-cyan-50"] {
+  background-color: #122834 !important;
+  border-color: rgba(6, 182, 212, 0.35) !important;
+}
+
+html.dark [class*="bg-pink-50"] {
+  background-color: #2B1727 !important;
+  border-color: rgba(236, 72, 153, 0.35) !important;
+}
+
+/* Icon Container Badges in Dark Mode */
+html.dark .bg-blue-100 {
+  background-color: rgba(59, 130, 246, 0.25) !important;
+  color: #60A5FA !important;
+}
+
+html.dark .bg-emerald-100 {
+  background-color: rgba(16, 185, 129, 0.25) !important;
+  color: #34D399 !important;
+}
+
+html.dark .bg-rose-100 {
+  background-color: rgba(244, 63, 94, 0.25) !important;
+  color: #FB7185 !important;
+}
+
+html.dark .bg-amber-100 {
+  background-color: rgba(245, 158, 11, 0.25) !important;
+  color: #FBBF24 !important;
+}
+
+html.dark .bg-orange-100 {
+  background-color: rgba(249, 115, 22, 0.25) !important;
+  color: #FB923C !important;
+}
+
+html.dark .bg-purple-100 {
+  background-color: rgba(168, 85, 247, 0.25) !important;
+  color: #C084FC !important;
+}
+
+/* Badge Text Colors */
+html.dark .text-purple-700,
+html.dark .text-purple-600 {
+  color: #C084FC !important;
+}
+
+html.dark .text-orange-700,
+html.dark .text-orange-600 {
+  color: #FB923C !important;
+}
+
+html.dark .text-emerald-700,
+html.dark .text-emerald-600 {
+  color: #34D399 !important;
+}
+
+html.dark .text-blue-700,
+html.dark .text-blue-600 {
+  color: #60A5FA !important;
+}
+
+html.dark .text-amber-700,
+html.dark .text-amber-600 {
+  color: #FBBF24 !important;
+}
+
+/* High-Contrast Typography & Label Hierarchy */
+html.dark .text-slate-900,
+html.dark .text-slate-800,
+html.dark .text-gray-900,
+html.dark .text-gray-800 {
+  color: #F9FAFB !important;
+}
+
+html.dark .text-slate-700,
+html.dark .text-slate-600,
+html.dark .text-gray-700,
+html.dark .text-gray-600 {
+  color: #E5E7EB !important;
+}
+
+html.dark .text-slate-500,
+html.dark .text-slate-400,
+html.dark .text-gray-500,
+html.dark .text-gray-400 {
+  color: #9CA3AF !important;
+}
+
+/* Form Controls, Inputs & Textareas */
+html.dark input[type="text"],
+html.dark input[type="number"],
+html.dark input[type="date"],
+html.dark input[type="email"],
+html.dark input[type="password"],
+html.dark select,
+html.dark textarea {
+  background-color: #1A2333 !important;
+  color: #F9FAFB !important;
+  border-color: #374151 !important;
+}
+
+/* Checkboxes & Radio Inputs in Dark Mode */
+html.dark input[type="checkbox"] {
+  background-color: #1F2937 !important;
+  border-color: #4B5563 !important;
+}
+
+html.dark input[type="checkbox"]:checked {
+  background-color: #2563EB !important;
+  border-color: #2563EB !important;
+}
+
+html.dark input[type="radio"] {
+  background-color: #1F2937 !important;
+  border-color: #4B5563 !important;
+}
+
+/* Toggle Switch Background Track in Dark Mode */
+html.dark .bg-slate-200 {
+  background-color: #374151 !important;
+}
+
+html.dark .bg-transparent {
+  background-color: transparent !important;
+}
+
+html.dark input::placeholder,
+html.dark textarea::placeholder {
+  color: #6B7280 !important;
+}
+
+/* Secondary & Action Buttons in Dark Mode */
+html.dark [class*="bg-blue-50"],
+html.dark button[class*="bg-blue-50"] {
+  background-color: rgba(59, 130, 246, 0.15) !important;
+  border-color: rgba(59, 130, 246, 0.35) !important;
+  color: #60A5FA !important;
+}
+
+html.dark button[class*="hover:bg-blue-50"]:hover {
+  background-color: rgba(59, 130, 246, 0.25) !important;
+}
+
+/* Reset Filters & Ghost Buttons in Dark Mode */
+html.dark button[class*="bg-slate-100"],
+html.dark [class*="bg-slate-100"] button {
+  background-color: #1E293B !important;
+  border-color: #374151 !important;
+  color: #E5E7EB !important;
+}
+
+html.dark button[class*="bg-slate-100"]:hover,
+html.dark button[class*="hover:bg-rose-50"]:hover {
+  background-color: rgba(244, 63, 94, 0.2) !important;
+  border-color: rgba(244, 63, 94, 0.4) !important;
+  color: #FB7185 !important;
+}
+
+/* Progress bar background tracks */
+html.dark [class*="bg-slate-100"],
+html.dark [class*="bg-gray-100"] {
+  background-color: #1E293B !important;
+}
+
+/* Divider borders */
+html.dark [class*="border-slate-100"],
+html.dark [class*="border-gray-100"] {
+  border-color: #1F2937 !important;
+}
+
+/* Tables & Data Grid Header */
+html.dark table th {
+  background-color: #162032 !important;
+  color: #9CA3AF !important;
+  border-color: #1F2937 !important;
+}
+
+html.dark table td {
+  border-color: #1F2937 !important;
+}
+
+/* Recharts Pie Chart Dark Mode Stroke & Center Fix */
+html.dark .recharts-pie-sector {
+  stroke: #111827 !important;
+}
+
+html.dark .recharts-sector {
+  stroke: #111827 !important;
+}
+
+/* Header & Sidebar Dark Grounding */
+html.dark header {
+  background-color: #0F172A !important;
+  border-color: #1E293B !important;
+}
+
+html.dark aside {
+  background-color: #0F172A !important;
+  border-color: #1E293B !important;
+}
+
+
+/* Custom Light & Dark Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #F1F5F9;
+}
+
+html.dark ::-webkit-scrollbar-track {
+  background: #0F172A;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 9999px;
+}
+
+html.dark ::-webkit-scrollbar-thumb {
+  background: #374151;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94A3B8;
+}
+
+html.dark ::-webkit-scrollbar-thumb:hover {
+  background: #4B5563;
 }

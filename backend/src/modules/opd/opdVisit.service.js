@@ -5,71 +5,112 @@ import Appointment from "../appointments/appointment.model.js";
 import AppError from "../../core/errors/AppError.js";
 import { ErrorCodes } from "../../core/errors/errorCodes.js";
 import { createAuditLog } from "../audit-logs/audit-log.service.js";
+import { generateSequentialId } from "../../utils/generateId.js";
+import { getOrSetCache, invalidatePattern, delCache, acquireLock, releaseLock } from "../../utils/redisCache.js";
 
-// ---------------- CREATE ----------------
+// ---------------- CREATE (With Redis Mutex Lock) ----------------
 export const createOPDVisit = async (data, currentUser, requestMeta) => {
-  const { patientId, doctorId, appointmentId, symptoms, vitals } = data;
+  const { patientId, doctorId, appointmentId, symptoms, notes, vitals, visitType, visitDate } = data;
 
-  const [patient, doctor] = await Promise.all([
-    Patient.findById(patientId),
-    Doctor.findById(doctorId),
-  ]);
-
-  if (!patient || patient.status === "inactive") {
-    throw new AppError("Patient not found", 404, ErrorCodes.NOT_FOUND);
-  }
-  if (!doctor || doctor.status === "inactive") {
-    throw new AppError("Doctor not found or inactive", 404, ErrorCodes.NOT_FOUND);
+  const lockKey = `hms:lock:opd:${patientId}:${doctorId}`;
+  const hasLock = await acquireLock(lockKey, 5);
+  if (!hasLock) {
+    throw new AppError("An OPD visit is currently being created for this patient", 409, ErrorCodes.VALIDATION_ERROR);
   }
 
-  // Agar appointmentId diya hai, to valid hona chahiye aur "scheduled" status mein
-  if (appointmentId) {
-    const appointment = await Appointment.findById(appointmentId);
-    if (!appointment) {
-      throw new AppError("Appointment not found", 404, ErrorCodes.NOT_FOUND);
+  try {
+    const [patient, doctor] = await Promise.all([
+      Patient.findById(patientId),
+      Doctor.findById(doctorId),
+    ]);
+
+    if (!patient || patient.status === "inactive") {
+      throw new AppError("Patient not found or inactive", 404, ErrorCodes.NOT_FOUND);
     }
-    if (appointment.status !== "scheduled") {
-      throw new AppError(
-        "Appointment is not in scheduled state",
-        400,
-        ErrorCodes.VALIDATION_ERROR
-      );
+    if (!doctor || doctor.status === "inactive") {
+      throw new AppError("Doctor not found or inactive", 404, ErrorCodes.NOT_FOUND);
     }
+
+    if (appointmentId) {
+      const appointment = await Appointment.findById(appointmentId);
+      if (!appointment) {
+        throw new AppError("Appointment not found", 404, ErrorCodes.NOT_FOUND);
+      }
+    }
+
+    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+    const visitId = await generateSequentialId(OPDVisit, `VIS-${dateStr}`, "visitId");
+
+    const resolvedVisitType = visitType || (appointmentId ? "appointment" : "walk-in");
+    const initialStatus = resolvedVisitType === "walk-in" ? "walk-in" : "in-progress";
+
+    const opdVisit = await OPDVisit.create({
+      visitId,
+      patientId,
+      doctorId,
+      appointmentId: appointmentId || null,
+      visitType: resolvedVisitType,
+      symptoms: symptoms || "Routine OPD Consultation",
+      notes: notes || "",
+      vitals: vitals || {
+        temperature: 98.6,
+        bloodPressure: "120/80",
+        pulse: 78,
+        weight: 65.2,
+        height: 165,
+        spO2: 98,
+      },
+      visitDate: visitDate ? new Date(visitDate) : new Date(),
+      status: initialStatus,
+    });
+
+    if (appointmentId) {
+      await Appointment.findByIdAndUpdate(appointmentId, { status: "completed" });
+      await invalidatePattern("hms:appointment:*");
+    }
+
+    await invalidatePattern("hms:opd:*");
+    await invalidatePattern("hms:route:opd*");
+
+    if (currentUser) {
+      await createAuditLog({
+        userId: currentUser.id,
+        action: "CREATE",
+        resource: "opd_visit",
+        resourceId: opdVisit._id,
+        newValue: opdVisit.toObject(),
+        ipAddress: requestMeta?.ipAddress || "",
+        userAgent: requestMeta?.userAgent || "",
+      });
+    }
+
+    return opdVisit;
+  } finally {
+    await releaseLock(lockKey);
   }
-
-  const opdVisit = await OPDVisit.create({
-    patientId,
-    doctorId,
-    appointmentId: appointmentId || null,
-    symptoms,
-    vitals,
-    status: "in-progress",
-  });
-
-  // Agar appointment se link hai, to appointment ko "completed" mark kar do
-  if (appointmentId) {
-    await Appointment.findByIdAndUpdate(appointmentId, { status: "completed" });
-  }
-
-  await createAuditLog({
-    userId: currentUser.id,
-    action: "CREATE",
-    resource: "opd_visit",
-    resourceId: opdVisit._id,
-    newValue: opdVisit.toObject(),
-    ipAddress: requestMeta.ipAddress,
-    userAgent: requestMeta.userAgent,
-  });
-
-  return opdVisit;
 };
 
-// ---------------- GET ALL ----------------
-export const getAllOPDVisits = async ({ page = 1, limit = 10, patientId, doctorId, status, date }) => {
+// ---------------- GET ALL (Dynamic MongoDB Stats & Tab Filtering) ----------------
+export const getAllOPDVisits = async ({
+  page = 1,
+  limit = 10,
+  patientId,
+  doctorId,
+  status,
+  tab,
+  date,
+  search,
+}) => {
   const query = {};
-  if (patientId) query.patientId = patientId;
-  if (doctorId) query.doctorId = doctorId;
-  if (status) query.status = status;
+  if (patientId && patientId !== "all") query.patientId = patientId;
+  if (doctorId && doctorId !== "all") query.doctorId = doctorId;
+  if (status && status !== "all") query.status = status;
+
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const todayEnd = new Date();
+  todayEnd.setHours(23, 59, 59, 999);
+
   if (date) {
     const startOfDay = new Date(date);
     startOfDay.setHours(0, 0, 0, 0);
@@ -78,37 +119,87 @@ export const getAllOPDVisits = async ({ page = 1, limit = 10, patientId, doctorI
     query.visitDate = { $gte: startOfDay, $lte: endOfDay };
   }
 
-  const skip = (page - 1) * limit;
+  // Tab filters
+  if (tab === "in-progress") {
+    query.status = "in-progress";
+  } else if (tab === "completed") {
+    query.status = "completed";
+  } else if (tab === "walk-in") {
+    query.$or = [{ status: "walk-in" }, { visitType: "walk-in" }];
+  }
 
-  const [visits, total] = await Promise.all([
+  const safeSearch = search ? search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") : "";
+  const skip = (Number(page) - 1) * Number(limit);
+
+  const [visits, total, todayCount, inProgressCount, completedCount, walkInCount] = await Promise.all([
     OPDVisit.find(query)
-      .populate("patientId", "name patientId phone")
+      .populate("patientId", "name patientId phone email bloodGroup gender dateOfBirth photoUrl")
       .populate({
         path: "doctorId",
-        select: "doctorId specialization",
-        populate: { path: "userId", select: "name" },
+        select: "doctorId specialization photoUrl userId departmentId",
+        populate: [
+          { path: "userId", select: "name" },
+          { path: "departmentId", select: "name code" },
+        ],
       })
+      .populate("appointmentId", "appointmentId appointmentDate startTime")
       .skip(skip)
-      .limit(limit)
+      .limit(Number(limit))
       .sort({ visitDate: -1 }),
     OPDVisit.countDocuments(query),
+    OPDVisit.countDocuments({ visitDate: { $gte: todayStart, $lte: todayEnd } }),
+    OPDVisit.countDocuments({ status: "in-progress" }),
+    OPDVisit.countDocuments({ status: "completed" }),
+    OPDVisit.countDocuments({ $or: [{ status: "walk-in" }, { visitType: "walk-in" }] }),
   ]);
 
+  const filteredVisits = safeSearch
+    ? visits.filter((v) =>
+        v.patientId?.name?.toLowerCase().includes(safeSearch.toLowerCase()) ||
+        v.patientId?.patientId?.toLowerCase().includes(safeSearch.toLowerCase()) ||
+        v.doctorId?.userId?.name?.toLowerCase().includes(safeSearch.toLowerCase()) ||
+        v.visitId?.toLowerCase().includes(safeSearch.toLowerCase()) ||
+        v.symptoms?.toLowerCase().includes(safeSearch.toLowerCase()) ||
+        v.diagnosis?.toLowerCase().includes(safeSearch.toLowerCase())
+      )
+    : visits;
+
   return {
-    visits,
-    pagination: { total, page: Number(page), limit: Number(limit), totalPages: Math.ceil(total / limit) },
+    visits: filteredVisits,
+    stats: {
+      totalVisits: total,
+      todayCount,
+      inProgressCount,
+      completedCount,
+      walkInCount,
+    },
+    pagination: {
+      total,
+      page: Number(page),
+      limit: Number(limit),
+      totalPages: Math.ceil((total || 1) / Number(limit)),
+    },
   };
 };
 
-// ---------------- GET BY ID ----------------
+// ---------------- GET BY ID WITH REDIS CACHE ----------------
 export const getOPDVisitById = async (id) => {
-  const visit = await OPDVisit.findById(id)
-    .populate("patientId", "name patientId phone dateOfBirth gender")
-    .populate({
-      path: "doctorId",
-      select: "doctorId specialization",
-      populate: { path: "userId", select: "name" },
-    });
+  const { data: visit } = await getOrSetCache(
+    `hms:opd:visit:${id}`,
+    () =>
+      OPDVisit.findById(id)
+        .populate("patientId", "name patientId phone email bloodGroup gender dateOfBirth photoUrl")
+        .populate({
+          path: "doctorId",
+          select: "doctorId specialization photoUrl userId departmentId",
+          populate: [
+            { path: "userId", select: "name" },
+            { path: "departmentId", select: "name code" },
+          ],
+        })
+        .populate("appointmentId", "appointmentId appointmentDate startTime"),
+    600
+  );
 
   if (!visit) {
     throw new AppError("OPD visit not found", 404, ErrorCodes.NOT_FOUND);
@@ -117,42 +208,42 @@ export const getOPDVisitById = async (id) => {
   return visit;
 };
 
-// ---------------- UPDATE (diagnosis add karna, complete karna) ----------------
+// ---------------- UPDATE ----------------
 export const updateOPDVisit = async (id, data, currentUser, requestMeta) => {
   const visit = await OPDVisit.findById(id);
   if (!visit) {
     throw new AppError("OPD visit not found", 404, ErrorCodes.NOT_FOUND);
   }
 
-  if (visit.status === "completed") {
-    throw new AppError(
-      "Cannot update a completed OPD visit",
-      400,
-      ErrorCodes.VALIDATION_ERROR
-    );
-  }
-
   const oldValue = visit.toObject();
-  const { symptoms, diagnosis, notes, vitals, status } = data;
+  const { symptoms, diagnosis, notes, vitals, clinicalNotes, prescription, status } = data;
 
   if (symptoms !== undefined) visit.symptoms = symptoms;
   if (diagnosis !== undefined) visit.diagnosis = diagnosis;
   if (notes !== undefined) visit.notes = notes;
-  if (vitals !== undefined) visit.vitals = { ...visit.vitals.toObject(), ...vitals };
+  if (vitals !== undefined) visit.vitals = { ...visit.vitals, ...vitals };
+  if (clinicalNotes !== undefined) visit.clinicalNotes = { ...visit.clinicalNotes, ...clinicalNotes };
+  if (prescription !== undefined) visit.prescription = prescription;
   if (status !== undefined) visit.status = status;
 
   await visit.save();
 
-  await createAuditLog({
-    userId: currentUser.id,
-    action: "UPDATE",
-    resource: "opd_visit",
-    resourceId: visit._id,
-    oldValue,
-    newValue: visit.toObject(),
-    ipAddress: requestMeta.ipAddress,
-    userAgent: requestMeta.userAgent,
-  });
+  await delCache(`hms:opd:visit:${id}`);
+  await invalidatePattern("hms:opd:*");
+  await invalidatePattern("hms:route:opd*");
+
+  if (currentUser) {
+    await createAuditLog({
+      userId: currentUser.id,
+      action: "UPDATE",
+      resource: "opd_visit",
+      resourceId: visit._id,
+      oldValue,
+      newValue: visit.toObject(),
+      ipAddress: requestMeta?.ipAddress || "",
+      userAgent: requestMeta?.userAgent || "",
+    });
+  }
 
   return visit;
 };

@@ -3,7 +3,7 @@ import { successResponse } from "../../core/responses/apiResponse.js";
 import { asyncHandler } from "../../utils/asyncHandler.js";
 
 export const dashboard = asyncHandler(async (req, res) => {
-  const stats = await getDashboardStats();
+  const stats = await getDashboardStats(req.query);
   return successResponse(res, 200, "Dashboard stats fetched successfully", stats);
 });
 

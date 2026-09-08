@@ -48,6 +48,8 @@ const auditLogSchema = new mongoose.Schema(
 auditLogSchema.index({ userId: 1, createdAt: -1 });
 auditLogSchema.index({ resource: 1, resourceId: 1 });
 auditLogSchema.index({ createdAt: -1 });
+auditLogSchema.index({ action: 1, createdAt: -1 });
+auditLogSchema.index({ resource: 1, action: 1, createdAt: -1 });
 
 const AuditLog = mongoose.model("AuditLog", auditLogSchema);
 

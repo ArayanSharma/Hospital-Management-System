@@ -22,6 +22,9 @@ import supplierRoutes from "../modules/suppliers/supplier.routes.js";
 import inventoryItemRoutes from "../modules/inventory/inventoryItem.routes.js";
 import medicineRoutes from "../modules/pharmacy/medicine.routes.js";
 import pharmacySaleRoutes from "../modules/pharmacy/pharmacySale.routes.js";
+import pharmacyDashboardRoutes from "../modules/pharmacy/pharmacyDashboard.routes.js";
+import stockInRoutes from "../modules/pharmacy/stockIn.routes.js";
+import inventoryRoutes from "../modules/pharmacy/inventory.routes.js";
 
 import invoiceRoutes from "../modules/billing/invoice.routes.js";
 import paymentRoutes from "../modules/payments/payment.routes.js";
@@ -52,7 +55,10 @@ router.use("/admissions", admissionRoutes);
 router.use("/prescriptions", prescriptionRoutes);
 router.use("/medical-records", medicalRecordRoutes);
 router.use("/lab-tests", labTestRoutes);
+router.use("/laboratory/tests", labTestRoutes);
+router.use("/laboratory", labTestRoutes);
 router.use("/lab-reports", labReportRoutes);
+router.use("/laboratory/reports", labReportRoutes);
 router.use("/radiology-tests", radiologyTestRoutes);
 router.use("/radiology-reports", radiologyReportRoutes);
 
@@ -60,6 +66,12 @@ router.use("/suppliers", supplierRoutes);
 router.use("/inventory", inventoryItemRoutes);
 router.use("/medicines", medicineRoutes);
 router.use("/pharmacy-sales", pharmacySaleRoutes);
+router.use("/pharmacy/stock-in", stockInRoutes);
+router.use("/stock-in", stockInRoutes);
+router.use("/pharmacy/inventory", inventoryRoutes);
+router.use("/inventory-actions", inventoryRoutes);
+router.use("/pharmacy", pharmacyDashboardRoutes);
+
 
 router.use("/invoices", invoiceRoutes);
 router.use("/payments", paymentRoutes);

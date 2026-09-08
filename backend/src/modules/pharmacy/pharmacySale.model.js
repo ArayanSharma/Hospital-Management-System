@@ -5,24 +5,34 @@ const saleMedicineItemSchema = new mongoose.Schema(
     medicineId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Medicine",
-      required: true,
     },
-    inventoryItemId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "InventoryItem",
+    medicineName: {
+      type: String,
       required: true,
-      // Kis batch se stock kata
+      trim: true,
+    },
+    batchNo: {
+      type: String,
+      trim: true,
+    },
+    expiryDate: {
+      type: String,
+      trim: true,
     },
     quantity: {
       type: Number,
       required: true,
       min: 1,
     },
+    unit: {
+      type: String,
+      default: "Strip",
+    },
     unitPrice: {
       type: Number,
       required: true,
     },
-    subtotal: {
+    amount: {
       type: Number,
       required: true,
     },
@@ -32,15 +42,33 @@ const saleMedicineItemSchema = new mongoose.Schema(
 
 const pharmacySaleSchema = new mongoose.Schema(
   {
+    invoiceNo: {
+      type: String,
+      required: true,
+      trim: true,
+      index: true,
+    },
+    customerType: {
+      type: String,
+      enum: ["Walk-in Customer", "OPD Patient", "IPD Patient"],
+      default: "Walk-in Customer",
+    },
+    customerName: {
+      type: String,
+      default: "Walk-in Customer",
+      trim: true,
+    },
+    mobileNumber: {
+      type: String,
+      trim: true,
+    },
+    prescriptionNo: {
+      type: String,
+      trim: true,
+    },
     patientId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Patient",
-      default: null,
-      // Optional — walk-in customer bhi ho sakta hai bina registered patient ke
-    },
-    prescriptionId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Prescription",
       default: null,
     },
     medicines: {
@@ -50,26 +78,70 @@ const pharmacySaleSchema = new mongoose.Schema(
         message: "At least one medicine is required",
       },
     },
+    totalItems: {
+      type: Number,
+      default: 1,
+    },
+    totalQuantity: {
+      type: Number,
+      default: 1,
+    },
+    subTotal: {
+      type: Number,
+      required: true,
+    },
+    discountAmount: {
+      type: Number,
+      default: 0,
+    },
+    gstAmount: {
+      type: Number,
+      default: 0,
+    },
     totalAmount: {
       type: Number,
       required: true,
     },
+    grandTotal: {
+      type: Number,
+      required: true,
+    },
+    paymentMethod: {
+      type: String,
+      enum: ["Cash", "UPI", "Card", "Credit"],
+      default: "Cash",
+    },
+    amountReceived: {
+      type: Number,
+      default: 0,
+    },
+    changeAmount: {
+      type: Number,
+      default: 0,
+    },
+    notes: {
+      type: String,
+      trim: true,
+    },
     paymentStatus: {
       type: String,
       enum: ["pending", "paid"],
-      default: "pending",
+      default: "paid",
+    },
+    printInvoice: {
+      type: Boolean,
+      default: true,
     },
     soldBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      required: true,
     },
   },
   { timestamps: true }
 );
 
-pharmacySaleSchema.index({ patientId: 1, createdAt: -1 });
+pharmacySaleSchema.index({ invoiceNo: 1, createdAt: -1 });
 
 const PharmacySale = mongoose.model("PharmacySale", pharmacySaleSchema);
 
-export default PharmacySale;
+export default PharmacySale;

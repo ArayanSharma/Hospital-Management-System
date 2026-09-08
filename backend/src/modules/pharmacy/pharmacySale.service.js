@@ -6,89 +6,108 @@ import { stockOut } from "../inventory/inventoryItem.service.js";
 import AppError from "../../core/errors/AppError.js";
 import { ErrorCodes } from "../../core/errors/errorCodes.js";
 import { createAuditLog } from "../audit-logs/audit-log.service.js";
+import { getOrSetCache, invalidatePattern, delCache, acquireLock, releaseLock } from "../../utils/redisCache.js";
+import { notifyPharmacySaleEvent } from "../../utils/notificationDispatcher.js";
 
 export const createPharmacySale = async (data, currentUser, requestMeta) => {
-  const { patientId, prescriptionId, medicines } = data;
+  const {
+    invoiceNo,
+    customerType,
+    customerName,
+    mobileNumber,
+    prescriptionNo,
+    patientId,
+    medicines,
+    totalItems,
+    totalQuantity,
+    subTotal,
+    discountAmount,
+    gstAmount,
+    totalAmount,
+    grandTotal,
+    paymentMethod,
+    amountReceived,
+    changeAmount,
+    notes,
+    paymentStatus,
+    printInvoice,
+  } = data;
 
-  // 1. Har medicine item ke liye validate karo aur subtotal calculate karo
-  const saleItems = [];
-  let totalAmount = 0;
+  const invNo = invoiceNo || `INV-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
 
-  for (const item of medicines) {
-    const { medicineId, inventoryItemId, quantity } = item;
-
-    const medicine = await Medicine.findById(medicineId);
-    if (!medicine) {
-      throw new AppError(`Medicine not found: ${medicineId}`, 404, ErrorCodes.NOT_FOUND);
-    }
-
-    const inventoryItem = await InventoryItem.findById(inventoryItemId);
-    if (!inventoryItem) {
-      throw new AppError(`Inventory item not found: ${inventoryItemId}`, 404, ErrorCodes.NOT_FOUND);
-    }
-
-    if (inventoryItem.quantity < quantity) {
-      throw new AppError(
-        `Insufficient stock for ${medicine.name}. Available: ${inventoryItem.quantity}`,
-        400,
-        ErrorCodes.VALIDATION_ERROR
-      );
-    }
-
-    const subtotal = medicine.price * quantity;
-    totalAmount += subtotal;
-
-    saleItems.push({
-      medicineId,
-      inventoryItemId,
-      quantity,
-      unitPrice: medicine.price,
-      subtotal,
-    });
+  const lockKey = `hms:lock:pharmsale:${invNo}`;
+  const hasLock = await acquireLock(lockKey, 10);
+  if (!hasLock) {
+    throw new AppError("A pharmacy POS sale with this invoice number is currently being processed", 409, ErrorCodes.VALIDATION_ERROR);
   }
 
-  // 2. Transaction: Sale create + Stock deduct — ek saath ya kuch bhi nahi
-  const session = await mongoose.startSession();
-  session.startTransaction();
-
   try {
-    const sale = await PharmacySale.create(
-      [
-        {
-          patientId: patientId || null,
-          prescriptionId: prescriptionId || null,
-          medicines: saleItems,
-          totalAmount,
-          paymentStatus: "pending",
-          soldBy: currentUser.id,
-        },
-      ],
-      { session }
-    );
+    const saleItems = (medicines || []).map((m) => ({
+      medicineId: m.medicineId || m.id,
+      medicineName: m.name || m.medicineName || m.medicine,
+      batchNo: m.batchNo || m.batch,
+      expiryDate: m.expiryDate || m.expiry,
+      quantity: Number(m.quantity || m.qty || 1),
+      unit: m.unit || "Strip",
+      unitPrice: Number(m.unitPrice || m.price || 0),
+      amount: Number(m.amount || m.subtotal || (m.unitPrice || m.price || 0) * (m.quantity || m.qty || 1)),
+    }));
 
-    // Har medicine ke liye stock deduct karo
-    for (const item of saleItems) {
-      await stockOut(item.inventoryItemId, item.quantity, session);
-    }
+    const calcSubTotal = saleItems.reduce((sum, item) => sum + item.amount, 0);
+    const calcGst = calcSubTotal * 0.12;
+    const calcGrandTotal = calcSubTotal + calcGst - Number(discountAmount || 0);
 
-    await session.commitTransaction();
-    session.endSession();
-
-    await createAuditLog({
-      userId: currentUser.id,
-      action: "CREATE",
-      resource: "pharmacy_sale",
-      resourceId: sale[0]._id,
-      newValue: sale[0].toObject(),
-      ipAddress: requestMeta.ipAddress,
-      userAgent: requestMeta.userAgent,
+    const saleRecord = await PharmacySale.create({
+      invoiceNo: invNo,
+      customerType: customerType || "Walk-in Customer",
+      customerName: customerName || "Walk-in Customer",
+      mobileNumber,
+      prescriptionNo,
+      patientId: patientId || null,
+      medicines: saleItems,
+      totalItems: totalItems || saleItems.length,
+      totalQuantity: totalQuantity || saleItems.reduce((acc, it) => acc + it.quantity, 0),
+      subTotal: Number(subTotal || calcSubTotal),
+      discountAmount: Number(discountAmount || 0),
+      gstAmount: Number(gstAmount || calcGst),
+      totalAmount: Number(totalAmount || grandTotal || calcGrandTotal),
+      grandTotal: Number(grandTotal || calcGrandTotal),
+      paymentMethod: paymentMethod || "Cash",
+      amountReceived: Number(amountReceived || 0),
+      changeAmount: Number(changeAmount || 0),
+      notes,
+      paymentStatus: paymentStatus || "paid",
+      printInvoice: Boolean(printInvoice),
+      soldBy: currentUser?.id,
     });
 
-    return sale[0];
-  } catch (err) {
-    await session.abortTransaction();
-    session.endSession();
-    throw err;
+    await invalidatePattern("hms:pharmacy:*");
+    await invalidatePattern("hms:route:pharmacy*");
+
+    if (currentUser) {
+      await createAuditLog({
+        userId: currentUser.id,
+        action: "CREATE",
+        resource: "pharmacy_sale",
+        resourceId: saleRecord._id,
+        newValue: saleRecord.toObject(),
+        ipAddress: requestMeta?.ipAddress || "",
+        userAgent: requestMeta?.userAgent || "",
+      });
+    }
+
+    if (patientId) {
+      await notifyPharmacySaleEvent({
+        userId: patientId,
+        saleId: saleRecord._id,
+        invoiceNo: invNo,
+        totalAmount: saleRecord.grandTotal,
+      });
+    }
+
+    return saleRecord;
+  } finally {
+    await releaseLock(lockKey);
   }
 };
 
@@ -97,7 +116,9 @@ export const getAllPharmacySales = async ({ page = 1, limit = 10, patientId, pay
   if (patientId) query.patientId = patientId;
   if (paymentStatus) query.paymentStatus = paymentStatus;
 
-  const skip = (page - 1) * limit;
+  const pageNum = parseInt(page, 10) || 1;
+  const limitNum = parseInt(limit, 10) || 10;
+  const skip = (pageNum - 1) * limitNum;
 
   const [sales, total] = await Promise.all([
     PharmacySale.find(query)
@@ -105,22 +126,27 @@ export const getAllPharmacySales = async ({ page = 1, limit = 10, patientId, pay
       .populate("soldBy", "name")
       .populate("medicines.medicineId", "name unit")
       .skip(skip)
-      .limit(limit)
+      .limit(limitNum)
       .sort({ createdAt: -1 }),
     PharmacySale.countDocuments(query),
   ]);
 
   return {
     sales,
-    pagination: { total, page: Number(page), limit: Number(limit), totalPages: Math.ceil(total / limit) },
+    pagination: { total, page: pageNum, limit: limitNum, totalPages: Math.ceil(total / limitNum) || 1 },
   };
 };
 
 export const getPharmacySaleById = async (id) => {
-  const sale = await PharmacySale.findById(id)
-    .populate("patientId", "name patientId phone")
-    .populate("soldBy", "name")
-    .populate("medicines.medicineId", "name unit");
+  const { data: sale } = await getOrSetCache(
+    `hms:pharmacy:sale:${id}`,
+    () =>
+      PharmacySale.findById(id)
+        .populate("patientId", "name patientId phone")
+        .populate("soldBy", "name")
+        .populate("medicines.medicineId", "name unit"),
+    600
+  );
 
   if (!sale) {
     throw new AppError("Pharmacy sale not found", 404, ErrorCodes.NOT_FOUND);
@@ -143,16 +169,22 @@ export const markSaleAsPaid = async (id, currentUser, requestMeta) => {
   sale.paymentStatus = "paid";
   await sale.save();
 
-  await createAuditLog({
-    userId: currentUser.id,
-    action: "UPDATE",
-    resource: "pharmacy_sale",
-    resourceId: sale._id,
-    oldValue,
-    newValue: sale.toObject(),
-    ipAddress: requestMeta.ipAddress,
-    userAgent: requestMeta.userAgent,
-  });
+  await delCache(`hms:pharmacy:sale:${id}`);
+  await invalidatePattern("hms:pharmacy:*");
+  await invalidatePattern("hms:route:pharmacy*");
+
+  if (currentUser) {
+    await createAuditLog({
+      userId: currentUser.id,
+      action: "UPDATE",
+      resource: "pharmacy_sale",
+      resourceId: sale._id,
+      oldValue,
+      newValue: sale.toObject(),
+      ipAddress: requestMeta?.ipAddress || "",
+      userAgent: requestMeta?.userAgent || "",
+    });
+  }
 
   return sale;
 };

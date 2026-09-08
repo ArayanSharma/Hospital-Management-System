@@ -4,6 +4,7 @@ import {
   getAdmissionById,
   updateAdmission,
   dischargePatient,
+  transferBed,
 } from "./admission.service.js";
 import { successResponse } from "../../core/responses/apiResponse.js";
 import { asyncHandler } from "../../utils/asyncHandler.js";
@@ -36,4 +37,10 @@ export const discharge = asyncHandler(async (req, res) => {
   const { dischargeSummary } = req.body;
   const admission = await dischargePatient(req.params.id, dischargeSummary, req.user, meta);
   return successResponse(res, 200, "Patient discharged successfully", admission);
+});
+
+export const transfer = asyncHandler(async (req, res) => {
+  const meta = getRequestMeta(req);
+  const admission = await transferBed(req.params.id, req.body, req.user, meta);
+  return successResponse(res, 200, "Patient transferred successfully", admission);
 });

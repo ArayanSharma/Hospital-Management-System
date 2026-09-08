@@ -6,18 +6,18 @@ import AppError from "../../core/errors/AppError.js";
 import { ErrorCodes } from "../../core/errors/errorCodes.js";
 import { createAuditLog } from "../audit-logs/audit-log.service.js";
 import { isTimeOverlapping } from "../../utils/timeOverlap.js";
-import { createNotification } from "../notifications/notification.service.js";
+import { notifyAppointmentEvent } from "../../utils/notificationDispatcher.js";
 
-// ---------------- Helper: conflict check ----------------
+// Helper: conflict check
 const checkDoctorConflict = async (doctorId, appointmentDate, startTime, endTime, excludeId = null) => {
   const query = {
     doctorId,
     appointmentDate,
-    status: { $in: ["scheduled"] }, // sirf active appointments check honi chahiye, cancelled wale nahi
+    status: { $in: ["scheduled", "checked_in", "in_consultation"] },
   };
 
   if (excludeId) {
-    query._id = { $ne: excludeId }; // update ke waqt khud se conflict na ho
+    query._id = { $ne: excludeId };
   }
 
   const existingAppointments = await Appointment.find(query);
@@ -29,100 +29,150 @@ const checkDoctorConflict = async (doctorId, appointmentDate, startTime, endTime
   return hasConflict;
 };
 
-// ---------------- CREATE ----------------
+// ---------------- CREATE WITH REDIS ATOMIC LOCK & EDGE CASE GUARDS ----------------
 export const createAppointment = async (data, currentUser, requestMeta) => {
   const {
     patientId,
     doctorId,
+    departmentId,
     appointmentDate,
     startTime,
     endTime,
     reason,
+    notes,
+    sendNotification,
   } = data;
 
-  // 1. Validate references exist
-  const [patient, doctor] = await Promise.all([
-    Patient.findById(patientId),
-    Doctor.findById(doctorId),
-  ]);
-
-  if (!patient || patient.status === "inactive") {
-    throw new AppError("Patient not found", 404, ErrorCodes.NOT_FOUND);
-  }
-  if (!doctor || doctor.status === "inactive") {
-    throw new AppError("Doctor not found or inactive", 404, ErrorCodes.NOT_FOUND);
+  // 1. Time Format Validation (HH:mm)
+  const timeRegex = /^([0-1][0-9]|2[0-3]):[0-5][0-9]$/;
+  if (!timeRegex.test(startTime) || !timeRegex.test(endTime)) {
+    throw new AppError("Invalid time format. Time must be in HH:mm 24-hour format (e.g. 09:30, 14:00)", 400, ErrorCodes.VALIDATION_ERROR);
   }
 
-  // 2. Basic time validity
   if (startTime >= endTime) {
-    throw new AppError(
-      "End time must be after start time",
-      400,
-      ErrorCodes.VALIDATION_ERROR
-    );
+    throw new AppError("End time must be strictly after start time", 400, ErrorCodes.VALIDATION_ERROR);
   }
 
-  // 3. Conflict check — doctor ki schedule mein overlap to nahi
-  const hasConflict = await checkDoctorConflict(
-    doctorId,
-    appointmentDate,
-    startTime,
-    endTime
-  );
-  if (hasConflict) {
-    throw new AppError(
-      "Doctor already has an appointment in this time slot",
-      409,
-      ErrorCodes.VALIDATION_ERROR
-    );
+  // 2. Past Date & Past Time Edge Case Guard
+  const apptDateObj = new Date(appointmentDate);
+  if (isNaN(apptDateObj.getTime())) {
+    throw new AppError("Invalid appointment date format", 400, ErrorCodes.VALIDATION_ERROR);
   }
 
-  const appointment = await Appointment.create({
-    patientId,
-    doctorId,
-    departmentId: doctor.departmentId, // doctor se automatically le liya, alag se nahi maangna
-    appointmentDate,
-    startTime,
-    endTime,
-    reason,
-    status: "scheduled",
-  });
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const apptDayStart = new Date(apptDateObj.getFullYear(), apptDateObj.getMonth(), apptDateObj.getDate());
 
-  await createAuditLog({
-    userId: currentUser.id,
-    action: "CREATE",
-    resource: "appointment",
-    resourceId: appointment._id,
-    newValue: appointment.toObject(),
-    ipAddress: requestMeta.ipAddress,
-    userAgent: requestMeta.userAgent,
-  });
+  if (apptDayStart < todayStart) {
+    throw new AppError("Cannot schedule an appointment for a past date", 400, ErrorCodes.VALIDATION_ERROR);
+  }
 
-  // ---------------- NOTIFICATION: Doctor ko inform karo ----------------
-  await createNotification({
-    userId: doctor.userId,
-    type: "appointment",
-    title: "New Appointment Scheduled",
-    message: `You have a new appointment on ${new Date(appointmentDate).toLocaleDateString()} at ${startTime}`,
-    metadata: { appointmentId: appointment._id },
-  });
+  if (apptDayStart.getTime() === todayStart.getTime()) {
+    const currentHHMM = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+    if (startTime < currentHHMM) {
+      throw new AppError("Cannot schedule an appointment for a past time slot today", 400, ErrorCodes.VALIDATION_ERROR);
+    }
+  }
 
-  return appointment;
+  const formattedDate = apptDateObj.toISOString().slice(0, 10);
+  const lockKey = `hms:lock:appt:${doctorId}:${formattedDate}:${startTime}`;
+
+  // 3. Acquire True Atomic Redis Mutex Lock (SET NX EX)
+  const hasLock = await acquireLock(lockKey, 10);
+  if (!hasLock) {
+    throw new AppError("This slot is currently being processed for booking by another user. Please try again in a few seconds.", 409, ErrorCodes.VALIDATION_ERROR);
+  }
+
+  try {
+    const [patient, doctor] = await Promise.all([
+      Patient.findById(patientId),
+      Doctor.findById(doctorId),
+    ]);
+
+    if (!patient || patient.status === "inactive") {
+      throw new AppError("Patient not found or inactive", 404, ErrorCodes.NOT_FOUND);
+    }
+    if (!doctor || doctor.status === "inactive") {
+      throw new AppError("Doctor not found or inactive", 404, ErrorCodes.NOT_FOUND);
+    }
+
+    const hasConflict = await checkDoctorConflict(doctorId, appointmentDate, startTime, endTime);
+    if (hasConflict) {
+      throw new AppError("Doctor already has a scheduled appointment in this time slot", 409, ErrorCodes.VALIDATION_ERROR);
+    }
+
+    const dateStr = formattedDate.replace(/-/g, "");
+    const appointmentId = await generateSequentialId(Appointment, `APT-${dateStr}`, "appointmentId");
+
+    const appointment = await Appointment.create({
+      appointmentId,
+      patientId,
+      doctorId,
+      departmentId: departmentId || doctor.departmentId,
+      appointmentDate,
+      startTime,
+      endTime,
+      reason,
+      notes: notes || null,
+      sendNotification: sendNotification !== false,
+      status: "scheduled",
+    });
+
+    // Invalidate cached stats
+    await delCache("hms:stats:appointments");
+
+    await createAuditLog({
+      userId: currentUser.id,
+      action: "CREATE",
+      resource: "appointment",
+      resourceId: appointment._id,
+      newValue: appointment.toObject(),
+      ipAddress: requestMeta.ipAddress,
+      userAgent: requestMeta.userAgent,
+    });
+
+    if (sendNotification !== false && doctor?.userId) {
+      await notifyAppointmentEvent({
+        userId: doctor.userId,
+        appointmentId: appointment._id,
+        doctorName: currentUser?.name,
+        date: new Date(appointmentDate).toLocaleDateString(),
+        status: "scheduled",
+      });
+    }
+
+    return appointment;
+  } finally {
+    // Release Atomic Redis Lock
+    await releaseLock(lockKey);
+  }
 };
 
-// ---------------- GET ALL ----------------
+
+
+// ---------------- GET ALL (Dynamic MongoDB Query & Stats) ----------------
 export const getAllAppointments = async ({
   page = 1,
   limit = 10,
   doctorId,
   patientId,
+  departmentId,
   status,
+  tab,
   date,
+  search,
 }) => {
   const query = {};
-  if (doctorId) query.doctorId = doctorId;
-  if (patientId) query.patientId = patientId;
-  if (status) query.status = status;
+  if (doctorId && doctorId !== "all") query.doctorId = doctorId;
+  if (patientId && patientId !== "all") query.patientId = patientId;
+  if (departmentId && departmentId !== "all") query.departmentId = departmentId;
+  if (status && status !== "all") query.status = status;
+
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const todayEnd = new Date();
+  todayEnd.setHours(23, 59, 59, 999);
+
   if (date) {
     const startOfDay = new Date(date);
     startOfDay.setHours(0, 0, 0, 0);
@@ -131,30 +181,73 @@ export const getAllAppointments = async ({
     query.appointmentDate = { $gte: startOfDay, $lte: endOfDay };
   }
 
+  // Handle Tab Filtering
+  if (tab === "today") {
+    query.appointmentDate = { $gte: todayStart, $lte: todayEnd };
+  } else if (tab === "upcoming") {
+    query.status = "scheduled";
+    query.appointmentDate = { $gt: todayEnd };
+  } else if (tab === "checked_in") {
+    query.status = { $in: ["checked_in", "in_consultation"] };
+  } else if (tab === "completed") {
+    query.status = "completed";
+  } else if (tab === "cancelled") {
+    query.status = "cancelled";
+  } else if (tab === "no-show") {
+    query.status = "no-show";
+  }
+
+  const safeSearch = search ? search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") : "";
+
   const skip = (page - 1) * limit;
 
-  const [appointments, total] = await Promise.all([
+  const [appointments, total, todayCount, scheduledCount, checkedInCount, completedCount, cancelledCount, noShowCount] = await Promise.all([
     Appointment.find(query)
-      .populate("patientId", "name patientId phone")
+      .populate("patientId", "name patientId phone email photoUrl")
       .populate({
         path: "doctorId",
-        select: "doctorId specialization",
+        select: "doctorId specialization photoUrl userId",
         populate: { path: "userId", select: "name" },
       })
-      .populate("departmentId", "name")
+      .populate("departmentId", "name code")
       .skip(skip)
       .limit(limit)
       .sort({ appointmentDate: -1, startTime: 1 }),
     Appointment.countDocuments(query),
+    Appointment.countDocuments({ appointmentDate: { $gte: todayStart, $lte: todayEnd } }),
+    Appointment.countDocuments({ status: "scheduled" }),
+    Appointment.countDocuments({ status: { $in: ["checked_in", "in_consultation"] } }),
+    Appointment.countDocuments({ status: "completed" }),
+    Appointment.countDocuments({ status: "cancelled" }),
+    Appointment.countDocuments({ status: "no-show" }),
   ]);
 
+  const filteredAppointments = safeSearch
+    ? appointments.filter((appt) =>
+        appt.patientId?.name?.toLowerCase().includes(safeSearch.toLowerCase()) ||
+        appt.patientId?.patientId?.toLowerCase().includes(safeSearch.toLowerCase()) ||
+        appt.doctorId?.userId?.name?.toLowerCase().includes(safeSearch.toLowerCase()) ||
+        appt.appointmentId?.toLowerCase().includes(safeSearch.toLowerCase()) ||
+        appt.reason?.toLowerCase().includes(safeSearch.toLowerCase())
+      )
+    : appointments;
+
   return {
-    appointments,
+    appointments: filteredAppointments,
+    stats: {
+      totalAppointments: total,
+      todayCount,
+      scheduledCount,
+      checkedInCount,
+      completedCount,
+      cancelledCount,
+      noShowCount,
+    },
     pagination: {
       total,
       page: Number(page),
       limit: Number(limit),
-      totalPages: Math.ceil(total / limit),
+      totalPages: Math.ceil((total || 1) / limit),
     },
   };
 };
@@ -162,13 +255,13 @@ export const getAllAppointments = async ({
 // ---------------- GET BY ID ----------------
 export const getAppointmentById = async (id) => {
   const appointment = await Appointment.findById(id)
-    .populate("patientId", "name patientId phone")
+    .populate("patientId", "name patientId phone email")
     .populate({
       path: "doctorId",
-      select: "doctorId specialization",
+      select: "doctorId specialization photoUrl userId",
       populate: { path: "userId", select: "name" },
     })
-    .populate("departmentId", "name");
+    .populate("departmentId", "name code");
 
   if (!appointment) {
     throw new AppError("Appointment not found", 404, ErrorCodes.NOT_FOUND);
@@ -184,29 +277,16 @@ export const updateAppointment = async (id, data, currentUser, requestMeta) => {
     throw new AppError("Appointment not found", 404, ErrorCodes.NOT_FOUND);
   }
 
-  if (appointment.status !== "scheduled") {
-    throw new AppError(
-      "Only scheduled appointments can be rescheduled",
-      400,
-      ErrorCodes.VALIDATION_ERROR
-    );
-  }
-
   const oldValue = appointment.toObject();
-  const { appointmentDate, startTime, endTime, reason, notes } = data;
+  const { appointmentDate, startTime, endTime, reason, notes, status, sendNotification } = data;
 
-  // Agar time/date change ho raha hai, conflict dobara check karo
   if (appointmentDate || startTime || endTime) {
     const newDate = appointmentDate || appointment.appointmentDate;
     const newStart = startTime || appointment.startTime;
     const newEnd = endTime || appointment.endTime;
 
     if (newStart >= newEnd) {
-      throw new AppError(
-        "End time must be after start time",
-        400,
-        ErrorCodes.VALIDATION_ERROR
-      );
+      throw new AppError("End time must be after start time", 400, ErrorCodes.VALIDATION_ERROR);
     }
 
     const hasConflict = await checkDoctorConflict(
@@ -214,14 +294,10 @@ export const updateAppointment = async (id, data, currentUser, requestMeta) => {
       newDate,
       newStart,
       newEnd,
-      appointment._id // khud ko exclude karo check se
+      appointment._id
     );
     if (hasConflict) {
-      throw new AppError(
-        "Doctor already has an appointment in this time slot",
-        409,
-        ErrorCodes.VALIDATION_ERROR
-      );
+      throw new AppError("Doctor already has an appointment in this time slot", 409, ErrorCodes.VALIDATION_ERROR);
     }
 
     appointment.appointmentDate = newDate;
@@ -231,8 +307,12 @@ export const updateAppointment = async (id, data, currentUser, requestMeta) => {
 
   if (reason !== undefined) appointment.reason = reason;
   if (notes !== undefined) appointment.notes = notes;
+  if (status !== undefined) appointment.status = status;
+  if (sendNotification !== undefined) appointment.sendNotification = sendNotification;
 
   await appointment.save();
+
+  await delCache("hms:stats:appointments");
 
   await createAuditLog({
     userId: currentUser.id,
@@ -248,9 +328,9 @@ export const updateAppointment = async (id, data, currentUser, requestMeta) => {
   return appointment;
 };
 
-// ---------------- STATUS CHANGE (complete / cancel / no-show) ----------------
+// ---------------- STATUS CHANGE (complete / cancel / no-show / check-in) ----------------
 export const changeAppointmentStatus = async (id, newStatus, cancelledReason, currentUser, requestMeta) => {
-  const validStatuses = ["completed", "cancelled", "no-show"];
+  const validStatuses = ["scheduled", "checked_in", "in_consultation", "completed", "cancelled", "no-show"];
   if (!validStatuses.includes(newStatus)) {
     throw new AppError("Invalid status value", 400, ErrorCodes.VALIDATION_ERROR);
   }
@@ -260,45 +340,61 @@ export const changeAppointmentStatus = async (id, newStatus, cancelledReason, cu
     throw new AppError("Appointment not found", 404, ErrorCodes.NOT_FOUND);
   }
 
-  if (appointment.status !== "scheduled") {
-    throw new AppError(
-      "Only scheduled appointments can change status",
-      400,
-      ErrorCodes.VALIDATION_ERROR
-    );
+  // Edge Case State Transition Validation
+  if (appointment.status === "cancelled" && newStatus !== "scheduled" && newStatus !== "cancelled") {
+    throw new AppError("Cancelled appointments cannot be updated. Please reschedule the appointment slot.", 400, ErrorCodes.VALIDATION_ERROR);
+  }
+  if (appointment.status === "completed" && newStatus !== "completed") {
+    throw new AppError("Completed appointments are finalized and cannot be modified.", 400, ErrorCodes.VALIDATION_ERROR);
   }
 
   const oldValue = appointment.toObject();
 
   appointment.status = newStatus;
   if (newStatus === "cancelled") {
-    appointment.cancelledReason = cancelledReason || "Not specified";
+    appointment.cancelledReason = (cancelledReason && cancelledReason.trim()) || "Patient requested cancellation";
   }
 
   await appointment.save();
 
-  await createAuditLog({
-    userId: currentUser.id,
-    action: "UPDATE",
-    resource: "appointment",
-    resourceId: appointment._id,
-    oldValue,
-    newValue: appointment.toObject(),
-    ipAddress: requestMeta.ipAddress,
-    userAgent: requestMeta.userAgent,
-  });
+  await delCache("hms:stats:appointments");
 
-  // ---------------- NOTIFICATION: agar cancel hui to doctor ko batao ----------------
-  if (newStatus === "cancelled") {
-    const doctor = await Doctor.findById(appointment.doctorId);
-    if (doctor) {
-      await createNotification({
-        userId: doctor.userId,
-        type: "appointment",
-        title: "Appointment Cancelled",
-        message: `Appointment on ${new Date(appointment.appointmentDate).toLocaleDateString()} was cancelled. Reason: ${cancelledReason || "Not specified"}`,
-        metadata: { appointmentId: appointment._id },
-      });
+
+  // Audit Log & Notification (Safe Execution)
+  try {
+    await createAuditLog({
+      userId: currentUser.id,
+      action: "UPDATE",
+      resource: "appointment",
+      resourceId: appointment._id,
+      oldValue,
+      newValue: appointment.toObject(),
+      ipAddress: requestMeta.ipAddress,
+      userAgent: requestMeta.userAgent,
+    });
+  } catch (auditErr) {
+    console.error("Audit log error on appointment status change:", auditErr);
+  }
+
+  if (newStatus === "cancelled" || newStatus === "checked_in") {
+    try {
+      const doctor = await Doctor.findById(appointment.doctorId);
+      if (doctor && doctor.userId) {
+        const notifTitle = newStatus === "cancelled" ? "Appointment Cancelled" : "Patient Checked-In";
+        const notifMsg = newStatus === "cancelled"
+          ? `Appointment on ${new Date(appointment.appointmentDate).toLocaleDateString()} was cancelled. Reason: ${appointment.cancelledReason}`
+          : `Patient has checked in for OPD appointment at ${appointment.startTime}.`;
+
+        await createNotification({
+          userId: doctor.userId,
+          type: "appointment",
+          title: notifTitle,
+          message: notifMsg,
+          metadata: { appointmentId: appointment._id },
+        });
+      }
+    } catch (notifErr) {
+      console.error("Notification error on appointment status change:", notifErr);
     }
   }
 

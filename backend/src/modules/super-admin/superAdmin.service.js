@@ -5,103 +5,262 @@ import Patient from "../patients/patient.model.js";
 import Doctor from "../doctors/doctor.model.js";
 import Appointment from "../appointments/appointment.model.js";
 import Admission from "../ipd/admission.model.js";
+import Ward from "../wards/ward.model.js";
 import Invoice from "../billing/invoice.model.js";
 import Payment from "../payments/payment.model.js";
+import InsuranceClaim from "../insurance/insuranceClaim.model.js";
 import AuditLog from "../audit-logs/audit-log.model.js";
+import PharmacySale from "../pharmacy/pharmacySale.model.js";
+import InventoryItem from "../inventory/inventoryItem.model.js";
+import { getOrSetCache } from "../../utils/redisCache.js";
 
-// ---------------- DASHBOARD STATS ----------------
-export const getDashboardStats = async () => {
-  const sevenDaysAgo = new Date();
-  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-
-  const [
-    totalUsers,
-    activeUsers,
-    totalRoles,
-    totalPermissions,
-    totalPatients,
-    totalDoctors,
-    todayAppointments,
-    currentlyAdmitted,
-    recentRegistrations,
-    usersByRole,
-    revenueThisMonth,
-  ] = await Promise.all([
-    User.countDocuments({ status: { $ne: "deleted" } }),
-    User.countDocuments({ status: "active" }),
-    Role.countDocuments(),
-    Permission.countDocuments(),
-    Patient.countDocuments({ status: "active" }),
-    Doctor.countDocuments({ status: "active" }),
-    Appointment.countDocuments({
-      appointmentDate: {
-        $gte: new Date(new Date().setHours(0, 0, 0, 0)),
-        $lte: new Date(new Date().setHours(23, 59, 59, 999)),
-      },
-    }),
-    Admission.countDocuments({ status: "admitted" }),
-    User.countDocuments({ createdAt: { $gte: sevenDaysAgo }, status: { $ne: "deleted" } }),
-    User.aggregate([
-      { $match: { status: { $ne: "deleted" } } },
-      { $lookup: { from: "roles", localField: "roleId", foreignField: "_id", as: "role" } },
-      { $unwind: "$role" },
-      { $group: { _id: "$role.name", count: { $sum: 1 } } },
-    ]),
-    Payment.aggregate([
-      {
-        $match: {
-          status: "success",
-          paidAt: { $gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1) },
-        },
-      },
-      { $group: { _id: null, total: { $sum: "$amount" } } },
-    ]),
-  ]);
-
-  return {
-    users: {
-      total: totalUsers,
-      active: activeUsers,
-      recentRegistrations,
-      byRole: usersByRole,
-    },
-    rbac: {
-      totalRoles,
-      totalPermissions,
-    },
-    hospital: {
-      totalPatients,
-      totalDoctors,
-      todayAppointments,
-      currentlyAdmitted,
-    },
-    finance: {
-      revenueThisMonth: revenueThisMonth[0]?.total || 0,
-    },
-  };
+// Helper for safe Date parsing with edge case fallback
+const parseSafeDate = (dateStr, fallbackDate) => {
+  if (!dateStr) return fallbackDate;
+  const parsed = new Date(dateStr);
+  return isNaN(parsed.getTime()) ? fallbackDate : parsed;
 };
 
-// ---------------- RECENT ACTIVITY FEED ----------------
-export const getRecentActivity = async (limit = 20) => {
-  const logs = await AuditLog.find()
-    .populate("userId", "name email")
-    .sort({ createdAt: -1 })
-    .limit(limit);
+// ---------------- DASHBOARD STATS (Cached in Redis) ----------------
+export const getDashboardStats = async (params = {}) => {
+  const { startDate, endDate, departmentId } = params;
 
-  // Raw audit logs ko human-readable feed mein convert karo
-  const feed = logs.map((log) => ({
-    id: log._id,
-    userName: log.userId?.name || "Unknown User",
-    action: log.action,
-    resource: log.resource,
-    description: `${log.userId?.name || "Someone"} ${formatAction(log.action)} a ${formatResource(log.resource)}`,
-    timestamp: log.createdAt,
-  }));
+  const cacheKey = `hms:superadmin:dashboard:${startDate || "def"}:${endDate || "def"}:${departmentId || "all"}`;
+  const { data: stats } = await getOrSetCache(
+    cacheKey,
+    async () => {
+      const now = new Date();
+      const defaultSevenDaysAgo = new Date(now);
+      defaultSevenDaysAgo.setDate(defaultSevenDaysAgo.getDate() - 7);
+
+      const start = parseSafeDate(startDate, defaultSevenDaysAgo);
+      const end = parseSafeDate(endDate, now);
+      end.setHours(23, 59, 59, 999);
+
+      const thirtyDaysFromNow = new Date(now);
+      thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
+
+      const todayStart = new Date(now);
+      todayStart.setHours(0, 0, 0, 0);
+
+      const todayEnd = new Date(now);
+      todayEnd.setHours(23, 59, 59, 999);
+
+      // Filter Matchers
+      const dateMatchFilter = { $gte: start, $lte: end };
+      const doctorFilter = { status: "active" };
+      if (departmentId) doctorFilter.departmentId = departmentId;
+
+      const apptFilter = { appointmentDate: { $gte: todayStart, $lte: todayEnd } };
+      if (departmentId) apptFilter.departmentId = departmentId;
+
+      const [
+        totalUsers,
+        activeUsers,
+        totalRoles,
+        totalPermissions,
+        totalPatients,
+        totalDoctors,
+        todayAppointments,
+        currentlyAdmitted,
+        usersByRole,
+        revenueThisMonth,
+        revenueByMethod,
+        pendingInvoices,
+        pendingClaims,
+        totalClaims,
+        appointmentStatusCounts,
+        patientRegistrationTrend,
+        lowStockItems,
+        expiringItems,
+        topSellingMedicines,
+        wardOccupancy,
+      ] = await Promise.all([
+        User.countDocuments({ status: { $ne: "deleted" } }),
+        User.countDocuments({ status: "active" }),
+        Role.countDocuments(),
+        Permission.countDocuments(),
+
+        Patient.countDocuments({ status: "active", isDeleted: { $ne: true } }),
+        Doctor.countDocuments(doctorFilter),
+
+        Appointment.countDocuments(apptFilter),
+        Admission.countDocuments({ status: "admitted" }),
+
+        User.aggregate([
+          { $match: { status: { $ne: "deleted" } } },
+          { $lookup: { from: "roles", localField: "roleId", foreignField: "_id", as: "role" } },
+          { $unwind: "$role" },
+          { $group: { _id: "$role.name", count: { $sum: 1 } } },
+        ]),
+
+        Payment.aggregate([
+          { $match: { status: "success", paidAt: dateMatchFilter } },
+          { $group: { _id: null, total: { $sum: "$amount" } } },
+        ]),
+
+        Payment.aggregate([
+          { $match: { status: "success", paidAt: dateMatchFilter } },
+          { $group: { _id: "$method", total: { $sum: "$amount" } } },
+        ]),
+
+        Invoice.aggregate([
+          { $match: { status: { $in: ["unpaid", "partially-paid"] } } },
+          { $group: { _id: null, pending: { $sum: { $subtract: ["$total", "$amountPaid"] } } } },
+        ]),
+
+        InsuranceClaim.countDocuments({ status: { $in: ["submitted", "under-review"] } }),
+        InsuranceClaim.countDocuments(),
+
+        Appointment.aggregate([
+          { $match: { appointmentDate: dateMatchFilter } },
+          { $group: { _id: "$status", count: { $sum: 1 } } },
+        ]),
+
+        Patient.aggregate([
+          { $match: { createdAt: dateMatchFilter, isDeleted: { $ne: true } } },
+          {
+            $group: {
+              _id: { $dateToString: { format: "%d %b", date: "$createdAt" } },
+              count: { $sum: 1 },
+            },
+          },
+          { $sort: { _id: 1 } },
+        ]),
+
+        InventoryItem.find({
+          $expr: { $lte: ["$quantity", "$minStockLevel"] },
+        })
+          .select("itemName quantity minStockLevel")
+          .limit(5),
+
+        InventoryItem.find({
+          expiryDate: { $lte: thirtyDaysFromNow },
+        })
+          .select("itemName expiryDate quantity")
+          .limit(5),
+
+        PharmacySale.aggregate([
+          { $match: { createdAt: dateMatchFilter } },
+          { $unwind: "$medicines" },
+          {
+            $group: {
+              _id: "$medicines.medicineId",
+              totalQty: { $sum: "$medicines.quantity" },
+              totalRevenue: { $sum: { $ifNull: ["$medicines.amount", "$medicines.subtotal"] } },
+            },
+          },
+          { $sort: { totalQty: -1 } },
+          { $limit: 5 },
+          {
+            $lookup: {
+              from: "medicines",
+              localField: "_id",
+              foreignField: "_id",
+              as: "medicine",
+            },
+          },
+          { $unwind: "$medicine" },
+          {
+            $project: {
+              name: "$medicine.name",
+              totalQty: 1,
+              totalRevenue: 1,
+            },
+          },
+        ]),
+
+        Admission.aggregate([
+          { $match: { status: "admitted" } },
+          { $lookup: { from: "wards", localField: "wardId", foreignField: "_id", as: "ward" } },
+          { $unwind: "$ward" },
+          {
+            $group: {
+              _id: "$ward.name",
+              occupied: { $sum: 1 },
+              capacity: { $first: "$ward.capacity" },
+            },
+          },
+        ]),
+      ]);
+
+      return {
+        queryRange: {
+          startDate: start.toISOString(),
+          endDate: end.toISOString(),
+          departmentId: departmentId || null,
+        },
+        users: {
+          total: totalUsers,
+          active: activeUsers,
+          byRole: usersByRole,
+        },
+        rbac: {
+          totalRoles,
+          totalPermissions,
+        },
+        hospital: {
+          totalPatients,
+          totalDoctors,
+          todayAppointments,
+          currentlyAdmitted,
+        },
+        finance: {
+          revenueThisMonth: revenueThisMonth[0]?.total || 0,
+          revenueByMethod,
+          pendingUncollected: pendingInvoices[0]?.pending || 0,
+        },
+        insurance: {
+          pendingClaims,
+          totalClaims,
+        },
+        appointments: {
+          statusBreakdown: appointmentStatusCounts,
+        },
+        trends: {
+          patientRegistration: patientRegistrationTrend,
+        },
+        inventory: {
+          lowStock: lowStockItems,
+          expiring: expiringItems,
+        },
+        pharmacy: {
+          topMedicines: topSellingMedicines,
+        },
+        occupancy: wardOccupancy,
+      };
+    },
+    300
+  );
+
+  return stats;
+};
+
+// ---------------- RECENT ACTIVITY FEED (Cached in Redis) ----------------
+export const getRecentActivity = async (limit = 20) => {
+  const { data: feed } = await getOrSetCache(
+    `hms:superadmin:activity:${limit}`,
+    async () => {
+      const logs = await AuditLog.find()
+        .populate("userId", "name email")
+        .sort({ createdAt: -1 })
+        .limit(limit);
+
+      return logs.map((log) => ({
+        id: log._id,
+        userName: log.userId?.name || "System User",
+        action: log.action,
+        resource: log.resource,
+        description: `${log.userId?.name || "System"} ${formatAction(log.action)} a ${formatResource(log.resource)}`,
+        timestamp: log.createdAt,
+      }));
+    },
+    60
+  );
 
   return feed;
 };
 
-// ---------------- Helpers: readable text banane ke liye ----------------
 const formatAction = (action) => {
   const map = { CREATE: "created", UPDATE: "updated", DELETE: "deleted" };
   return map[action] || action.toLowerCase();

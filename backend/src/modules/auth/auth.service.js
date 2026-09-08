@@ -1,4 +1,5 @@
 import User from "../users/user.model.js";
+import Role from "../roles/role.model.js";
 import AppError from "../../core/errors/AppError.js";
 import { ErrorCodes } from "../../core/errors/errorCodes.js";
 import {
@@ -6,6 +7,9 @@ import {
   generateRefreshToken,
   verifyRefreshToken,
 } from "../../utils/generateToken.js";
+
+import Department from "../departments/department.model.js";
+import { notifyAuthSecurityEvent } from "../../utils/notificationDispatcher.js";
 
 const sanitizeUser = (user) => {
   const userObj = user.toObject ? user.toObject() : user;
@@ -16,9 +20,9 @@ const sanitizeUser = (user) => {
 
 // ---------------- REGISTER ----------------
 export const registerUser = async (data) => {
-  const { name, email, password, roleId, phone } = data;
+  const { name, email, password, roleId, role, phone, departmentId, department } = data;
 
-  const existingUser = await User.findOne({ email });
+  const existingUser = await User.findOne({ email: email.toLowerCase() });
   if (existingUser) {
     throw new AppError(
       "User with this email already exists",
@@ -27,27 +31,78 @@ export const registerUser = async (data) => {
     );
   }
 
-  // NOTE: password yahan plain jaa raha hai — pre-save hook isse hash karega
+  // Resolve roleId if a role name string was provided
+  let targetRoleId = roleId || role;
+  let targetRoleName = "";
+  if (targetRoleId && typeof targetRoleId === "string" && !targetRoleId.match(/^[0-9a-fA-F]{24}$/)) {
+    const roleDoc = await Role.findOne({ name: new RegExp(`^${targetRoleId}$`, "i") });
+    if (roleDoc) {
+      targetRoleId = roleDoc._id;
+      targetRoleName = roleDoc.name;
+    } else {
+      targetRoleName = targetRoleId.toUpperCase();
+      targetRoleId = null;
+    }
+  }
+
+  // Resolve departmentId if a department name string was provided
+  let targetDeptId = departmentId || department;
+  if (targetDeptId && typeof targetDeptId === "string" && !targetDeptId.match(/^[0-9a-fA-F]{24}$/)) {
+    const deptDoc = await Department.findOne({ name: new RegExp(`^${targetDeptId}$`, "i") });
+    if (deptDoc) {
+      targetDeptId = deptDoc._id;
+    } else {
+      targetDeptId = null;
+    }
+  }
+
   const user = await User.create({
     name,
-    email,
+    email: email.toLowerCase(),
     password,
-    roleId,
-    phone,
+    roleId: targetRoleId || undefined,
+    roleName: targetRoleName || undefined,
+    departmentId: targetDeptId || undefined,
+    phone: phone || undefined,
     status: "active",
   });
 
   return sanitizeUser(user);
 };
 
+export const getRegistrationOptions = async () => {
+  const roles = await Role.find({ status: { $ne: "inactive" } }).select("name description").lean();
+  const departments = await Department.find({ status: "active" }).select("name code").lean();
+
+  return {
+    roles: roles.length > 0 ? roles : [
+      { name: "Doctor", description: "Medical Practitioner" },
+      { name: "Nurse", description: "Nursing Staff" },
+      { name: "Receptionist", description: "Front Desk & Registrations" },
+      { name: "Accountant", description: "Billing & Finance" },
+      { name: "Pharmacist", description: "Pharmacy & Medicine Management" },
+      { name: "Lab Technician", description: "Diagnostic & Lab Tests" },
+    ],
+    departments: departments.length > 0 ? departments : [
+      { name: "Cardiology", code: "CARD" },
+      { name: "General OPD", code: "OPD" },
+      { name: "Inpatient IPD", code: "IPD" },
+      { name: "Pharmacy", code: "PHARM" },
+      { name: "Laboratory", code: "LAB" },
+      { name: "Radiology", code: "RAD" },
+    ],
+  };
+};
+
 // ---------------- LOGIN ----------------
 export const loginUser = async (email, password) => {
-  const cleanEmail = email?.trim().toLowerCase();
-  const cleanPassword = password?.trim();
-
-  const user = await User.findOne({ email: cleanEmail })
+  const user = await User.findOne({ email: email.toLowerCase() })
     .select("+password")
-    .populate("roleId", "name permissionIds");
+    .populate({
+      path: "roleId",
+      select: "name modulePermissions actionPermissions permissionIds",
+      populate: { path: "permissionIds", select: "name" },
+    });
 
   if (!user) {
     throw new AppError(
@@ -57,16 +112,25 @@ export const loginUser = async (email, password) => {
     );
   }
 
-  if (user.status?.toLowerCase() !== "active") {
+  // Account Status check
+  if (user.status !== "active") {
     throw new AppError(
-      "Account is inactive. Contact admin.",
+      `Account is currently ${user.status}. Please contact administrator.`,
       403,
       ErrorCodes.AUTH_ACCOUNT_INACTIVE
     );
   }
 
-  // Model ka instance method use ho raha hai — manual bcrypt.compare nahi
-  const isMatch = await user.isPasswordMatch(cleanPassword);
+  // Login Access control check (Section 3: Status & Access)
+  if (user.loginAccess && user.loginAccess !== "Allowed") {
+    throw new AppError(
+      `Login access is ${user.loginAccess.toLowerCase()} for this account. Contact system administrator.`,
+      403,
+      ErrorCodes.AUTH_ACCOUNT_INACTIVE
+    );
+  }
+
+  const isMatch = await user.isPasswordMatch(password);
   if (!isMatch) {
     throw new AppError(
       "Invalid email or password",
@@ -75,19 +139,112 @@ export const loginUser = async (email, password) => {
     );
   }
 
-  const payload = { id: user._id, roleId: user.roleId?._id };
+  if (!user.roleId && user.roleName) {
+    const roleDoc = await Role.findOne({ name: user.roleName.toUpperCase() });
+    if (roleDoc) {
+      user.roleId = roleDoc;
+    }
+  }
+
+  const payload = { id: user._id, roleId: user.roleId?._id || user.roleId };
 
   const accessToken = generateAccessToken(payload);
   const refreshToken = generateRefreshToken(payload);
 
   user.refreshToken = refreshToken;
   user.lastLoginAt = new Date();
+  user.lastLoginFormatted =
+    new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) +
+    " \n " +
+    new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
   await user.save();
+
+  // Send Security Login Alert Notification
+  notifyAuthSecurityEvent({
+    userId: user._id,
+    eventType: "new_login",
+  });
+
+  const sanitized = sanitizeUser(user);
+
+  return {
+    user: sanitized,
+    accessToken,
+    refreshToken,
+    mustChangePassword: user.forcePasswordChange || false,
+  };
+};
+
+// ---------------- GOOGLE SSO LOGIN ----------------
+export const googleLoginUser = async ({ email, name, photoUrl }) => {
+  if (!email) {
+    throw new AppError("Email is required from Google SSO", 400, ErrorCodes.BAD_REQUEST);
+  }
+
+  let user = await User.findOne({ email: email.toLowerCase() }).populate({
+    path: "roleId",
+    select: "name modulePermissions actionPermissions permissionIds",
+    populate: { path: "permissionIds", select: "name" },
+  });
+
+
+
+  if (!user) {
+    const patientRole = await Role.findOne({ name: /PATIENT/i });
+    const empId = `EMP-${Math.floor(1000 + Math.random() * 9000)}`;
+    user = await User.create({
+      name: name || email.split("@")[0],
+      email: email.toLowerCase(),
+      password: "GoogleAuthUserPass#" + Math.random().toString(36).slice(-8),
+      avatar: photoUrl || "",
+      roleId: patientRole ? patientRole._id : undefined,
+      roleName: patientRole ? patientRole.name.toUpperCase() : "PATIENT",
+      employeeId: empId,
+      status: "active",
+      emailVerified: "Verified",
+      loginAccess: "Allowed",
+      isProfileComplete: false,
+    });
+
+    user = await User.findById(user._id).populate({
+      path: "roleId",
+      select: "name modulePermissions actionPermissions permissionIds",
+      populate: { path: "permissionIds", select: "name" },
+    });
+  }
+
+  if (user.status !== "active") {
+    throw new AppError(
+      `Account is currently ${user.status}. Contact system administrator.`,
+      403,
+      ErrorCodes.AUTH_ACCOUNT_INACTIVE
+    );
+  }
+
+  const payload = { id: user._id, roleId: user.roleId?._id || user.roleId };
+  const accessToken = generateAccessToken(payload);
+  const refreshToken = generateRefreshToken(payload);
+
+  user.refreshToken = refreshToken;
+  user.lastLoginAt = new Date();
+  user.lastLoginFormatted =
+    new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) +
+    " \n " +
+    new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+  await user.save();
+
+  notifyAuthSecurityEvent({
+    userId: user._id,
+    eventType: "google_login",
+  });
 
   return {
     user: sanitizeUser(user),
     accessToken,
     refreshToken,
+    mustChangePassword: false,
   };
 };
 
@@ -151,14 +308,65 @@ export const logoutUser = async (userId) => {
 
 // ---------------- GET CURRENT USER (me) ----------------
 export const getCurrentUser = async (userId) => {
-  const user = await User.findById(userId).populate(
-    "roleId",
-    "name permissionIds"
-  );
+  const user = await User.findById(userId).populate({
+    path: "roleId",
+    select: "name modulePermissions actionPermissions permissionIds",
+    populate: { path: "permissionIds", select: "name" },
+  });
 
   if (!user) {
     throw new AppError("User not found", 404, ErrorCodes.USER_NOT_FOUND);
   }
+
+  if (!user.roleId && user.roleName) {
+    const roleDoc = await Role.findOne({ name: user.roleName.toUpperCase() });
+    if (roleDoc) {
+      const userObj = user.toObject();
+      userObj.roleId = roleDoc;
+      return sanitizeUser(userObj);
+    }
+  }
+
+  return sanitizeUser(user);
+};
+
+// ---------------- COMPLETE PROFILE ----------------
+export const updateCompleteProfile = async (userId, profileData) => {
+  const user = await User.findById(userId);
+  if (!user || user.status === "deleted") {
+    throw new AppError("User not found", 404, ErrorCodes.USER_NOT_FOUND);
+  }
+
+  // Edge case & Cyber Security check: Lock immutable fields
+  const forbiddenFields = ["email", "employeeId", "roleName", "roleId", "status", "emailVerified", "loginAccess"];
+  forbiddenFields.forEach((field) => {
+    if (profileData[field] !== undefined && String(profileData[field]) !== String(user[field])) {
+      delete profileData[field];
+    }
+  });
+
+  // Edge case validations
+  if (profileData.dateOfBirth && new Date(profileData.dateOfBirth) > new Date()) {
+    throw new AppError("Date of birth cannot be in the future", 400, ErrorCodes.BAD_REQUEST);
+  }
+
+  if (profileData.phone && !/^\+?[0-9\s-]{8,20}$/.test(profileData.phone.trim())) {
+    throw new AppError("Please provide a valid contact phone number (8-20 digits)", 400, ErrorCodes.BAD_REQUEST);
+  }
+
+  // Update allowed fields
+  if (profileData.name) user.name = profileData.name.trim();
+  if (profileData.phone) user.phone = profileData.phone.trim();
+  if (profileData.gender) user.gender = profileData.gender;
+  if (profileData.dateOfBirth) user.dateOfBirth = profileData.dateOfBirth;
+  if (profileData.bloodGroup !== undefined) user.bloodGroup = profileData.bloodGroup;
+  if (profileData.maritalStatus !== undefined) user.maritalStatus = profileData.maritalStatus;
+  if (profileData.nationality !== undefined) user.nationality = profileData.nationality;
+  if (profileData.currentAddress !== undefined) user.currentAddress = profileData.currentAddress;
+  if (profileData.notes !== undefined) user.notes = profileData.notes;
+
+  user.isProfileComplete = true;
+  await user.save();
 
   return sanitizeUser(user);
 };

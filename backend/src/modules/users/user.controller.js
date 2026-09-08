@@ -5,13 +5,27 @@ import {
   updateUser,
   changePassword,
   deleteUser,
+  exportUsersService,
 } from "./user.service.js";
 import { successResponse } from "../../core/responses/apiResponse.js";
 import { asyncHandler } from "../../utils/asyncHandler.js";
 
+const getRequestMeta = (req) => ({
+  ipAddress: req.ip || req.headers["x-forwarded-for"] || req.socket.remoteAddress || "",
+  userAgent: req.headers["user-agent"] || "",
+});
+
 export const create = asyncHandler(async (req, res) => {
-  const user = await createUser(req.body);
+  const user = await createUser(req.body, req.user, getRequestMeta(req));
   return successResponse(res, 201, "User created successfully", user);
+});
+
+export const exportCSV = asyncHandler(async (req, res) => {
+  const csvData = await exportUsersService(req.query);
+  const filename = `Users_Export_${new Date().toISOString().split("T")[0]}.csv`;
+  res.setHeader("Content-Type", "text/csv");
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+  return res.status(200).send(csvData);
 });
 
 export const getById = asyncHandler(async (req, res) => {
@@ -25,17 +39,17 @@ export const getAll = asyncHandler(async (req, res) => {
 });
 
 export const update = asyncHandler(async (req, res) => {
-  const user = await updateUser(req.params.id, req.body);
+  const user = await updateUser(req.params.id, req.body, req.user, getRequestMeta(req));
   return successResponse(res, 200, "User updated successfully", user);
 });
 
 export const changeUserPassword = asyncHandler(async (req, res) => {
   const { oldPassword, newPassword } = req.body;
-  const result = await changePassword(req.user.id, oldPassword, newPassword);
+  const result = await changePassword(req.user.id, oldPassword, newPassword, req.user, getRequestMeta(req));
   return successResponse(res, 200, result.message);
 });
 
 export const remove = asyncHandler(async (req, res) => {
-  const result = await deleteUser(req.params.id);
+  const result = await deleteUser(req.params.id, req.user, getRequestMeta(req));
   return successResponse(res, 200, result.message);
-});
+});

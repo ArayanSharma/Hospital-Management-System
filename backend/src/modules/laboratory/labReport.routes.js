@@ -5,6 +5,7 @@ import { checkPermission } from "../../middleware/permission.middleware.js";
 import { validate } from "../../middleware/validation.middleware.js";
 import { createLabReportSchema, updateLabReportSchema } from "./laboratory.validation.js";
 import { uploadLabReport, handleUploadError } from "../../middleware/upload.middleware.js";
+import { routeCache } from "../../middleware/cache.middleware.js";
 
 const router = Router();
 
@@ -17,7 +18,7 @@ router.post(
   validate(createLabReportSchema),
   create
 );
-router.get("/test/:labTestId", authenticate, checkPermission("lab_report:read"), getByTestId);
+router.get("/test/:labTestId", authenticate, checkPermission("lab_report:read"), routeCache(300, "hms:route:lab", true), getByTestId);
 router.patch(
   "/:id",
   authenticate,

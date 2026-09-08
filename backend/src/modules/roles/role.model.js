@@ -8,11 +8,33 @@ const roleSchema = new mongoose.Schema(
       unique: true,
       trim: true,
       uppercase: true,
-      // Example: "DOCTOR", "RECEPTIONIST", "SUPER_ADMIN"
+    },
+    roleCode: {
+      type: String,
+      trim: true,
+      uppercase: true,
+    },
+    roleType: {
+      type: String,
+      enum: ["System", "Custom"],
+      default: "Custom",
+    },
+    userCount: {
+      type: Number,
+      default: 0,
+    },
+    maxUsers: {
+      type: Number,
+      default: null,
+    },
+    parentRole: {
+      type: String,
+      default: "",
     },
     description: {
       type: String,
       trim: true,
+      maxlength: 255,
     },
     permissionIds: [
       {
@@ -20,10 +42,23 @@ const roleSchema = new mongoose.Schema(
         ref: "Permission",
       },
     ],
+    modulePermissions: {
+      type: Map,
+      of: String,
+      default: {},
+    },
+    actionPermissions: {
+      type: Map,
+      of: Object, // e.g. { "Patient Management": { create: true, read: true, update: true, delete: false, manage: false } }
+      default: {},
+    },
     isSystemRole: {
       type: Boolean,
       default: false,
-      // true = SUPER_ADMIN jaise roles jo UI se delete nahi ho sakte
+    },
+    isProtected: {
+      type: Boolean,
+      default: false,
     },
     status: {
       type: String,
