@@ -42,7 +42,7 @@ Manages the drug catalog, pricing, OTC (over-the-counter) and prescription medic
 ### Functions & Transaction Logic (`pharmacySale.service.js`)
 
 1. **`createPharmacySale(data, currentUser, requestMeta)`**:
-   - Iterates through requested `medicines` array. Checks `InventoryItem.quantity >= quantity`. Throws `400 Insufficient Stock` if quantity is inadequate.
+   - Iterates through requested `medicines` array. Checks `InventoryItem.quantity >= quantity`. Throws `400 BAD_REQUEST` ("Insufficient Stock") if stock is inadequate.
    - Computes `subtotal` (`unitPrice * quantity`) and accumulates `totalAmount`.
    - **ACID Transaction Boundary**:
      - Starts Mongoose Session: `mongoose.startSession() -> startTransaction()`.

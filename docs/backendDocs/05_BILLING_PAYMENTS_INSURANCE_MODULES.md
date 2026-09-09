@@ -48,7 +48,7 @@ Consolidates hospital charges (consultations, room stay, laboratory tests, surgi
    - Supports Mongoose transaction sessions.
 
 3. **`cancelInvoice(id, currentUser, requestMeta)`**:
-   - Guards against cancellation if payments have already been collected (`amountPaid > 0`). Throws `400 Validation Error`.
+   - Guards against cancellation if payments have already been collected (`amountPaid > 0`). Throws `400 BAD_REQUEST`.
 
 ---
 
@@ -73,7 +73,7 @@ Processes incoming customer payments against unpaid invoices via Cash, Card, UPI
 
 1. **`processPayment(data, currentUser, requestMeta)`**:
    - Fetches associated `Invoice`.
-   - Validates payment amount: ensures `amount <= (invoice.total - invoice.amountPaid)`. Throws `400 Overpayment Error` if payment exceeds remaining balance!
+   - Validates payment amount: ensures `amount <= (invoice.total - invoice.amountPaid)`. Throws `400 BAD_REQUEST` ("Overpayment Error") if payment exceeds remaining balance!
    - **ACID Transaction Boundary**:
      - Starts Mongoose Session (`session.startTransaction()`).
      - Creates `Payment` receipt record.
