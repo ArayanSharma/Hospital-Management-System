@@ -10,16 +10,16 @@ import {
 } from "lucide-react";
 
 export default function IpdStatCards({ stats }) {
-  const totalBeds = stats?.totalBeds ?? 120;
-  const availableBeds = stats?.availableBeds ?? 32;
-  const availablePct = stats?.availablePercentage ?? "26.67%";
-  const occupiedBeds = stats?.occupiedBeds ?? 78;
-  const occupiedPct = stats?.occupiedPercentage ?? "65.00%";
-  const maintenanceBeds = stats?.maintenanceBeds ?? 10;
-  const maintenancePct = stats?.maintenancePercentage ?? "8.33%";
-  const currentlyAdmitted = stats?.currentlyAdmitted ?? 78;
-  const todayAdmissions = stats?.todayAdmissions ?? 6;
-  const todayDischarges = stats?.todayDischarges ?? 4;
+  const totalBeds = stats?.totalBeds ?? 0;
+  const availableBeds = stats?.availableBeds ?? 0;
+  const availablePct = stats?.availablePercentage ?? "0.00%";
+  const occupiedBeds = stats?.occupiedBeds ?? 0;
+  const occupiedPct = stats?.occupiedPercentage ?? "0.00%";
+  const maintenanceBeds = stats?.maintenanceBeds ?? 0;
+  const maintenancePct = stats?.maintenancePercentage ?? "0.00%";
+  const currentlyAdmitted = stats?.currentlyAdmitted ?? 0;
+  const todayAdmissions = stats?.todayAdmissions ?? 0;
+  const todayDischarges = stats?.todayDischarges ?? 0;
 
   return (
     <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">

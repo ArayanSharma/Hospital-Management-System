@@ -5,57 +5,9 @@ import AppError from "../../core/errors/AppError.js";
 import { ErrorCodes } from "../../core/errors/errorCodes.js";
 import { getOrSetCache, invalidatePattern, delCache, acquireLock, releaseLock } from "../../utils/redisCache.js";
 import { notifyInsuranceClaimEvent } from "../../utils/notificationDispatcher.js";
-
-// Helper to seed initial DB claims if count is 0
-export const ensureSampleClaims = async () => {
-  try {
-    const count = await InsuranceClaim.countDocuments();
-    if (count > 0) return;
-
-    let patient = await Patient.findOne({ status: "active" });
-    if (!patient) {
-      patient = await Patient.create({
-        name: "Priya Verma",
-        patientId: "UHID12346",
-        phone: "9876543210",
-        gender: "Female",
-        dateOfBirth: new Date("1990-08-16"),
-      });
-    }
-
-    const sampleClaims = [
-      {
-        claimNumber: "CLM-2025-000101",
-        patientId: patient._id,
-        patientName: "Priya Verma",
-        uhid: "UHID12346",
-        policyNumber: "SH/2025/784512",
-        providerName: "Star Health & Allied Insurance Co. Ltd.",
-        tpaName: "Health India TPA Services Pvt. Ltd.",
-        policyValidity: "01 Apr 2025 to 31 Mar 2026",
-        invoiceNumber: "INV-2025-000567",
-        admissionType: "Outpatient (OPD)",
-        treatmentDate: "29 May 2025",
-        claimType: "Cashless",
-        claimAmount: 125000,
-        approvedAmount: 110000,
-        settledAmount: 0,
-        patientPayable: 15000,
-        status: "Approved",
-        submittedDate: "29 May 2025",
-        expectedReviewDate: "07 Jun 2025",
-        lastUpdatedDate: "29 May 2025",
-      },
-    ];
-
-    await InsuranceClaim.insertMany(sampleClaims);
-  } catch (err) {
-    console.error("Error seeding sample claims:", err);
-  }
-};
+import { dispatchAsyncEmail } from "../../utils/email/emailDispatcher.js";
 
 export const createClaimService = async (data) => {
-  await ensureSampleClaims();
   const count = await InsuranceClaim.countDocuments();
   const seq = (count + 106).toString().padStart(6, "0");
   const claimNumber = data.claimNumber || `CLM-2025-${seq}`;
@@ -105,21 +57,35 @@ export const createClaimService = async (data) => {
   await invalidatePattern("hms:insurance:*");
   await invalidatePattern("hms:route:insurance*");
 
-    if (claim.patientId) {
-      await notifyInsuranceClaimEvent({
-        userId: claim.patientId,
-        claimId: claim._id,
-        claimNumber: claim.claimNumber,
-        status: claim.status,
-        claimAmount: claim.claimAmount,
-      });
-    }
+  // Dispatch TPA Insurance Claim Submitted Email
+  const recipientEmail = data.email || patient?.email || "arayan.sharma.dev@gmail.com";
+  dispatchAsyncEmail({
+    to: recipientEmail,
+    type: "insurance_claim_submitted",
+    data: {
+      patientName: claim.patientName,
+      claimId: claim.claimNumber,
+      policyNo: claim.policyNumber,
+      tpaName: claim.tpaName,
+      claimAmount: claim.claimAmount,
+      submittedDate: claim.submittedDate,
+    },
+  });
 
-    return claim;
+  if (claim.patientId) {
+    await notifyInsuranceClaimEvent({
+      userId: claim.patientId,
+      claimId: claim._id,
+      claimNumber: claim.claimNumber,
+      status: claim.status,
+      claimAmount: claim.claimAmount,
+    });
+  }
+
+  return claim;
 };
 
 export const getAllClaimsService = async ({ search, status } = {}) => {
-  await ensureSampleClaims();
   const query = {};
   if (status && status !== "all" && status !== "All Status") {
     query.status = new RegExp(status, "i");
@@ -222,6 +188,29 @@ export const updateClaimStatusService = async (id, payload) => {
 
     await delCache(`hms:insurance:claim:${id}`);
     await invalidatePattern("hms:route:insurance*");
+
+    // Dispatch Claim Decision Status Email
+    let recipientEmail = payload.email;
+    if (!recipientEmail && claim.patientId) {
+      const patient = await Patient.findById(claim.patientId).select("email").lean();
+      if (patient?.email) recipientEmail = patient.email;
+    }
+    if (!recipientEmail) recipientEmail = "arayan.sharma.dev@gmail.com";
+
+    dispatchAsyncEmail({
+      to: recipientEmail,
+      type: "insurance_claim_status",
+      data: {
+        patientName: claim.patientName,
+        claimId: claim.claimNumber,
+        policyNo: claim.policyNumber,
+        tpaName: claim.tpaName,
+        status: claim.status,
+        approvedAmount: claim.approvedAmount || claim.claimAmount,
+        rejectionReason: claim.rejectionReason || "",
+        decisionDate: claim.lastUpdatedDate,
+      },
+    });
 
     if (claim.patientId) {
       await notifyInsuranceClaimEvent({

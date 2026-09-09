@@ -104,13 +104,17 @@ export function useUserManagement() {
   };
 
   const handleDeleteUser = async (userId) => {
-    if (window.confirm("Are you sure you want to delete/deactivate this user?")) {
+    if (
+      window.confirm(
+        "Deactivate User Account?\n\nDeactivating this user will suspend their login access while preserving all associated audit history and clinical records."
+      )
+    ) {
       try {
         await deleteUserApi(userId);
         fetchUsers();
       } catch (err) {
-        console.error("User deletion error:", err);
-        alert(err.response?.data?.message || "Failed to delete user account.");
+        console.error("User deactivation error:", err);
+        alert(err.response?.data?.message || "Failed to deactivate user account.");
       }
     }
   };

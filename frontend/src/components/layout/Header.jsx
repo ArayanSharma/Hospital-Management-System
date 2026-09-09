@@ -9,9 +9,10 @@ export default function Header() {
   const navigate = useNavigate();
 
   const getInitials = (name) => {
-    if (!name) return "SA";
+    if (!name) return "US";
     return name
       .split(" ")
+      .filter(Boolean)
       .map((n) => n[0])
       .join("")
       .substring(0, 2)
@@ -44,15 +45,32 @@ export default function Header() {
 
         {/* User Profile Pill */}
         <div className="flex items-center gap-3 pl-1">
-          <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 text-white font-semibold text-xs flex items-center justify-center shadow-sm shadow-blue-500/20 shrink-0">
-            {getInitials(user?.name || "Super Admin")}
+          {user?.photoUrl || user?.avatar || user?.photoURL ? (
+            <img
+              src={user.photoUrl || user.avatar || user.photoURL}
+              alt={user?.name || "User"}
+              className="w-9 h-9 rounded-full object-cover border border-slate-200 dark:border-slate-700 shadow-sm shrink-0"
+              onError={(e) => {
+                // If image fails to load, hide image and fallback to initials
+                e.target.style.display = 'none';
+                if (e.target.nextSibling) {
+                  e.target.nextSibling.style.display = 'flex';
+                }
+              }}
+            />
+          ) : null}
+          <div
+            className="w-9 h-9 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 text-white font-semibold text-xs items-center justify-center shadow-sm shadow-blue-500/20 shrink-0"
+            style={{ display: user?.photoUrl || user?.avatar || user?.photoURL ? 'none' : 'flex' }}
+          >
+            {getInitials(user?.name || "User")}
           </div>
           <div className="hidden sm:block text-left">
             <p className="text-xs font-bold text-slate-900 dark:text-slate-100 leading-snug">
-              {user?.name || "Super Admin"}
+              {user?.name || "User"}
             </p>
-            <p className="text-[11px] font-medium text-slate-400 dark:text-slate-400 leading-none">
-              {user?.roleId?.name || "SUPER_ADMIN"}
+            <p className="text-[11px] font-medium text-slate-400 dark:text-slate-400 leading-none uppercase">
+              {user?.roleName || (typeof user?.roleId === "object" ? user?.roleId?.name : user?.role) || "User"}
             </p>
           </div>
           <button

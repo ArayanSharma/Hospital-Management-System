@@ -178,9 +178,11 @@ export default function EditPermissionsModal({ isOpen, onClose, onSubmit, role }
     setSubmitting(true);
     try {
       const derivedModulePermissions = {
+        // Short keys matching Permission Matrix
         Patient: getModuleAccessLevel("Patient Management"),
         Doctor: getModuleAccessLevel("User Management") !== "No Access" ? getModuleAccessLevel("User Management") : "Read Only",
         Appointment: getModuleAccessLevel("OPD Management"),
+        IPD: getModuleAccessLevel("IPD Management"),
         Billing: getModuleAccessLevel("Billing & Invoicing"),
         Pharmacy: getModuleAccessLevel("Pharmacy"),
         Laboratory: getModuleAccessLevel("Laboratory"),
@@ -189,6 +191,18 @@ export default function EditPermissionsModal({ isOpen, onClose, onSubmit, role }
         User: getModuleAccessLevel("User Management"),
         Role: getModuleAccessLevel("User Management"),
         "Audit Log": getModuleAccessLevel("Audit Log"),
+
+        // Long keys matching Module Permissions Management
+        "Patient Management": getModuleAccessLevel("Patient Management"),
+        "OPD Management": getModuleAccessLevel("OPD Management"),
+        "IPD Management": getModuleAccessLevel("IPD Management"),
+        "Prescriptions": getModuleAccessLevel("Prescriptions"),
+        "Laboratory": getModuleAccessLevel("Laboratory"),
+        "Radiology": getModuleAccessLevel("Radiology"),
+        "Billing & Invoicing": getModuleAccessLevel("Billing & Invoicing"),
+        "Pharmacy": getModuleAccessLevel("Pharmacy"),
+        "User Management": getModuleAccessLevel("User Management"),
+        "Reports": getModuleAccessLevel("Reports"),
       };
 
       await onSubmit(role._id, {

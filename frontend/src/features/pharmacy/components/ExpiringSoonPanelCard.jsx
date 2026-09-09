@@ -36,7 +36,7 @@ export default function ExpiringSoonPanelCard({ items = [], onViewAll }) {
 
                 <div className="text-right flex-shrink-0">
                   <p className="text-xs font-semibold text-slate-700">{row.expiryDate}</p>
-                  <p className="text-[11px] font-semibold text-emerald-600">
+                  <p className="text-[11px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200/60 inline-block">
                     {row.daysLeft}
                   </p>
                 </div>

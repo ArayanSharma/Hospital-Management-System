@@ -10,6 +10,8 @@ import {
   ClipboardList,
   DollarSign,
   Ban,
+  MailCheck,
+  Mail,
 } from "lucide-react";
 import CustomDropdown from "../../../components/ui/CustomDropdown.jsx";
 import TableSkeleton from "../../../components/ui/TableSkeleton.jsx";
@@ -303,7 +305,15 @@ export default function SalesTable({
               items.map((row) => (
                 <tr key={row.id || row._id} className="hover:bg-slate-50/60 transition-colors">
                   {/* Invoice No */}
-                  <td className="py-3 px-4 font-extrabold text-blue-600 font-mono">{row.invoiceNo}</td>
+                  <td className="py-3 px-4 font-extrabold text-blue-600 font-mono">
+                    <div className="flex items-center gap-1.5">
+                      <span>{row.invoiceNo}</span>
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-200" title="Digital Purchase Receipt Dispatched via Email">
+                        <MailCheck className="w-3 h-3 text-emerald-600" />
+                        <span>Sent</span>
+                      </span>
+                    </div>
+                  </td>
 
                   {/* Date & Time */}
                   <td className="py-3 px-3">

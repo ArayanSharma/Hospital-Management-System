@@ -22,6 +22,7 @@ import RadiologyStudyDetailsModal from "../components/modals/RadiologyStudyDetai
 import RadiologyUploadImagesModal from "../components/modals/RadiologyUploadImagesModal.jsx";
 import RadiologyFindingsModal from "../components/modals/RadiologyFindingsModal.jsx";
 import RadiologyCancellationDetailsModal from "../components/modals/RadiologyCancellationDetailsModal.jsx";
+import LabPrintReportModal from "../../laboratory/components/modals/LabPrintReportModal.jsx";
 
 export default function RadiologyTestList() {
   const [modalOpen, setModalOpen] = useState(false);
@@ -35,6 +36,7 @@ export default function RadiologyTestList() {
   const [uploadImagesOrder, setUploadImagesOrder] = useState(null);
   const [findingsModalOrder, setFindingsModalOrder] = useState(null);
   const [cancellationDetailsOrder, setCancellationDetailsOrder] = useState(null);
+  const [printReportOrder, setPrintReportOrder] = useState(null);
 
   const {
     orders,
@@ -94,7 +96,7 @@ export default function RadiologyTestList() {
         if (reportElem) reportElem.scrollIntoView({ behavior: "smooth" });
         break;
       case "print-report":
-        window.print();
+        setPrintReportOrder(orderItem);
         break;
       case "view-history":
         alert(`Showing history for scan #${orderItem.orderId || orderItem._id}`);
@@ -167,6 +169,7 @@ export default function RadiologyTestList() {
             <RadiologyReportSection
               selectedOrder={selectedOrder}
               onReportUpdated={fetchOrders}
+              onPrintReport={(o) => setPrintReportOrder(o)}
             />
           </div>
         </div>
@@ -243,6 +246,13 @@ export default function RadiologyTestList() {
         order={cancellationDetailsOrder}
         isOpen={!!cancellationDetailsOrder}
         onClose={() => setCancellationDetailsOrder(null)}
+      />
+
+      {/* Printable Radiology Diagnostic Report Modal */}
+      <LabPrintReportModal
+        test={printReportOrder}
+        isOpen={!!printReportOrder}
+        onClose={() => setPrintReportOrder(null)}
       />
     </div>
   );

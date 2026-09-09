@@ -1,5 +1,5 @@
 import React from "react";
-import { Eye, MoreVertical, ChevronLeft, ChevronRight } from "lucide-react";
+import { Eye, MoreVertical, ChevronLeft, ChevronRight, MailCheck } from "lucide-react";
 import Loading from "../../../components/common/Loading.jsx";
 import ErrorState from "../../../components/common/ErrorState.jsx";
 
@@ -121,7 +121,12 @@ export default function IpdDischargesTable({
 
                     {/* Admission ID */}
                     <td className="py-3 px-3 whitespace-nowrap font-mono text-[11px] font-semibold text-slate-700">
-                      {admIdDisplay}
+                      <div className="flex items-center gap-1.5" title="Discharge summary & post-care guidelines email dispatched to patient">
+                        <span>{admIdDisplay}</span>
+                        <span className="p-0.5 rounded bg-emerald-50 text-emerald-600 border border-emerald-200 shrink-0">
+                          <MailCheck className="w-2.5 h-2.5 stroke-[2.5]" />
+                        </span>
+                      </div>
                     </td>
 
                     {/* Patient Cell */}

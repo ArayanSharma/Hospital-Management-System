@@ -1,5 +1,5 @@
 import React from "react";
-import { Eye, MoreVertical, ChevronLeft, ChevronRight, Filter, UserCheck } from "lucide-react";
+import { Eye, MoreVertical, ChevronLeft, ChevronRight, Filter, UserCheck, MailCheck } from "lucide-react";
 import SearchInput from "../../../components/common/SearchInput.jsx";
 import TableSkeleton from "../../../components/ui/TableSkeleton.jsx";
 import ErrorState from "../../../components/common/ErrorState.jsx";
@@ -132,12 +132,12 @@ export default function IpdActiveAdmissionsTable({
                 const rowNumber = ((page - 1) * 10) + index + 1;
                 const patient = adm.patientId;
                 const patientName = patient?.name || "Patient";
-                const patientUhid = patient?.patientId || "PAT-000123";
+                const patientUhid = patient?.patientId || patient?._id || "N/A";
                 const genderAge = formatGenderAge(patient?.dateOfBirth, patient?.gender);
 
                 const doctor = adm.doctorId;
-                const doctorName = doctor?.userId?.name || doctor?.name || "Dr. Doctor";
-                const specName = doctor?.specialization || "Cardiology";
+                const doctorName = doctor?.userId?.name || doctor?.name || "Physician";
+                const specName = doctor?.specialization || "Inpatient Care";
 
                 const wardName = adm.wardId?.name || "ICU";
                 const bedNumber = adm.bedId?.bedNumber || "ICU-02";
@@ -163,7 +163,12 @@ export default function IpdActiveAdmissionsTable({
                           </div>
                         )}
                         <div className="leading-tight">
-                          <p className="font-bold text-slate-900 text-xs">{patientName}</p>
+                          <div className="flex items-center gap-1.5" title="IPD Admission receipt & bed info dispatched to patient email">
+                            <p className="font-bold text-slate-900 text-xs">{patientName}</p>
+                            <span className="p-0.5 rounded bg-blue-50 text-blue-600 border border-blue-200 shrink-0">
+                              <MailCheck className="w-2.5 h-2.5 stroke-[2.5]" />
+                            </span>
+                          </div>
                           <p className="text-[10px] text-slate-400">{patientUhid} · {genderAge}</p>
                         </div>
                       </div>

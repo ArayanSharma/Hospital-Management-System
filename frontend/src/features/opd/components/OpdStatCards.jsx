@@ -2,10 +2,10 @@ import React from "react";
 import { Calendar, Clock, CheckCircle2, UserCheck } from "lucide-react";
 
 export default function OpdStatCards({ stats }) {
-  const todayCount = stats?.todayCount ?? 36;
-  const inProgressCount = stats?.inProgressCount ?? 12;
-  const completedCount = stats?.completedCount ?? 21;
-  const walkInCount = stats?.walkInCount ?? 9;
+  const todayCount = stats?.todayCount ?? 0;
+  const inProgressCount = stats?.inProgressCount ?? 0;
+  const completedCount = stats?.completedCount ?? 0;
+  const walkInCount = stats?.walkInCount ?? 0;
 
   const todayLabel = new Date().toLocaleDateString("en-US", {
     weekday: "short",

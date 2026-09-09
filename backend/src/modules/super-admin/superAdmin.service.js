@@ -30,10 +30,10 @@ export const getDashboardStats = async (params = {}) => {
     cacheKey,
     async () => {
       const now = new Date();
-      const defaultSevenDaysAgo = new Date(now);
-      defaultSevenDaysAgo.setDate(defaultSevenDaysAgo.getDate() - 7);
+      const defaultThirtyDaysAgo = new Date(now);
+      defaultThirtyDaysAgo.setDate(defaultThirtyDaysAgo.getDate() - 30);
 
-      const start = parseSafeDate(startDate, defaultSevenDaysAgo);
+      const start = parseSafeDate(startDate, defaultThirtyDaysAgo);
       const end = parseSafeDate(endDate, now);
       end.setHours(23, 59, 59, 999);
 
@@ -84,7 +84,7 @@ export const getDashboardStats = async (params = {}) => {
         Patient.countDocuments({ status: "active", isDeleted: { $ne: true } }),
         Doctor.countDocuments(doctorFilter),
 
-        Appointment.countDocuments(apptFilter),
+        Appointment.countDocuments(departmentId ? { departmentId } : {}),
         Admission.countDocuments({ status: "admitted" }),
 
         User.aggregate([
@@ -94,31 +94,33 @@ export const getDashboardStats = async (params = {}) => {
           { $group: { _id: "$role.name", count: { $sum: 1 } } },
         ]),
 
-        Payment.aggregate([
-          { $match: { status: "success", paidAt: dateMatchFilter } },
-          { $group: { _id: null, total: { $sum: "$amount" } } },
+        // Dynamic Revenue Calculation from Invoice / PharmacySale / Payment records
+        Invoice.aggregate([
+          { $match: { status: { $in: ["paid", "partially-paid"] }, createdAt: dateMatchFilter } },
+          { $group: { _id: null, total: { $sum: "$amountPaid" } } },
         ]),
 
-        Payment.aggregate([
-          { $match: { status: "success", paidAt: dateMatchFilter } },
-          { $group: { _id: "$method", total: { $sum: "$amount" } } },
+        Invoice.aggregate([
+          { $match: { status: { $in: ["paid", "partially-paid"] }, createdAt: dateMatchFilter } },
+          { $unwind: "$paymentHistory" },
+          { $group: { _id: "$paymentHistory.mode", total: { $sum: "$paymentHistory.amount" } } },
         ]),
 
         Invoice.aggregate([
           { $match: { status: { $in: ["unpaid", "partially-paid"] } } },
-          { $group: { _id: null, pending: { $sum: { $subtract: ["$total", "$amountPaid"] } } } },
+          { $group: { _id: null, pending: { $sum: "$dueAmount" } } },
         ]),
 
-        InsuranceClaim.countDocuments({ status: { $in: ["submitted", "under-review"] } }),
+        InsuranceClaim.countDocuments({ status: { $in: ["Submitted", "Under Review", "submitted", "under review"] } }),
         InsuranceClaim.countDocuments(),
 
         Appointment.aggregate([
-          { $match: { appointmentDate: dateMatchFilter } },
+          { $match: { createdAt: dateMatchFilter } },
           { $group: { _id: "$status", count: { $sum: 1 } } },
         ]),
 
         Patient.aggregate([
-          { $match: { createdAt: dateMatchFilter, isDeleted: { $ne: true } } },
+          { $match: { isDeleted: { $ne: true }, createdAt: dateMatchFilter } },
           {
             $group: {
               _id: { $dateToString: { format: "%d %b", date: "$createdAt" } },
@@ -129,9 +131,9 @@ export const getDashboardStats = async (params = {}) => {
         ]),
 
         InventoryItem.find({
-          $expr: { $lte: ["$quantity", "$minStockLevel"] },
+          $expr: { $lte: ["$quantity", "$minimumStock"] },
         })
-          .select("itemName quantity minStockLevel")
+          .select("itemName quantity minimumStock")
           .limit(5),
 
         InventoryItem.find({
@@ -141,29 +143,20 @@ export const getDashboardStats = async (params = {}) => {
           .limit(5),
 
         PharmacySale.aggregate([
-          { $match: { createdAt: dateMatchFilter } },
           { $unwind: "$medicines" },
           {
             $group: {
               _id: "$medicines.medicineId",
+              medicineName: { $first: "$medicines.medicineName" },
               totalQty: { $sum: "$medicines.quantity" },
-              totalRevenue: { $sum: { $ifNull: ["$medicines.amount", "$medicines.subtotal"] } },
+              totalRevenue: { $sum: "$medicines.amount" },
             },
           },
           { $sort: { totalQty: -1 } },
           { $limit: 5 },
           {
-            $lookup: {
-              from: "medicines",
-              localField: "_id",
-              foreignField: "_id",
-              as: "medicine",
-            },
-          },
-          { $unwind: "$medicine" },
-          {
             $project: {
-              name: "$medicine.name",
+              name: "$medicineName",
               totalQty: 1,
               totalRevenue: 1,
             },

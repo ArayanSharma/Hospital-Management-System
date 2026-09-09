@@ -7,6 +7,7 @@ import { ErrorCodes } from "../../core/errors/errorCodes.js";
 import { createAuditLog } from "../audit-logs/audit-log.service.js";
 import { isTimeOverlapping } from "../../utils/timeOverlap.js";
 import { notifyAppointmentEvent } from "../../utils/notificationDispatcher.js";
+import { dispatchAsyncEmail } from "../../utils/email/emailDispatcher.js";
 
 // Helper: conflict check
 const checkDoctorConflict = async (doctorId, appointmentDate, startTime, endTime, excludeId = null) => {
@@ -86,7 +87,7 @@ export const createAppointment = async (data, currentUser, requestMeta) => {
   try {
     const [patient, doctor] = await Promise.all([
       Patient.findById(patientId),
-      Doctor.findById(doctorId),
+      Doctor.findById(doctorId).populate("userId", "name email"),
     ]);
 
     if (!patient || patient.status === "inactive") {
@@ -131,13 +132,26 @@ export const createAppointment = async (data, currentUser, requestMeta) => {
       userAgent: requestMeta.userAgent,
     });
 
-    if (sendNotification !== false && doctor?.userId) {
-      await notifyAppointmentEvent({
-        userId: doctor.userId,
-        appointmentId: appointment._id,
-        doctorName: currentUser?.name,
-        date: new Date(appointmentDate).toLocaleDateString(),
-        status: "scheduled",
+    // Dispatch dual confirmation emails (Patient & Doctor) with .ics calendar invite
+    const recipients = [];
+    if (patient?.email) recipients.push(patient.email);
+    if (doctor?.userId?.email) recipients.push(doctor.userId.email);
+
+    if (recipients.length > 0) {
+      dispatchAsyncEmail({
+        to: recipients,
+        type: "appointment_booked",
+        data: {
+          appointmentId: appointment.appointmentId,
+          patientName: patient.name,
+          doctorName: doctor?.userId?.name || doctor?.name || "Specialist",
+          rawDateStr: formattedDate,
+          startTime,
+          endTime,
+          date: new Date(appointmentDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
+          timeSlot: `${startTime} - ${endTime}`,
+          department: doctor?.department || "General OPD",
+        },
       });
     }
 
@@ -325,6 +339,41 @@ export const updateAppointment = async (id, data, currentUser, requestMeta) => {
     userAgent: requestMeta.userAgent,
   });
 
+  // Dispatch Appointment Rescheduled Email if date/time slot was updated
+  if (appointmentDate || startTime || endTime) {
+    try {
+      const [patient, doctor] = await Promise.all([
+        Patient.findById(appointment.patientId),
+        Doctor.findById(appointment.doctorId).populate("userId", "name email"),
+      ]);
+
+      const recipients = [];
+      if (patient?.email) recipients.push(patient.email);
+      if (doctor?.userId?.email) recipients.push(doctor.userId.email);
+
+      if (recipients.length > 0) {
+        dispatchAsyncEmail({
+          to: recipients,
+          type: "appointment_rescheduled",
+          data: {
+            appointmentId: appointment.appointmentId,
+            patientName: patient?.name || "Patient",
+            doctorName: doctor?.userId?.name || doctor?.name || "Specialist",
+            oldDate: oldValue.appointmentDate ? new Date(oldValue.appointmentDate).toLocaleDateString("en-GB") : "",
+            newDate: new Date(appointment.appointmentDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
+            rawDateStr: new Date(appointment.appointmentDate).toISOString().slice(0, 10),
+            newTimeSlot: `${appointment.startTime} - ${appointment.endTime}`,
+            startTime: appointment.startTime,
+            endTime: appointment.endTime,
+            reason: appointment.reason || "Slot Rescheduled",
+          },
+        });
+      }
+    } catch (emailErr) {
+      console.error("Failed to dispatch rescheduled email:", emailErr);
+    }
+  }
+
   return appointment;
 };
 
@@ -376,25 +425,31 @@ export const changeAppointmentStatus = async (id, newStatus, cancelledReason, cu
     console.error("Audit log error on appointment status change:", auditErr);
   }
 
-  if (newStatus === "cancelled" || newStatus === "checked_in") {
+  if (newStatus === "cancelled") {
     try {
-      const doctor = await Doctor.findById(appointment.doctorId);
-      if (doctor && doctor.userId) {
-        const notifTitle = newStatus === "cancelled" ? "Appointment Cancelled" : "Patient Checked-In";
-        const notifMsg = newStatus === "cancelled"
-          ? `Appointment on ${new Date(appointment.appointmentDate).toLocaleDateString()} was cancelled. Reason: ${appointment.cancelledReason}`
-          : `Patient has checked in for OPD appointment at ${appointment.startTime}.`;
+      const [patient, doctor] = await Promise.all([
+        Patient.findById(appointment.patientId),
+        Doctor.findById(appointment.doctorId).populate("userId", "name email"),
+      ]);
 
-        await createNotification({
-          userId: doctor.userId,
-          type: "appointment",
-          title: notifTitle,
-          message: notifMsg,
-          metadata: { appointmentId: appointment._id },
+      const recipients = [];
+      if (patient?.email) recipients.push(patient.email);
+      if (doctor?.userId?.email) recipients.push(doctor.userId.email);
+
+      if (recipients.length > 0) {
+        dispatchAsyncEmail({
+          to: recipients,
+          type: "appointment_cancel",
+          data: {
+            patientName: patient?.name || "Patient",
+            doctorName: doctor?.userId?.name || doctor?.name || "Specialist",
+            date: new Date(appointment.appointmentDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
+            reason: appointment.cancelledReason,
+          },
         });
       }
-    } catch (notifErr) {
-      console.error("Notification error on appointment status change:", notifErr);
+    } catch (cancelEmailErr) {
+      console.error("Failed to send cancellation email:", cancelEmailErr);
     }
   }
 

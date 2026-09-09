@@ -13,12 +13,13 @@ export default function PharmacyDashboard() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [selectedRange, setSelectedRange] = useState("today");
 
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = async (rangeToFetch = selectedRange) => {
     setLoading(true);
     setError(null);
     try {
-      const response = await getPharmacyDashboardApi();
+      const response = await getPharmacyDashboardApi(rangeToFetch);
       if (response.data && response.data.success) {
         setData(response.data.data);
       } else {
@@ -26,7 +27,6 @@ export default function PharmacyDashboard() {
       }
     } catch (err) {
       console.warn("API request error, using fallback zeros:", err);
-      // Clean fallback data structure so UI never breaks
       setData({
         kpis: {
           totalMedicines: { value: "0", raw: 0, change: "Live Database" },
@@ -42,8 +42,12 @@ export default function PharmacyDashboard() {
   };
 
   useEffect(() => {
-    fetchDashboardData();
-  }, []);
+    fetchDashboardData(selectedRange);
+  }, [selectedRange]);
+
+  const handleRangeChange = (newRange) => {
+    setSelectedRange(newRange);
+  };
 
   return (
     <div className="space-y-6 max-w-[1600px] mx-auto pb-8 text-slate-800">
@@ -57,7 +61,7 @@ export default function PharmacyDashboard() {
         </div>
 
         <div className="flex items-center gap-3">
-          <PharmacyDateSelector onSelectRange={(val) => console.log("Date range filter changed:", val)} />
+          <PharmacyDateSelector selectedRange={selectedRange} onSelectRange={handleRangeChange} />
         </div>
       </div>
 

@@ -61,7 +61,15 @@ export default function InventoryList() {
     try {
       const [statsRes, listRes] = await Promise.all([
         getInventoryStatsApi().catch(() => null),
-        getMedicinesApi({ page: currentPage, limit: itemsPerPage, search: searchQuery || undefined }).catch(() => null),
+        getMedicinesApi({
+          page: currentPage,
+          limit: itemsPerPage,
+          search: searchQuery || undefined,
+          stockStatus: activeTab !== "all" ? activeTab : undefined,
+          category: categoryFilter !== "all" ? categoryFilter : undefined,
+          manufacturer: manufacturerFilter !== "all" ? manufacturerFilter : undefined,
+          status: statusFilter !== "all" ? statusFilter : undefined,
+        }).catch(() => null),
       ]);
 
       if (statsRes?.data?.data) {
@@ -72,23 +80,39 @@ export default function InventoryList() {
       if (listData) {
         const resItems = listData.items || listData.medicines || (Array.isArray(listData) ? listData : []);
         if (Array.isArray(resItems)) {
-          const formatted = resItems.map((med, idx) => ({
-            id: med._id || med.id || String(idx + 1),
-            _id: med._id || med.id,
-            name: med.name,
-            dosage: med.dosageForm || "Tablet",
-            category: med.category || "Pharmaceuticals",
-            manufacturer: med.manufacturer || "Vendor",
-            batchNo: med.batchNo || med.code || `PCM650/0${idx + 1}`,
-            expiryDate: med.expiryDate || (idx % 4 === 3 ? "15 Oct 2024" : "30 Dec 2026"),
-            daysLeft: idx % 4 === 3 ? -15 : 180,
-            purchasePrice: med.purchasePrice || med.price || 20,
-            mrp: med.mrp || (med.price ? med.price * 1.2 : 25),
-            availableStock: med.availableStock !== undefined ? med.availableStock : (idx % 6 === 5 ? 0 : idx % 5 === 2 ? 0 : idx % 5 === 1 ? 30 : med.minStockLevel || 100),
-            minStockLevel: med.minStockLevel || 50,
-            unit: med.unit || "Strip",
-            status: med.status ? (med.status.charAt(0).toUpperCase() + med.status.slice(1)) : (idx % 6 === 5 ? "Archived" : idx % 4 === 3 ? "Expiring Soon" : idx % 5 === 2 ? "Out of Stock" : idx % 5 === 1 ? "Low Stock" : "In Stock"),
-          }));
+          const formatted = resItems.map((med, idx) => {
+            const stock = med.availableStock !== undefined ? med.availableStock : 100;
+            const minLvl = med.minStockLevel || 20;
+
+            let statusText = "In Stock";
+            if (med.status === "archived" || med.status === "Archived") {
+              statusText = "Archived";
+            } else if (stock === 0 || med.status === "inactive" || med.status === "Inactive") {
+              statusText = "Out of Stock";
+            } else if (stock <= minLvl || stock <= 20) {
+              statusText = "Low Stock";
+            } else {
+              statusText = "In Stock";
+            }
+
+            return {
+              id: med._id || med.id || String(idx + 1),
+              _id: med._id || med.id,
+              name: med.name,
+              dosage: med.dosageForm || "Tablet",
+              category: med.category || "Pharmaceuticals",
+              manufacturer: med.manufacturer || "Vendor",
+              batchNo: med.batchNo || med.code || `BATCH-${idx + 1}`,
+              expiryDate: med.expiryDate ? (new Date(med.expiryDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })) : "30 Dec 2026",
+              daysLeft: med.expiryDate ? Math.ceil((new Date(med.expiryDate) - new Date()) / (1000 * 3600 * 24)) : 180,
+              purchasePrice: med.purchasePrice || med.price || 20,
+              mrp: med.mrp || (med.price ? med.price * 1.2 : 25),
+              availableStock: stock,
+              minStockLevel: minLvl,
+              unit: med.unit || "Strip",
+              status: statusText,
+            };
+          });
           setItems(formatted);
         }
         if (listData.total !== undefined) {
@@ -107,25 +131,12 @@ export default function InventoryList() {
 
   useEffect(() => {
     loadData();
-  }, [currentPage, itemsPerPage, searchQuery]);
+  }, [currentPage, itemsPerPage, searchQuery, activeTab, categoryFilter, manufacturerFilter, statusFilter]);
 
   // Filtered dataset computation
   const filteredItems = useMemo(() => {
     return items.filter((item) => {
-      const isArchived = item.status === "Archived" || item.status === "archived";
-
-      // 1. Tab Filter
-      if (activeTab === "archived") {
-        if (!isArchived) return false;
-      } else {
-        if (isArchived) return false; // Exclude archived items from active tabs
-        if (activeTab === "in_stock" && (item.availableStock === 0 || item.status === "Out of Stock")) return false;
-        if (activeTab === "low_stock" && item.status !== "Low Stock" && item.availableStock > 50) return false;
-        if (activeTab === "out_of_stock" && item.availableStock > 0 && item.status !== "Out of Stock") return false;
-        if (activeTab === "expiring_soon" && item.status !== "Expiring Soon" && item.daysLeft > 35) return false;
-      }
-
-      // 2. Search Query Filter
+      // Search Query Filter
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase();
         const nameMatch = item.name?.toLowerCase().includes(query);
@@ -134,23 +145,20 @@ export default function InventoryList() {
         if (!nameMatch && !batchMatch && !categoryMatch) return false;
       }
 
-      // 3. Category Filter
+      // Category Filter
       if (categoryFilter !== "all" && item.category !== categoryFilter) return false;
 
-      // 4. Manufacturer Filter
+      // Manufacturer Filter
       if (manufacturerFilter !== "all" && item.manufacturer !== manufacturerFilter) return false;
 
-      // 5. Status Filter (Skip if active tab is archived)
-      if (activeTab !== "archived" && statusFilter !== "all" && item.status !== statusFilter) return false;
-
-      // 6. Expiry Filter
+      // Expiry Filter
       if (expiryFilter === "30" && item.daysLeft > 30) return false;
       if (expiryFilter === "60" && item.daysLeft > 60) return false;
       if (expiryFilter === "expired" && item.daysLeft >= 0) return false;
 
       return true;
     });
-  }, [items, activeTab, searchQuery, categoryFilter, manufacturerFilter, statusFilter, expiryFilter]);
+  }, [items, searchQuery, categoryFilter, manufacturerFilter, expiryFilter]);
 
   const showNotification = (msg) => {
     setNotificationMsg(msg);
@@ -324,26 +332,26 @@ export default function InventoryList() {
     });
 
     return {
-      totalMedicines: (stats?.totalMedicines && stats.totalMedicines !== "0" && stats.totalMedicines !== 0) ? stats.totalMedicines : totalMeds,
+      totalMedicines: (stats?.totalMedicines !== undefined && stats.totalMedicines !== "0" && stats.totalMedicines !== 0) ? stats.totalMedicines : (totalItems || totalMeds),
       totalStockUnits: (stats?.totalStockUnits && stats.totalStockUnits !== "0") ? stats.totalStockUnits : totalUnits.toLocaleString("en-IN"),
       stockValue: (stats?.stockValue && stats.stockValue !== "₹ 0.00") ? stats.stockValue : `₹ ${totalValueNum.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`,
-      lowStockItems: (stats?.lowStockItems && stats.lowStockItems !== 0) ? stats.lowStockItems : lowStockMeds,
+      lowStockItems: stats?.lowStockItems ?? lowStockMeds,
       outOfStock: stats?.outOfStock ?? outOfStockMeds,
       expiringSoon: stats?.expiringSoon ?? expiringMeds,
       countsByTab: {
-        all: totalMeds,
-        in_stock: inStockMeds,
-        inStock: inStockMeds,
-        low_stock: lowStockMeds,
-        lowStock: lowStockMeds,
-        out_of_stock: outOfStockMeds,
-        outOfStock: outOfStockMeds,
-        expiring_soon: expiringMeds,
-        expiringSoon: expiringMeds,
-        archived: archivedMeds,
-        archivedBatches: archivedMeds,
+        all: stats?.countsByTab?.all ?? totalItems ?? totalMeds,
+        in_stock: stats?.countsByTab?.in_stock ?? inStockMeds,
+        inStock: stats?.countsByTab?.inStock ?? inStockMeds,
+        low_stock: stats?.countsByTab?.low_stock ?? lowStockMeds,
+        lowStock: stats?.countsByTab?.lowStock ?? lowStockMeds,
+        out_of_stock: stats?.countsByTab?.out_of_stock ?? outOfStockMeds,
+        outOfStock: stats?.countsByTab?.outOfStock ?? outOfStockMeds,
+        expiring_soon: stats?.countsByTab?.expiring_soon ?? expiringMeds,
+        expiringSoon: stats?.countsByTab?.expiringSoon ?? expiringMeds,
+        archived: stats?.countsByTab?.archived ?? archivedMeds,
+        archivedBatches: stats?.countsByTab?.archivedBatches ?? archivedMeds,
       },
-      stockAlertsSummary: {
+      stockAlertsSummary: stats?.stockAlertsSummary || {
         lowStockItems: lowStockMeds,
         outOfStockItems: outOfStockMeds,
         expiring7Days: Math.max(0, Math.floor(expiringMeds * 0.3)),

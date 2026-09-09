@@ -1,20 +1,18 @@
 import { Component } from "react";
-import { AlertTriangle, RefreshCw, Home } from "lucide-react";
+import { AlertTriangle, RefreshCw, Home, Terminal } from "lucide-react";
 
 class ErrorBoundary extends Component {
   constructor(props) {
     super(props);
-    this.state = { hasError: false, error: null };
+    this.state = { hasError: false, error: null, showDetails: false };
   }
 
   static getDerivedStateFromError(error) {
-    // Agla render pe fallback UI dikhane ke liye state update karo
     return { hasError: true, error };
   }
 
   componentDidCatch(error, errorInfo) {
-    // Production mein yahan error tracking service (Sentry, LogRocket) call hoga
-    console.error("ErrorBoundary caught an error:", error, errorInfo);
+    console.error("Global ErrorBoundary caught an error:", error, errorInfo);
   }
 
   handleReset = () => {
@@ -24,47 +22,53 @@ class ErrorBoundary extends Component {
 
   render() {
     if (this.state.hasError) {
-      // Custom fallback diya ho to wahi use karo, warna default
       if (this.props.fallback) {
         return this.props.fallback(this.state.error, this.handleReset);
       }
 
       return (
-        <div className="min-h-[400px] flex items-center justify-center p-6">
-          <div className="text-center max-w-sm">
-            <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-4">
-              <AlertTriangle className="w-6 h-6 text-red-500" />
+        <div className="min-h-[450px] flex items-center justify-center p-6 bg-slate-50 dark:bg-[#0B0F19] transition-colors duration-200">
+          <div className="text-center max-w-md w-full bg-white dark:bg-[#131B2E] border border-slate-200 dark:border-slate-800 p-8 rounded-2xl shadow-xl">
+            <div className="w-14 h-14 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-center justify-center mx-auto mb-4 text-red-500">
+              <AlertTriangle className="w-7 h-7" />
             </div>
-            <h2 className="text-base font-semibold text-gray-900 mb-1">
+            <h2 className="text-lg font-bold text-slate-900 dark:text-white mb-2">
               {this.props.title || "Something went wrong"}
             </h2>
-            <p className="text-sm text-gray-500 mb-5">
-              {this.props.message || "This section encountered an unexpected error. You can try again or go back to the dashboard."}
+            <p className="text-sm text-slate-600 dark:text-slate-300 mb-6 leading-relaxed">
+              {this.props.message ||
+                "This component encountered an unexpected error. You can try reloading or return to the dashboard."}
             </p>
-            <div className="flex items-center justify-center gap-2">
+
+            <div className="flex items-center justify-center gap-3">
               <button
                 onClick={this.handleReset}
-                className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-gray-900 text-white rounded-md hover:bg-gray-800 transition cursor-pointer"
+                className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:hover:bg-white text-white dark:text-slate-900 rounded-xl transition cursor-pointer"
               >
-                <RefreshCw className="w-3.5 h-3.5" /> Try Again
+                <RefreshCw className="w-4 h-4" /> Try Again
               </button>
               <a
                 href="/"
-                className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium border border-gray-300 rounded-md hover:bg-gray-50 transition"
+                className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl transition"
               >
-                <Home className="w-3.5 h-3.5" /> Go Home
+                <Home className="w-4 h-4" /> Go Home
               </a>
             </div>
 
-            {import.meta.env.DEV && this.state.error && (
-              <details className="mt-5 text-left">
-                <summary className="text-xs text-gray-400 cursor-pointer hover:text-gray-600">
-                  Error details (dev only)
-                </summary>
-                <pre className="mt-2 text-[11px] bg-gray-50 border border-gray-200 rounded p-2 overflow-x-auto text-red-600 font-mono">
-                  {this.state.error.toString()}
-                </pre>
-              </details>
+            {this.state.error && (
+              <div className="mt-6 text-left border-t border-slate-100 dark:border-slate-800/80 pt-4">
+                <button
+                  onClick={() => this.setState((prev) => ({ showDetails: !prev.showDetails }))}
+                  className="flex items-center gap-1.5 text-xs font-semibold text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition cursor-pointer"
+                >
+                  <Terminal className="w-3.5 h-3.5" /> Technical Diagnostics
+                </button>
+                {this.state.showDetails && (
+                  <pre className="mt-2.5 text-[11px] bg-slate-900 text-red-400 border border-slate-800 rounded-xl p-3 overflow-x-auto font-mono">
+                    {this.state.error.toString()}
+                  </pre>
+                )}
+              </div>
             )}
           </div>
         </div>

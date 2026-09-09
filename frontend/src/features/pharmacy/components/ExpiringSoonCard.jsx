@@ -55,7 +55,7 @@ export default function ExpiringSoonCard({ items = [], isLoading }) {
                     <td className="py-3 font-medium text-slate-600">{row.expiryDate || "30 Dec 2026"}</td>
                     <td className="py-3 text-right">
                       <span className="bg-amber-50 text-amber-600 border border-amber-200/80 px-2.5 py-1 rounded-md text-[11px] font-semibold inline-block">
-                        {row.daysLeft ? `${row.daysLeft} days` : "30 days"}
+                        {row.daysLeft ? (row.daysLeft.includes("days") ? row.daysLeft : `${row.daysLeft} days`) : "30 days left"}
                       </span>
                     </td>
                   </tr>

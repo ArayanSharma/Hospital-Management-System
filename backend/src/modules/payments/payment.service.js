@@ -6,7 +6,9 @@ import AppError from "../../core/errors/AppError.js";
 import { ErrorCodes } from "../../core/errors/errorCodes.js";
 import { createAuditLog } from "../audit-logs/audit-log.service.js";
 import { generateSequentialId } from "../../utils/generateId.js";
+import Patient from "../patients/patient.model.js";
 import { getOrSetCache, invalidatePattern, delCache, acquireLock, releaseLock } from "../../utils/redisCache.js";
+import { dispatchAsyncEmail } from "../../utils/email/emailDispatcher.js";
 
 // ---------------- CREATE PAYMENT (Payment + Invoice update transaction with REDIS LOCK) ----------------
 export const createPayment = async (data, currentUser, requestMeta) => {
@@ -95,9 +97,45 @@ export const createPayment = async (data, currentUser, requestMeta) => {
       }
 
       const populatedPayment = await Payment.findById(payment[0]._id)
-        .populate("patientId", "name patientId phone dateOfBirth gender")
-        .populate("invoiceId", "invoiceNumber total amountPaid dueAmount items departments")
+        .populate("patientId", "name patientId phone email dateOfBirth gender")
+        .populate("invoiceId", "invoiceNumber total amountPaid dueAmount items departments dueDate")
         .populate("receivedBy", "name");
+
+      // Dispatch Payment Receipt Success Email with GST tax details
+      if (populatedPayment?.patientId?.email) {
+        dispatchAsyncEmail({
+          to: populatedPayment.patientId.email,
+          type: "payment_receipt",
+          data: {
+            receiptNo: populatedPayment.receiptNumber,
+            invoiceNo: populatedPayment.invoiceId?.invoiceNumber || "INV-2026",
+            amountPaid: populatedPayment.amount,
+            paymentMethod: populatedPayment.method,
+            transactionId: populatedPayment.transactionId || `TXN-${populatedPayment.receiptNumber}`,
+            receiptDate: new Date(populatedPayment.paidAt).toLocaleString("en-GB"),
+          },
+        });
+      }
+
+      // If partial payment remains due and past due date, send payment overdue notice
+      if (populatedPayment?.invoiceId?.dueAmount > 0 && populatedPayment?.patientId?.email) {
+        const dueDateObj = new Date(populatedPayment.invoiceId.dueDate || Date.now());
+        if (dueDateObj < new Date()) {
+          const diffTime = Math.abs(new Date() - dueDateObj);
+          const daysOverdue = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+          dispatchAsyncEmail({
+            to: populatedPayment.patientId.email,
+            type: "payment_overdue",
+            data: {
+              invoiceNo: populatedPayment.invoiceId.invoiceNumber,
+              patientName: populatedPayment.patientId.name,
+              dueAmount: populatedPayment.invoiceId.dueAmount,
+              dueDate: dueDateObj.toLocaleDateString("en-GB"),
+              daysOverdue,
+            },
+          });
+        }
+      }
 
       return populatedPayment;
     } catch (err) {

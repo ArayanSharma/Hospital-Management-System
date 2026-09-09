@@ -17,6 +17,7 @@ import LabCancelOrderModal from "../components/modals/LabCancelOrderModal.jsx";
 import LabViewSampleModal from "../components/modals/LabViewSampleModal.jsx";
 import LabUploadReportModal from "../components/modals/LabUploadReportModal.jsx";
 import LabCancellationDetailsModal from "../components/modals/LabCancellationDetailsModal.jsx";
+import LabPrintReportModal from "../components/modals/LabPrintReportModal.jsx";
 import { updateLabTestStatusApi } from "../services/labTest.api.js";
 import { createLabReportApi, finalizeLabReportApi } from "../services/labReport.api.js";
 
@@ -56,6 +57,7 @@ export default function LabTestList() {
   const [viewSampleTest, setViewSampleTest] = useState(null);
   const [uploadReportTest, setUploadReportTest] = useState(null);
   const [cancellationDetailsTest, setCancellationDetailsTest] = useState(null);
+  const [printReportTest, setPrintReportTest] = useState(null);
 
   // Sample Collection Action
   const handleCollectSample = async (testId) => {
@@ -150,7 +152,7 @@ export default function LabTestList() {
         setActiveTab("details");
         break;
       case "print-report":
-        window.print();
+        setPrintReportTest(testItem);
         break;
       case "view-history":
         setActiveTab("history");
@@ -259,7 +261,9 @@ export default function LabTestList() {
         <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={() => window.print()}
+            onClick={() => {
+              if (selectedTest) setPrintReportTest(selectedTest);
+            }}
             className="px-3 py-1.5 rounded-xl border border-slate-200 text-blue-600 hover:bg-blue-50 text-[11px] font-semibold transition cursor-pointer flex items-center gap-1.5"
           >
             <Printer className="w-3.5 h-3.5 text-blue-600" />
@@ -286,6 +290,7 @@ export default function LabTestList() {
               activeTab={activeTab}
               setActiveTab={setActiveTab}
               onCollectSample={handleCollectSample}
+              onPrintReport={(t) => setPrintReportTest(t)}
               submitting={submitting}
             />
           </div>
@@ -367,6 +372,13 @@ export default function LabTestList() {
         test={cancellationDetailsTest}
         isOpen={!!cancellationDetailsTest}
         onClose={() => setCancellationDetailsTest(null)}
+      />
+
+      {/* Printable Pathology Diagnostic Report Modal */}
+      <LabPrintReportModal
+        test={printReportTest}
+        isOpen={!!printReportTest}
+        onClose={() => setPrintReportTest(null)}
       />
     </div>
   );

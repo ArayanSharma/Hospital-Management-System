@@ -25,6 +25,7 @@ export const useAuth = () => {
       email: firebaseUser.email,
       name: firebaseUser.displayName,
       photoUrl: firebaseUser.photoURL,
+      firebaseUid: firebaseUser.uid,
     });
     dispatch(setCredentials(data.data));
     const u = data.data?.user;

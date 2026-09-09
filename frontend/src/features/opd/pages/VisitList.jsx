@@ -11,6 +11,7 @@ import OpdVisitFormModal from "../components/OpdVisitFormModal.jsx";
 import OpdCancelVisitModal from "../components/modals/OpdCancelVisitModal.jsx";
 import OpdAssignDoctorModal from "../components/modals/OpdAssignDoctorModal.jsx";
 import OpdViewVisitModal from "../components/modals/OpdViewVisitModal.jsx";
+import OpdPrintSummaryModal from "../components/modals/OpdPrintSummaryModal.jsx";
 import { updateOPDVisitApi } from "../services/opdVisit.api.js";
 
 export default function VisitList() {
@@ -43,6 +44,7 @@ export default function VisitList() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingVisit, setEditingVisit] = useState(null);
   const [viewingVisit, setViewingVisit] = useState(null);
+  const [printingVisit, setPrintingVisit] = useState(null);
   const [cancellingVisit, setCancellingVisit] = useState(null);
   const [assignDoctorVisit, setAssignDoctorVisit] = useState(null);
   const [submitting, setSubmitting] = useState(false);
@@ -152,6 +154,7 @@ export default function VisitList() {
             onStatusChange={handleStatusChange}
             onAssignDoctor={(v) => setAssignDoctorVisit(v)}
             onOpenCancelModal={(v) => setCancellingVisit(v)}
+            onPrintVisit={(v) => setPrintingVisit(v)}
           />
         </div>
 
@@ -161,6 +164,7 @@ export default function VisitList() {
             visit={selectedVisit}
             onClose={() => setSelectedVisit(null)}
             onUpdateSuccess={refetch}
+            onPrintVisit={(v) => setPrintingVisit(v)}
           />
         </div>
       </div>
@@ -170,6 +174,13 @@ export default function VisitList() {
         visit={viewingVisit}
         isOpen={!!viewingVisit}
         onClose={() => setViewingVisit(null)}
+      />
+
+      {/* Print Patient OPD Summary Modal */}
+      <OpdPrintSummaryModal
+        visit={printingVisit}
+        isOpen={!!printingVisit}
+        onClose={() => setPrintingVisit(null)}
       />
 
       {/* Assign Doctor Modal */}

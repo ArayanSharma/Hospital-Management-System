@@ -1,5 +1,6 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
+import { MailCheck } from "lucide-react";
 
 export default function LowStockAlertsCard({ items = [], isLoading }) {
   const navigate = useNavigate();
@@ -52,7 +53,15 @@ export default function LowStockAlertsCard({ items = [], isLoading }) {
               <tbody className="divide-y divide-slate-100 text-xs">
                 {items.map((row, idx) => (
                   <tr key={row.id || row._id || idx} className="hover:bg-slate-50/50 transition-colors">
-                    <td className="py-3 font-semibold text-slate-800">{row.medicine || row.name}</td>
+                    <td className="py-3 font-semibold text-slate-800">
+                      <div className="flex items-center gap-1.5">
+                        <span>{row.medicine || row.name}</span>
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-rose-50 text-rose-700 text-[10px] font-bold border border-rose-200" title="Low Inventory Alert Email Sent to Pharmacist & Admin">
+                          <MailCheck className="w-3 h-3 text-rose-600" />
+                          <span>Alert Sent</span>
+                        </span>
+                      </div>
+                    </td>
                     <td className="py-3 font-medium text-slate-500">{row.batchNo || row.code || "PCM650"}</td>
                     <td className="py-3 text-center font-bold text-slate-800">{row.availableStock ?? row.currentStock ?? 10}</td>
                     <td className="py-3 text-center font-medium text-slate-500">{row.unit || "Strip"}</td>

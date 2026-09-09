@@ -65,7 +65,7 @@ export default function RoleSidebarWidgets({
                   Total Users
                 </p>
                 <p className="text-sm font-black text-slate-900 mt-0.5">
-                  {selectedRole?.userCount || 18}
+                  {selectedRole?.userCount ?? 0}
                 </p>
               </div>
 

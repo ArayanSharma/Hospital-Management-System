@@ -307,28 +307,28 @@ export default function SupplierTable({
 
                   {/* Contact Person */}
                   <td className="py-3 px-3">
-                    <p className="font-bold text-slate-800 leading-tight">{row.contactPerson || "Manager"}</p>
-                    <p className="text-[11px] text-slate-400 font-medium">{row.designation || "Sales Head"}</p>
+                    <p className="font-bold text-slate-800 leading-tight">{row.contactPerson || "N/A"}</p>
+                    <p className="text-[11px] text-slate-400 font-medium">{row.designation || "Representative"}</p>
                   </td>
 
                   {/* Phone / Email */}
                   <td className="py-3 px-3">
-                    <p className="font-semibold text-slate-800 leading-tight">{row.phone}</p>
-                    <p className="text-[11px] text-slate-400 font-medium">{row.email}</p>
+                    <p className="font-semibold text-slate-800 leading-tight">{row.phone || "N/A"}</p>
+                    <p className="text-[11px] text-slate-400 font-medium">{row.email || "N/A"}</p>
                   </td>
 
                   {/* Location */}
-                  <td className="py-3 px-3 font-semibold text-slate-700">{row.location || row.city || row.state || "India"}</td>
+                  <td className="py-3 px-3 font-semibold text-slate-700">{row.location || row.city || row.state || "N/A"}</td>
 
                   {/* Category */}
                   <td className="py-3 px-3 text-center">{getCategoryBadge(row.category || "Pharmaceuticals")}</td>
 
                   {/* Last Purchase */}
-                  <td className="py-3 px-3 font-medium text-slate-600">{row.lastPurchase || "15 Aug 2026"}</td>
+                  <td className="py-3 px-3 font-medium text-slate-600">{row.lastPurchase || "-"}</td>
 
                   {/* Total Purchases */}
                   <td className="py-3 px-3 text-right font-extrabold text-slate-900">
-                    ₹ {(Number(row.totalPurchases || row.creditLimit || 500000)).toLocaleString("en-IN")}
+                    ₹ {(Number(row.totalPurchases || row.totalPurchaseValue || 0)).toLocaleString("en-IN")}
                   </td>
 
                   {/* Status */}

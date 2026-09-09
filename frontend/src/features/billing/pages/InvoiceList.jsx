@@ -15,6 +15,7 @@ import InvoicePaymentHistoryModal from "../components/modals/InvoicePaymentHisto
 import InvoiceRefundModal from "../components/modals/InvoiceRefundModal.jsx";
 import InvoiceVoidModal from "../components/modals/InvoiceVoidModal.jsx";
 import InvoiceCancellationDetailsModal from "../components/modals/InvoiceCancellationDetailsModal.jsx";
+import BillingPrintInvoiceModal from "../components/modals/BillingPrintInvoiceModal.jsx";
 import TableSkeleton from "../../../components/ui/TableSkeleton.jsx";
 import { downloadRadiologyReportPdf } from "../../radiology/helpers/radiologyPdfHelper.js";
 
@@ -57,6 +58,7 @@ export default function InvoiceList() {
   const [refundInvoice, setRefundInvoice] = useState(null);
   const [voidInvoice, setVoidInvoice] = useState(null);
   const [cancelDetailsInvoice, setCancelDetailsInvoice] = useState(null);
+  const [printInvoice, setPrintInvoice] = useState(null);
 
   const handleCreateInvoiceSubmit = async (formData) => {
     setSubmittingInvoice(true);
@@ -73,11 +75,11 @@ export default function InvoiceList() {
   };
 
   const handleViewInvoice = (invoice) => {
-    handleOpenCollectPayment(invoice);
+    setPrintInvoice(invoice);
   };
 
   const handlePrintInvoice = (invoice) => {
-    downloadRadiologyReportPdf("invoice-table-container", `${invoice.invoiceNumber}_Invoice.pdf`);
+    setPrintInvoice(invoice);
   };
 
   const handleRefundSuccess = async (inv, refundData) => {
@@ -230,6 +232,13 @@ export default function InvoiceList() {
         isOpen={!!cancelDetailsInvoice}
         onClose={() => setCancelDetailsInvoice(null)}
         invoice={cancelDetailsInvoice}
+      />
+
+      {/* Print Billing Invoice Modal */}
+      <BillingPrintInvoiceModal
+        isOpen={!!printInvoice}
+        onClose={() => setPrintInvoice(null)}
+        invoice={printInvoice}
       />
     </div>
   );

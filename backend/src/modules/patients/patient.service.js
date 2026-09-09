@@ -76,90 +76,8 @@ export const createPatient = async (data, currentUser, requestMeta) => {
   }
 };
 
-export const ensureSamplePatients = async () => {
-  try {
-    // Sanitize any existing capitalized gender fields in DB to match enum
-    await Patient.updateMany({ gender: "Male" }, { $set: { gender: "male" } });
-    await Patient.updateMany({ gender: "Female" }, { $set: { gender: "female" } });
-    await Patient.updateMany({ gender: "Other" }, { $set: { gender: "other" } });
-
-    const count = await Patient.countDocuments();
-    if (count > 0) return;
-
-    const samplePatients = [
-      {
-        patientId: "PAT-1001",
-        name: "Rajesh Kumar",
-        dateOfBirth: "1985-04-12",
-        gender: "male",
-        phone: "+91 98765 11111",
-        email: "rajesh.kumar@example.com",
-        bloodGroup: "O+",
-        maritalStatus: "married",
-        status: "active",
-        emergencyContact: { name: "Sunita Kumar", relationship: "Spouse", phone: "+91 98765 11112" },
-      },
-      {
-        patientId: "PAT-1002",
-        name: "Priya Sharma",
-        dateOfBirth: "1992-08-25",
-        gender: "female",
-        phone: "+91 98765 22222",
-        email: "priya.sharma@example.com",
-        bloodGroup: "A+",
-        maritalStatus: "single",
-        status: "active",
-        emergencyContact: { name: "Ramesh Sharma", relationship: "Father", phone: "+91 98765 22223" },
-      },
-      {
-        patientId: "PAT-1003",
-        name: "Aarav Singh",
-        dateOfBirth: "2010-01-15",
-        gender: "male",
-        phone: "+91 98765 33333",
-        email: "aarav.singh@example.com",
-        bloodGroup: "B+",
-        maritalStatus: "single",
-        status: "active",
-        emergencyContact: { name: "Vikram Singh", relationship: "Father", phone: "+91 98765 33334" },
-      },
-      {
-        patientId: "PAT-1004",
-        name: "Ananya Gupta",
-        dateOfBirth: "1978-11-05",
-        gender: "female",
-        phone: "+91 98765 44444",
-        email: "ananya.gupta@example.com",
-        bloodGroup: "AB+",
-        maritalStatus: "married",
-        status: "active",
-        emergencyContact: { name: "Alok Gupta", relationship: "Spouse", phone: "+91 98765 44445" },
-      },
-      {
-        patientId: "PAT-1005",
-        name: "Suresh Verma",
-        dateOfBirth: "1965-06-30",
-        gender: "male",
-        phone: "+91 98765 55555",
-        email: "suresh.verma@example.com",
-        bloodGroup: "O-",
-        maritalStatus: "married",
-        status: "active",
-        emergencyContact: { name: "Kavita Verma", relationship: "Daughter", phone: "+91 98765 55556" },
-      },
-    ];
-
-    for (const p of samplePatients) {
-      await Patient.create(p);
-    }
-  } catch (err) {
-    console.error("Error seeding sample patients:", err);
-  }
-};
-
 // ---------------- GET ALL ----------------
 export const getAllPatients = async ({ page = 1, limit = 10, search, status, gender, bloodGroup }) => {
-  await ensureSamplePatients();
   const query = { isDeleted: { $ne: true } };
   if (status && status !== "all") query.status = status;
   if (gender && gender !== "all") query.gender = new RegExp(`^${gender}$`, "i");
@@ -325,7 +243,6 @@ export const deletePatient = async (id, currentUser, requestMeta) => {
 
 // ---------------- EXPORT CSV (Backend Controlled) ----------------
 export const exportPatientsService = async (params = {}) => {
-  await ensureSamplePatients();
   const { status, gender, bloodGroup, search } = params;
   const query = { isDeleted: { $ne: true } };
 

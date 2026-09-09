@@ -16,6 +16,7 @@ import {
   Printer,
   PlusCircle,
   XCircle,
+  MailCheck,
 } from "lucide-react";
 import { formatRupee, formatReportDate } from "../../billing/helpers/invoiceCalculations.js";
 import { CLAIM_STATUSES } from "../constants/insurance.constants.js";
@@ -115,7 +116,13 @@ export default function ClaimTable({
 
                     {/* Claim No */}
                     <td className="py-3 px-3 font-mono font-bold text-purple-700">
-                      {c.claimNumber}
+                      <div className="flex items-center gap-1.5">
+                        <span>{c.claimNumber}</span>
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-purple-50 text-purple-700 text-[10px] font-bold border border-purple-200" title="TPA Insurance Claim Email Notification Dispatched">
+                          <MailCheck className="w-3 h-3 text-purple-600" />
+                          <span>Sent</span>
+                        </span>
+                      </div>
                     </td>
 
                     {/* Patient (UHID) */}

@@ -70,13 +70,20 @@ const Sparkline = ({ color = "#2563EB", points = [10, 25, 18, 30, 22, 38, 32] })
 export default function Dashboard() {
   const navigate = useNavigate();
 
+  const getInitialFilters = () => {
+    const end = new Date();
+    const start = new Date();
+    start.setDate(start.getDate() - 30);
+    return {
+      startDate: start.toISOString().split("T")[0],
+      endDate: end.toISOString().split("T")[0],
+      departmentId: "",
+    };
+  };
+
   // Filter State
-  const [activeFilters, setActiveFilters] = useState({
-    startDate: "",
-    endDate: "",
-    departmentId: "",
-  });
-  const [dateLabel, setDateLabel] = useState("Last 7 Days");
+  const [activeFilters, setActiveFilters] = useState(getInitialFilters);
+  const [dateLabel, setDateLabel] = useState("Last 30 Days");
 
   // Popover Toggle States
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
@@ -153,8 +160,8 @@ export default function Dashboard() {
     setSelectedDept("");
     setCustomStart("");
     setCustomEnd("");
-    setDateLabel("Last 7 Days");
-    setActiveFilters({ startDate: "", endDate: "", departmentId: "" });
+    setDateLabel("Last 30 Days");
+    setActiveFilters(getInitialFilters());
     setIsFilterOpen(false);
     setIsCalendarOpen(false);
   };
@@ -162,16 +169,16 @@ export default function Dashboard() {
   if (loading) return <DashboardSkeleton />;
   if (error) return <ErrorState message={error} />;
 
-  // Dynamic MongoDB Stat Counters with Safe Fallbacks
-  const totalDoctors = stats?.hospital?.totalDoctors ?? 128;
-  const totalPatients = stats?.hospital?.totalPatients ?? 8542;
-  const todayAppointments = stats?.hospital?.todayAppointments ?? 152;
-  const currentlyAdmitted = stats?.hospital?.currentlyAdmitted ?? 243;
-  const monthlyRevenue = stats?.finance?.revenueThisMonth ?? 2485320;
-  const pendingUncollected = stats?.finance?.pendingUncollected ?? 321110;
-  const pendingClaims = stats?.insurance?.pendingClaims ?? 56;
-  const activeStaff = stats?.users?.active ?? 320;
-  const totalStaff = stats?.users?.total ?? 468;
+  // Dynamic MongoDB Stat Counters with 0 Defaults
+  const totalDoctors = stats?.hospital?.totalDoctors ?? 0;
+  const totalPatients = stats?.hospital?.totalPatients ?? 0;
+  const todayAppointments = stats?.hospital?.todayAppointments ?? 0;
+  const currentlyAdmitted = stats?.hospital?.currentlyAdmitted ?? 0;
+  const monthlyRevenue = stats?.finance?.revenueThisMonth ?? 0;
+  const pendingUncollected = stats?.finance?.pendingUncollected ?? 0;
+  const pendingClaims = stats?.insurance?.pendingClaims ?? 0;
+  const activeStaff = stats?.users?.active ?? 0;
+  const totalStaff = stats?.users?.total ?? 0;
 
   // 1. Stat Cards Data
   const statCards = [
@@ -481,16 +488,21 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5">
         {/* Card 1: Role-Wise Staff Distribution */}
         <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-2xs flex flex-col justify-between">
-          <h3 className="text-sm font-bold text-slate-900 tracking-tight mb-3">
-            Role-Wise Staff Distribution
-          </h3>
-          <div className="flex items-center justify-between gap-2 h-44">
-            <div className="w-1/2 h-full">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-sm font-bold text-slate-900 tracking-tight">
+              Role-Wise Staff Distribution
+            </h3>
+            <span className="text-[11px] font-semibold text-slate-400">
+              {totalStaff} Total
+            </span>
+          </div>
+          <div className="flex flex-col items-center justify-center gap-3">
+            <div className="w-full h-36 relative flex items-center justify-center">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
                     data={staffDistribution}
-                    innerRadius={38}
+                    innerRadius={40}
                     outerRadius={60}
                     paddingAngle={3}
                     dataKey="value"
@@ -501,21 +513,27 @@ export default function Dashboard() {
                   </Pie>
                 </PieChart>
               </ResponsiveContainer>
+              <div className="absolute text-center">
+                <p className="text-base font-extrabold text-slate-900">{totalStaff}</p>
+                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">
+                  Staff
+                </p>
+              </div>
             </div>
-            <div className="w-1/2 space-y-1.5 text-xs">
+            <div className="w-full max-h-24 overflow-y-auto grid grid-cols-2 gap-x-3 gap-y-1 text-xs pr-1 scrollbar-thin">
               {staffDistribution.map((item, idx) => (
-                <div key={idx} className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5 truncate">
+                <div key={idx} className="flex items-center justify-between text-[11px] py-0.5">
+                  <div className="flex items-center gap-1.5 min-w-0">
                     <span
-                      className="w-2.5 h-2.5 rounded-full shrink-0"
+                      className="w-2 h-2 rounded-full shrink-0"
                       style={{ backgroundColor: item.color }}
                     />
-                    <span className="text-slate-600 font-medium truncate">
-                      {item.name}
+                    <span className="text-slate-600 font-medium truncate title-case">
+                      {item.name.replace("_", " ")}
                     </span>
                   </div>
-                  <span className="font-semibold text-slate-900 ml-1">
-                    {item.value} ({item.percentage})
+                  <span className="font-bold text-slate-900 shrink-0 ml-1">
+                    {item.value}
                   </span>
                 </div>
               ))}
@@ -728,10 +746,11 @@ export default function Dashboard() {
             </h3>
             <button
               type="button"
-              onClick={() => handleDatePreset("Last 7 Days", 7)}
-              className="flex items-center gap-1 text-[11px] font-semibold text-slate-500 bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded-lg cursor-pointer"
+              onClick={() => setIsCalendarOpen(!isCalendarOpen)}
+              className="flex items-center gap-1 text-[11px] font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 px-2.5 py-1 rounded-lg transition cursor-pointer"
             >
-              Last 7 Days <ChevronDown className="w-3 h-3" />
+              <span>{dateLabel}</span>
+              <ChevronDown className="w-3 h-3 text-slate-400" />
             </button>
           </div>
           <div className="h-48 w-full mt-2">
@@ -772,18 +791,23 @@ export default function Dashboard() {
         </div>
 
         {/* Card 3: Appointment Status */}
-        <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-2xs flex flex-col justify-between">
-          <h3 className="text-sm font-bold text-slate-900 tracking-tight mb-3">
-            Appointment Status
-          </h3>
-          <div className="flex items-center justify-between gap-2 h-44">
-            <div className="w-1/2 h-full relative flex items-center justify-center">
+        <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-2xs flex flex-col justify-between h-full">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-sm font-bold text-slate-900 tracking-tight">
+              Appointment Status
+            </h3>
+            <span className="text-[11px] font-semibold text-slate-400">
+              {totalApptsCount} Total
+            </span>
+          </div>
+          <div className="my-auto py-2 flex flex-col items-center justify-center gap-3">
+            <div className="w-full h-36 relative flex items-center justify-center">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
                     data={appointmentStatus}
-                    innerRadius={36}
-                    outerRadius={56}
+                    innerRadius={40}
+                    outerRadius={60}
                     paddingAngle={3}
                     dataKey="value"
                   >
@@ -793,28 +817,33 @@ export default function Dashboard() {
                   </Pie>
                 </PieChart>
               </ResponsiveContainer>
-              <div className="absolute text-center">
-                <p className="text-sm font-extrabold text-slate-900">{todayAppointments}</p>
-                <p className="text-[10px] font-bold text-slate-400 uppercase">
+              <div className="absolute text-center pointer-events-none">
+                <p className="text-base font-extrabold text-slate-900 leading-none">{totalApptsCount}</p>
+                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">
                   Total
                 </p>
               </div>
             </div>
-            <div className="w-1/2 space-y-1.5 text-xs">
+            <div className="w-full grid grid-cols-1 gap-1.5 text-xs px-2">
               {appointmentStatus.map((item, idx) => (
-                <div key={idx} className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5 truncate">
+                <div key={idx} className="flex items-center justify-between text-[11px] bg-slate-50/70 border border-slate-100 px-2.5 py-1 rounded-lg">
+                  <div className="flex items-center gap-2 min-w-0">
                     <span
                       className="w-2.5 h-2.5 rounded-full shrink-0"
                       style={{ backgroundColor: item.color }}
                     />
-                    <span className="text-slate-600 font-medium truncate">
-                      {item.name}
+                    <span className="text-slate-700 font-semibold truncate uppercase">
+                      {item.name.replace("_", " ")}
                     </span>
                   </div>
-                  <span className="font-bold text-slate-900 ml-1">
-                    {item.value} ({item.percentage})
-                  </span>
+                  <div className="text-right shrink-0">
+                    <span className="font-extrabold text-slate-900">
+                      {item.value}
+                    </span>{" "}
+                    <span className="text-[10px] text-slate-400 font-medium">
+                      ({item.percentage})
+                    </span>
+                  </div>
                 </div>
               ))}
             </div>

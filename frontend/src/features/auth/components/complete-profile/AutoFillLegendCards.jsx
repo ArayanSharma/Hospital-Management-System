@@ -1,5 +1,5 @@
 import React from "react";
-import { Info, Lock, CheckCircle2, HelpCircle } from "lucide-react";
+import { Info, Lock, CheckCircle2, HelpCircle, MailCheck } from "lucide-react";
 
 export default function AutoFillLegendCards() {
   return (
@@ -26,6 +26,10 @@ export default function AutoFillLegendCards() {
             <span className="text-[10px] text-slate-400">Cannot be edited</span>
           </li>
         </ul>
+        <div className="mt-3 pt-2 border-t border-blue-100 dark:border-blue-900/40 flex items-center gap-1.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+          <MailCheck className="w-3.5 h-3.5" />
+          <span>Email alerts active via Resend / Nodemailer</span>
+        </div>
       </div>
 
       {/* Why auto-filled box */}

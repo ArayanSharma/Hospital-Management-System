@@ -6,6 +6,7 @@ export default function LabTestDetailsPanel({
   activeTab,
   setActiveTab,
   onCollectSample,
+  onPrintReport,
   submitting,
 }) {
   if (!test) {
@@ -65,7 +66,9 @@ export default function LabTestDetailsPanel({
         <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={() => window.print()}
+            onClick={() => {
+              if (onPrintReport) onPrintReport(test);
+            }}
             className="px-2.5 py-1 rounded-xl border border-slate-200 text-blue-600 hover:bg-blue-50 text-[11px] font-semibold transition cursor-pointer flex items-center gap-1.5"
           >
             <Printer className="w-3.5 h-3.5 text-blue-600" />
