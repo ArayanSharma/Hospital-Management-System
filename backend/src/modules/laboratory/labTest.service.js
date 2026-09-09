@@ -6,6 +6,7 @@ import { ErrorCodes } from "../../core/errors/errorCodes.js";
 import { createAuditLog } from "../audit-logs/audit-log.service.js";
 import { generateSequentialId } from "../../utils/generateId.js";
 import { getOrSetCache, invalidatePattern, delCache, acquireLock, releaseLock } from "../../utils/redisCache.js";
+import { dispatchAsyncEmail } from "../../utils/email/emailDispatcher.js";
 
 const TEST_PARAM_MAP = {
   "Lipid Profile": ["Total Cholesterol", "HDL Cholesterol", "LDL Cholesterol", "VLDL Cholesterol", "Triglycerides"],
@@ -15,61 +16,6 @@ const TEST_PARAM_MAP = {
   "Blood Sugar Fasting & PP": ["Fasting Plasma Glucose", "Post Prandial Glucose", "HbA1c"],
   "Kidney Function Test (KFT)": ["Serum Creatinine", "Blood Urea Nitrogen", "Uric Acid", "Serum Sodium", "Serum Potassium"],
   "Liver Function Test (LFT)": ["SGOT / AST", "SGPT / ALT", "Total Bilirubin", "Direct Bilirubin", "Serum Albumin"],
-};
-
-// Helper to seed initial sample lab tests if database has none
-const ensureSampleLabTests = async () => {
-  try {
-    const count = await LabTest.countDocuments();
-    if (count > 0) return;
-
-    const [patients, doctors] = await Promise.all([
-      Patient.find({ status: "active" }).limit(6),
-      Doctor.find({ status: "active" }).limit(6),
-    ]);
-
-    if (patients.length === 0 || doctors.length === 0) return;
-
-    const sampleOrders = [
-      {
-        orderId: "LT-2026-0001",
-        patientId: patients[0]._id,
-        doctorId: doctors[0]._id,
-        testName: "Complete Blood Count (CBC)",
-        sampleType: "Blood",
-        priority: "routine",
-        status: "pending",
-        clinicalNotes: "",
-        parameters: TEST_PARAM_MAP["Complete Blood Count (CBC)"],
-      },
-      {
-        orderId: "LT-2026-0002",
-        patientId: patients[1]?._id || patients[0]._id,
-        doctorId: doctors[1]?._id || doctors[0]._id,
-        testName: "Lipid Profile",
-        sampleType: "Blood",
-        priority: "urgent",
-        status: "sample-collected",
-        clinicalNotes: "",
-        parameters: TEST_PARAM_MAP["Lipid Profile"],
-      },
-      {
-        orderId: "LT-2026-0003",
-        patientId: patients[2]?._id || patients[0]._id,
-        doctorId: doctors[2]?._id || doctors[0]._id,
-        testName: "Thyroid Profile (T3, T4, TSH)",
-        sampleType: "Blood",
-        priority: "routine",
-        status: "completed",
-        clinicalNotes: "",
-        parameters: TEST_PARAM_MAP["Thyroid Profile (T3, T4, TSH)"],
-      },
-    ];
-
-    await LabTest.insertMany(sampleOrders);
-  } catch (err) {
-    console.error("Error seeding sample lab tests:", err);
-  }
 };
 
 // ---------------- CREATE (Doctor/Admin order karta hai) ----------------
@@ -164,8 +110,6 @@ export const getAllLabTests = async ({
   fromDate,
   toDate,
 }) => {
-  await ensureSampleLabTests();
-
   const query = {};
   if (patientId) query.patientId = patientId;
   if (status && status !== "all" && status !== "") query.status = status;
@@ -342,6 +286,28 @@ export const updateLabTestStatus = async (id, payload, currentUser, requestMeta)
       ipAddress: requestMeta?.ipAddress || "",
       userAgent: requestMeta?.userAgent || "",
     });
+  }
+
+  // Dispatch Lab Sample Collected Email when status becomes sample-collected
+  if (updateData.status === "sample-collected") {
+    try {
+      const patient = await Patient.findById(test.patientId);
+      if (patient?.email) {
+        dispatchAsyncEmail({
+          to: patient.email,
+          type: "lab_sample_collected",
+          data: {
+            orderId: test.orderId,
+            patientName: patient.name,
+            testName: test.testName,
+            sampleType: test.sampleType,
+            collectedAt: new Date().toLocaleString("en-GB"),
+          },
+        });
+      }
+    } catch (sampleErr) {
+      console.error("Lab sample collected email trigger error:", sampleErr);
+    }
   }
 
   return test;

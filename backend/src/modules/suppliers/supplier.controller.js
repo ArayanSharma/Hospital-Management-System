@@ -7,6 +7,7 @@ import {
   paySupplierOutstandingService,
   toggleSupplierStatusService,
   toggleSupplierArchiveService,
+  sendPurchaseOrderEmailService,
 } from "./supplier.service.js";
 import { successResponse } from "../../core/responses/apiResponse.js";
 import { asyncHandler } from "../../utils/asyncHandler.js";
@@ -57,4 +58,10 @@ export const toggleArchiveController = asyncHandler(async (req, res) => {
   const meta = getRequestMeta(req);
   const result = await toggleSupplierArchiveService(req.params.id, req.user, meta);
   return successResponse(res, 200, result.message, result.supplier);
+});
+
+export const sendPurchaseOrderController = asyncHandler(async (req, res) => {
+  const meta = getRequestMeta(req);
+  const result = await sendPurchaseOrderEmailService(req.params.id, req.body, req.user, meta);
+  return successResponse(res, 200, result.message, result);
 });

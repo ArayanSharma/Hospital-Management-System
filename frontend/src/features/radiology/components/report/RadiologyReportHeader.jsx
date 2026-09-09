@@ -7,6 +7,7 @@ export default function RadiologyReportHeader({
   setActiveTab,
   orderId,
   historyCount = 0,
+  onPrintReport,
 }) {
   return (
     <div className="border-b border-slate-200/90 px-5 py-3 flex flex-wrap items-center justify-between gap-3 bg-slate-50/50">
@@ -55,7 +56,10 @@ export default function RadiologyReportHeader({
       {/* Right Actions */}
       <div className="flex items-center gap-2">
         <button
-          onClick={() => downloadRadiologyReportPdf("radiology-report-preview-card", `${orderId}_Order.pdf`)}
+          onClick={() => {
+            if (onPrintReport) onPrintReport();
+            else window.print();
+          }}
           className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200/90 hover:border-slate-300 rounded-lg font-medium text-slate-700 hover:bg-slate-50 transition shadow-2xs cursor-pointer"
         >
           <Printer className="w-3.5 h-3.5 text-blue-600" />

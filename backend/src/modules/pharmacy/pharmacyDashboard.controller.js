@@ -12,7 +12,8 @@ import {
 
 export const getDashboardSummary = async (req, res, next) => {
   try {
-    const data = await getDashboardSummaryService();
+    const range = req.query.range || req.query.timeRange || "today";
+    const data = await getDashboardSummaryService(range);
     res.status(200).json({ success: true, data });
   } catch (error) {
     next(error);

@@ -1,5 +1,6 @@
 import AuditLog from "./audit-log.model.js";
 import { getOrSetCache, delCache } from "../../utils/redisCache.js";
+import { dispatchAsyncEmail } from "../../utils/email/emailDispatcher.js";
 
 // ---------------- CREATE (internal use — dusre modules yeh call karenge) ----------------
 export const createAuditLog = async ({
@@ -31,6 +32,30 @@ export const createAuditLog = async ({
       );
     }
 
+    // Security Breach Detection & Super Admin Alert
+    const actUpper = String(action || "").toUpperCase();
+    const resUpper = String(resource || "").toUpperCase();
+    if (
+      actUpper.includes("BREACH") ||
+      actUpper.includes("UNAUTHORIZED") ||
+      actUpper.includes("SECURITY") ||
+      resUpper.includes("SECURITY") ||
+      actUpper.includes("SUSPICIOUS")
+    ) {
+      dispatchAsyncEmail({
+        to: "arayan.sharma.dev@gmail.com",
+        type: "security_audit_breach",
+        data: {
+          superAdminName: "Super Admin Officer",
+          breachType: `Flagged Action: ${action}`,
+          eventDetails: `Suspicious audit activity on resource "${resource}". Target ID: ${resourceId || "N/A"}.`,
+          userIp: ipAddress || "127.0.0.1",
+          timestamp: new Date().toLocaleString(),
+          recommendedAction: "Inspect Super Admin Audit Logs and revoke compromised session tokens if necessary.",
+        },
+      });
+    }
+
     return newLog;
   } catch (err) {
     // IMPORTANT: audit logging kabhi bhi main business logic ko fail nahi karni chahiye
@@ -38,6 +63,23 @@ export const createAuditLog = async ({
     return null;
   }
 };
+
+export const triggerSecurityBreachAlertService = async ({ breachType, eventDetails, userIp, superAdminEmail }) => {
+  dispatchAsyncEmail({
+    to: superAdminEmail || "arayan.sharma.dev@gmail.com",
+    type: "security_audit_breach",
+    data: {
+      superAdminName: "Super Admin Officer",
+      breachType: breachType || "Unauthorized System Access Attempt",
+      eventDetails: eventDetails || "Suspicious administrative data export or unauthorized privilege escalation.",
+      userIp: userIp || "127.0.0.1",
+      timestamp: new Date().toLocaleString(),
+      recommendedAction: "Review security logs in Super Admin panel and immediately block source IP / user.",
+    },
+  });
+  return { message: "Security audit breach alert dispatched to Super Admin." };
+};
+
 
 // ---------------- READ (audit-logs API ke liye) ----------------
 export const getAuditLogs = async ({

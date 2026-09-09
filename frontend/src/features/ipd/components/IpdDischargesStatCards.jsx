@@ -2,11 +2,11 @@ import React from "react";
 import { Bed, MapPin, Calendar, Clock, Gift } from "lucide-react";
 
 export default function IpdDischargesStatCards({ stats }) {
-  const totalDischarges = stats?.totalAdmissions ? stats.dischargedThisMonth * 2 : 36;
-  const thisMonth = stats?.dischargedThisMonth ?? 18;
-  const yesterday = 2;
-  const averageStay = stats?.averageStay ?? "4.6";
-  const pendingSummaries = stats?.pendingDischarges ?? 3;
+  const totalDischarges = stats?.dischargedThisMonth ?? 0;
+  const thisMonth = stats?.dischargedThisMonth ?? 0;
+  const yesterday = stats?.todayDischarges ?? 0;
+  const averageStay = stats?.averageStay ?? "0.0";
+  const pendingSummaries = stats?.pendingDischarges ?? 0;
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">

@@ -8,6 +8,7 @@ import {
   payOutstandingController,
   toggleStatusController,
   toggleArchiveController,
+  sendPurchaseOrderController,
 } from "./supplier.controller.js";
 import { authenticate } from "../../middleware/auth.middleware.js";
 import { checkPermission } from "../../middleware/permission.middleware.js";
@@ -22,6 +23,7 @@ router.put("/:id", authenticate, checkPermission("supplier:update"), update);
 router.delete("/:id", authenticate, checkPermission("supplier:delete"), remove);
 
 router.post("/:id/pay-outstanding", authenticate, checkPermission("supplier:update"), payOutstandingController);
+router.post("/:id/send-po", authenticate, checkPermission("supplier:update"), sendPurchaseOrderController);
 router.patch("/:id/toggle-status", authenticate, checkPermission("supplier:update"), toggleStatusController);
 router.patch("/:id/toggle-archive", authenticate, checkPermission("supplier:update"), toggleArchiveController);
 

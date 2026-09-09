@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { X, CheckCircle2 } from "lucide-react";
+import { X, CheckCircle2, Printer } from "lucide-react";
 import { updateOPDVisitApi } from "../services/opdVisit.api.js";
 import OpdPatientSummaryHeader from "./OpdPatientSummaryHeader.jsx";
 import OpdVitalsTab from "./OpdVitalsTab.jsx";
@@ -7,36 +7,26 @@ import OpdClinicalNotesTab from "./OpdClinicalNotesTab.jsx";
 import OpdPrescriptionTab from "./OpdPrescriptionTab.jsx";
 import OpdBillsSummaryTab from "./OpdBillsSummaryTab.jsx";
 
-export default function OpdVisitDetailsPanel({ visit, onClose, onUpdateSuccess }) {
+export default function OpdVisitDetailsPanel({ visit, onClose, onUpdateSuccess, onPrintVisit }) {
   const [activeTab, setActiveTab] = useState("vitals");
   const [saving, setSaving] = useState(false);
 
-  // Editable Form State
-  const [symptoms, setSymptoms] = useState(visit?.symptoms || "High fever, Dry cough for 3 days, Body ache");
-  const [diagnosis, setDiagnosis] = useState(visit?.diagnosis || "Acute Viral Bronchitis");
-  const [notes, setNotes] = useState(visit?.notes || "Rest advised. Drink warm fluids. Take medicines as prescribed.");
+  // Editable Form State - Pure Real Data Only
+  const [symptoms, setSymptoms] = useState(visit?.symptoms || "");
+  const [diagnosis, setDiagnosis] = useState(visit?.diagnosis || "");
+  const [notes, setNotes] = useState(visit?.notes || "");
 
   const [vitals, setVitals] = useState({
-    temperature: visit?.vitals?.temperature ?? 98.6,
-    bloodPressure: visit?.vitals?.bloodPressure ?? "120/80",
-    pulse: visit?.vitals?.pulse ?? 78,
-    weight: visit?.vitals?.weight ?? 65.2,
-    height: visit?.vitals?.height ?? 165,
-    spO2: visit?.vitals?.spO2 ?? 98,
+    temperature: visit?.vitals?.temperature ?? "",
+    bloodPressure: visit?.vitals?.bloodPressure ?? "",
+    pulse: visit?.vitals?.pulse ?? "",
+    weight: visit?.vitals?.weight ?? "",
+    height: visit?.vitals?.height ?? "",
+    spO2: visit?.vitals?.spO2 ?? "",
   });
 
   const [prescription, setPrescription] = useState(
-    visit?.prescription && visit.prescription.length > 0
-      ? visit.prescription
-      : [
-          {
-            medicineName: "Paracetamol 650mg",
-            dosage: "1 tablet",
-            frequency: "Twice Daily",
-            duration: "5 Days",
-            instructions: "After meals",
-          },
-        ]
+    Array.isArray(visit?.prescription) ? visit.prescription : []
   );
 
   if (!visit) {
@@ -74,7 +64,7 @@ export default function OpdVisitDetailsPanel({ visit, onClose, onUpdateSuccess }
         <div className="flex items-center gap-2">
           <h3 className="text-sm font-bold text-slate-900">Visit Details</h3>
           <span className="font-mono text-xs font-semibold text-slate-400">
-            {visit.visitId || "VIS-20260826-001"}
+            {visit.visitId || visit._id || "VIS-N/A"}
           </span>
         </div>
 
@@ -93,6 +83,17 @@ export default function OpdVisitDetailsPanel({ visit, onClose, onUpdateSuccess }
             <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-pink-50 text-pink-600 border border-pink-200">
               Walk-in
             </span>
+          )}
+          {onPrintVisit && (
+            <button
+              type="button"
+              onClick={() => onPrintVisit(visit)}
+              className="flex items-center gap-1 text-xs text-blue-600 font-bold hover:text-blue-700 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200 transition cursor-pointer"
+              title="Print OPD Patient Summary"
+            >
+              <Printer className="w-3.5 h-3.5" />
+              <span>Print Summary</span>
+            </button>
           )}
           {onClose && (
             <button

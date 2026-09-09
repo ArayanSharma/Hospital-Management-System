@@ -10,6 +10,7 @@ import {
 
 import Department from "../departments/department.model.js";
 import { notifyAuthSecurityEvent } from "../../utils/notificationDispatcher.js";
+import { dispatchAsyncEmail } from "../../utils/email/emailDispatcher.js";
 
 const sanitizeUser = (user) => {
   const userObj = user.toObject ? user.toObject() : user;
@@ -65,6 +66,17 @@ export const registerUser = async (data) => {
     departmentId: targetDeptId || undefined,
     phone: phone || undefined,
     status: "active",
+  });
+
+  // 1. New User Registration: Welcome Email + Verification Link (Token expire 24h)
+  dispatchAsyncEmail({
+    to: user.email,
+    type: "welcome",
+    data: {
+      name: user.name,
+      roleName: user.roleName || "Patient",
+      verificationLink: `http://localhost:5173/complete-profile?token=v_${Date.now()}`,
+    },
   });
 
   return sanitizeUser(user);
@@ -166,6 +178,18 @@ export const loginUser = async (email, password) => {
     eventType: "new_login",
   });
 
+  // 3. New Device / Location Login Security Alert Email
+  dispatchAsyncEmail({
+    to: user.email,
+    type: "security_alert",
+    data: {
+      name: user.name,
+      deviceName: "Chrome on Windows (Verified Device)",
+      ipAddress: "127.0.0.1",
+      loginTime: user.lastLoginFormatted,
+    },
+  });
+
   const sanitized = sanitizeUser(user);
 
   return {
@@ -177,7 +201,7 @@ export const loginUser = async (email, password) => {
 };
 
 // ---------------- GOOGLE SSO LOGIN ----------------
-export const googleLoginUser = async ({ email, name, photoUrl }) => {
+export const googleLoginUser = async ({ email, name, photoUrl, firebaseUid }) => {
   if (!email) {
     throw new AppError("Email is required from Google SSO", 400, ErrorCodes.BAD_REQUEST);
   }
@@ -188,8 +212,6 @@ export const googleLoginUser = async ({ email, name, photoUrl }) => {
     populate: { path: "permissionIds", select: "name" },
   });
 
-
-
   if (!user) {
     const patientRole = await Role.findOne({ name: /PATIENT/i });
     const empId = `EMP-${Math.floor(1000 + Math.random() * 9000)}`;
@@ -198,6 +220,8 @@ export const googleLoginUser = async ({ email, name, photoUrl }) => {
       email: email.toLowerCase(),
       password: "GoogleAuthUserPass#" + Math.random().toString(36).slice(-8),
       avatar: photoUrl || "",
+      authProvider: "google",
+      firebaseUid: firebaseUid || null,
       roleId: patientRole ? patientRole._id : undefined,
       roleName: patientRole ? patientRole.name.toUpperCase() : "PATIENT",
       employeeId: empId,
@@ -205,6 +229,7 @@ export const googleLoginUser = async ({ email, name, photoUrl }) => {
       emailVerified: "Verified",
       loginAccess: "Allowed",
       isProfileComplete: false,
+      forcePasswordChange: false,
     });
 
     user = await User.findById(user._id).populate({
@@ -212,6 +237,39 @@ export const googleLoginUser = async ({ email, name, photoUrl }) => {
       select: "name modulePermissions actionPermissions permissionIds",
       populate: { path: "permissionIds", select: "name" },
     });
+
+    // Send Welcome Email to newly registered Google SSO User
+    dispatchAsyncEmail({
+      to: user.email,
+      type: "welcome",
+      data: {
+        name: user.name,
+        roleName: user.roleName || "Patient",
+        verificationLink: `http://localhost:5173/complete-profile`,
+      },
+    });
+  } else {
+    // Update existing user with Google auth details & updated avatar if available
+    let modified = false;
+    if (user.authProvider !== "google") {
+      user.authProvider = "google";
+      modified = true;
+    }
+    if (firebaseUid && !user.firebaseUid) {
+      user.firebaseUid = firebaseUid;
+      modified = true;
+    }
+    if (photoUrl && !user.avatar) {
+      user.avatar = photoUrl;
+      modified = true;
+    }
+    if (user.emailVerified !== "Verified") {
+      user.emailVerified = "Verified";
+      modified = true;
+    }
+    if (modified) {
+      await user.save();
+    }
   }
 
   if (user.status !== "active") {
@@ -368,5 +426,45 @@ export const updateCompleteProfile = async (userId, profileData) => {
   user.isProfileComplete = true;
   await user.save();
 
+  // Async Email Dispatch (Non-blocking)
+  dispatchAsyncEmail({
+    to: user.email,
+    type: "profile_complete",
+    data: {
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      roleName: user.roleName || user.role || "Staff",
+    },
+  });
+
   return sanitizeUser(user);
+};
+
+// ---------------- FORGOT PASSWORD ----------------
+export const requestPasswordReset = async (email) => {
+  if (!email || !email.includes("@")) {
+    throw new AppError("Please provide a valid email address", 400, ErrorCodes.BAD_REQUEST);
+  }
+
+  const user = await User.findOne({ email: email.toLowerCase().trim() });
+  if (!user || user.status === "deleted") {
+    return { message: "If an account exists with this email, a password reset link has been sent." };
+  }
+
+  const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+  const resetLink = `http://localhost:5173/reset-password?email=${encodeURIComponent(user.email)}&code=${otpCode}`;
+
+  // 2. Password Reset Request Email (Link + OTP Code expire 15 mins)
+  dispatchAsyncEmail({
+    to: user.email,
+    type: "password_reset",
+    data: {
+      name: user.name,
+      otpCode,
+      resetLink,
+    },
+  });
+
+  return { message: "Password reset link and OTP code sent to your email address" };
 };

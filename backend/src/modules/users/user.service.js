@@ -4,6 +4,7 @@ import AppError from "../../core/errors/AppError.js";
 import { ErrorCodes } from "../../core/errors/errorCodes.js";
 import { acquireLock, releaseLock, getOrSetCache, delCache, invalidatePattern } from "../../utils/redisCache.js";
 import { createAuditLog } from "../audit-logs/audit-log.service.js";
+import { dispatchAsyncEmail } from "../../utils/email/emailDispatcher.js";
 
 const sanitizeUser = (user) => {
   const userObj = user.toObject ? user.toObject() : user;
@@ -12,140 +13,8 @@ const sanitizeUser = (user) => {
   return userObj;
 };
 
-export const ensureSampleUsers = async () => {
-  try {
-    const count = await User.countDocuments();
-    if (count > 0) return;
-
-    let defaultRole = await Role.findOne();
-    const roleId = defaultRole ? defaultRole._id : null;
-
-    const sampleUsers = [
-      {
-        name: "Dr. Vikram Patel",
-        email: "vikram.patel@citycare.com",
-        username: "vikram.patel",
-        password: "Password123!",
-        roleId,
-        roleName: "DOCTOR",
-        department: "Cardiology",
-        designation: "Senior Cardiologist",
-        employeeId: "EMP-1001",
-        phone: "+91 98765 43210",
-        status: "active",
-        lastLoginFormatted: "31 May 2025 \n 10:30 AM",
-      },
-      {
-        name: "Nisha Sharma",
-        email: "nisha.sharma@citycare.com",
-        username: "nisha.sharma",
-        password: "Password123!",
-        roleId,
-        roleName: "NURSE",
-        department: "General Ward",
-        designation: "Head Nurse",
-        employeeId: "EMP-1002",
-        phone: "+91 98765 43211",
-        status: "active",
-        lastLoginFormatted: "31 May 2025 \n 09:15 AM",
-      },
-      {
-        name: "Ritika Verma",
-        email: "ritika.verma@citycare.com",
-        username: "ritika.verma",
-        password: "Password123!",
-        roleId,
-        roleName: "RECEPTIONIST",
-        department: "Front Office",
-        designation: "Front Desk Officer",
-        employeeId: "EMP-1003",
-        phone: "+91 98765 43212",
-        status: "active",
-        lastLoginFormatted: "31 May 2025 \n 08:45 AM",
-      },
-      {
-        name: "Amit Kumar",
-        email: "amit.kumar@citycare.com",
-        username: "amit.kumar",
-        password: "Password123!",
-        roleId,
-        roleName: "PHARMACIST",
-        department: "Pharmacy",
-        designation: "Senior Pharmacist",
-        employeeId: "EMP-1004",
-        phone: "+91 98765 43213",
-        status: "active",
-        lastLoginFormatted: "30 May 2025 \n 06:20 PM",
-      },
-      {
-        name: "Pooja Singh",
-        email: "pooja.singh@citycare.com",
-        username: "pooja.singh",
-        password: "Password123!",
-        roleId,
-        roleName: "ACCOUNTANT",
-        department: "Accounts",
-        designation: "Billing Accountant",
-        employeeId: "EMP-1005",
-        phone: "+91 98765 43214",
-        status: "inactive",
-        lastLoginFormatted: "28 May 2025 \n 04:10 PM",
-      },
-      {
-        name: "Rohit Mehta",
-        email: "rohit.mehta@citycare.com",
-        username: "rohit.mehta",
-        password: "Password123!",
-        roleId,
-        roleName: "ADMIN",
-        department: "Administration",
-        designation: "System Administrator",
-        employeeId: "EMP-1006",
-        phone: "+91 98765 43215",
-        status: "active",
-        lastLoginFormatted: "31 May 2025 \n 11:00 AM",
-      },
-      {
-        name: "Sunita Rani",
-        email: "sunita.rani@citycare.com",
-        username: "sunita.rani",
-        password: "Password123!",
-        roleId,
-        roleName: "NURSE",
-        department: "ICU",
-        designation: "ICU Specialist Nurse",
-        employeeId: "EMP-1007",
-        phone: "+91 98765 43216",
-        status: "suspended",
-        lastLoginFormatted: "15 May 2025 \n 02:30 PM",
-      },
-      {
-        name: "Arjun Sharma",
-        email: "arjun.sharma@citycare.com",
-        username: "arjun.sharma",
-        password: "Password123!",
-        roleId,
-        roleName: "DOCTOR",
-        department: "Orthopedics",
-        designation: "Orthopedic Surgeon",
-        employeeId: "EMP-1008",
-        phone: "+91 98765 43217",
-        status: "blocked",
-        lastLoginFormatted: "10 May 2025 \n 10:20 AM",
-      },
-    ];
-
-    for (const u of sampleUsers) {
-      await User.create(u);
-    }
-  } catch (err) {
-    console.error("Error seeding sample users:", err);
-  }
-};
-
 // ---------------- CREATE ----------------
 export const createUser = async (data, currentUser, requestMeta) => {
-  await ensureSampleUsers();
   const {
     name,
     email,
@@ -253,6 +122,17 @@ export const createUser = async (data, currentUser, requestMeta) => {
     await invalidatePattern("hms:user:*");
     await invalidatePattern("hms:route:user*");
 
+    // Dispatch Welcome Email + Profile Completion Link
+    dispatchAsyncEmail({
+      to: user.email,
+      type: "welcome",
+      data: {
+        name: user.name,
+        roleName: user.roleName || "User",
+        verificationLink: `http://localhost:5173/complete-profile?token=v_${Date.now()}`,
+      },
+    });
+
     if (currentUser) {
       await createAuditLog({
         userId: currentUser.id,
@@ -290,7 +170,6 @@ export const getUserById = async (id) => {
 
 // ---------------- GET ALL (paginated + dynamic filters & aggregations) ----------------
 export const getUsers = async ({ page = 1, limit = 10, status, role, department, search }) => {
-  await ensureSampleUsers();
   const query = { status: { $ne: "deleted" } };
 
   const sClean = status ? status.trim().toLowerCase() : "";
@@ -528,7 +407,6 @@ export const deleteUser = async (id, currentUser, requestMeta) => {
 
 // ---------------- EXPORT CSV (Backend Controlled) ----------------
 export const exportUsersService = async (params = {}) => {
-  await ensureSampleUsers();
   const { status, role, department, search } = params;
   const query = { status: { $ne: "deleted" } };
 

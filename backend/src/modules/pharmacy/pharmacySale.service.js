@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import PharmacySale from "./pharmacySale.model.js";
 import Medicine from "./medicine.model.js";
+import Patient from "../patients/patient.model.js";
 import InventoryItem from "../inventory/inventoryItem.model.js";
 import { stockOut } from "../inventory/inventoryItem.service.js";
 import AppError from "../../core/errors/AppError.js";
@@ -8,6 +9,7 @@ import { ErrorCodes } from "../../core/errors/errorCodes.js";
 import { createAuditLog } from "../audit-logs/audit-log.service.js";
 import { getOrSetCache, invalidatePattern, delCache, acquireLock, releaseLock } from "../../utils/redisCache.js";
 import { notifyPharmacySaleEvent } from "../../utils/notificationDispatcher.js";
+import { dispatchAsyncEmail } from "../../utils/email/emailDispatcher.js";
 
 export const createPharmacySale = async (data, currentUser, requestMeta) => {
   const {
@@ -31,6 +33,7 @@ export const createPharmacySale = async (data, currentUser, requestMeta) => {
     notes,
     paymentStatus,
     printInvoice,
+    email,
   } = data;
 
   const invNo = invoiceNo || `INV-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
@@ -94,6 +97,54 @@ export const createPharmacySale = async (data, currentUser, requestMeta) => {
         ipAddress: requestMeta?.ipAddress || "",
         userAgent: requestMeta?.userAgent || "",
       });
+    }
+
+    // Resolve customer email for Digital Purchase Receipt
+    let customerEmail = email;
+    if (!customerEmail && patientId) {
+      const patient = await Patient.findById(patientId).select("email").lean();
+      if (patient?.email) customerEmail = patient.email;
+    }
+    if (!customerEmail) customerEmail = "arayan.sharma.dev@gmail.com";
+
+    // 1. Dispatch Digital Purchase Receipt
+    dispatchAsyncEmail({
+      to: customerEmail,
+      type: "pharmacy_purchase_receipt",
+      data: {
+        customerName: customerName || "Valued Customer",
+        saleInvoiceNo: invNo,
+        items: saleItems,
+        totalAmount: saleRecord.grandTotal,
+        paymentMethod: paymentMethod || "Cash",
+        saleDate: new Date().toLocaleString(),
+      },
+    });
+
+    // 2. Deduct medicine stock & check low stock reorder thresholds
+    for (const item of saleItems) {
+      if (item.medicineId && mongoose.Types.ObjectId.isValid(item.medicineId)) {
+        const med = await Medicine.findById(item.medicineId);
+        if (med) {
+          med.availableStock = Math.max(0, (med.availableStock || 0) - item.quantity);
+          await med.save();
+
+          const threshold = med.reorderLevel !== undefined ? med.reorderLevel : 10;
+          if (med.availableStock <= threshold) {
+            dispatchAsyncEmail({
+              to: "arayan.sharma.dev@gmail.com",
+              type: "low_stock_alert",
+              data: {
+                medicineName: med.name,
+                currentStock: med.availableStock,
+                reorderLevel: threshold,
+                category: med.category || "Pharmaceuticals",
+                supplierName: med.supplier || "Central Pharma Vendor",
+              },
+            });
+          }
+        }
+      }
     }
 
     if (patientId) {

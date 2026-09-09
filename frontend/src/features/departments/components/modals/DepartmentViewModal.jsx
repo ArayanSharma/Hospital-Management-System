@@ -15,6 +15,7 @@ import {
   Baby,
   Ambulance,
   Wind,
+  Printer,
 } from "lucide-react";
 import Modal from "../../../../components/ui/Modal.jsx";
 
@@ -49,82 +50,133 @@ export default function DepartmentViewModal({ viewingDept, onClose, navigate }) 
   const meta = getDepartmentMeta(viewingDept.name, viewingDept.code);
   const DeptIcon = meta.icon;
   const hodDoctor = viewingDept.headDoctorId;
-  const hodName = hodDoctor?.userId?.name || hodDoctor?.name;
+  const rawHodName = hodDoctor?.userId?.name || hodDoctor?.name;
+  const hodName = rawHodName ? (rawHodName.startsWith("Dr.") ? rawHodName : `Dr. ${rawHodName}`) : null;
   const hodSpec = hodDoctor?.specialization || "Head Doctor";
+
+  const nameStr = viewingDept.name || "Unnamed Department";
+  const codeStr = viewingDept.code || "DEPT-N/A";
+  const descStr = viewingDept.description || "No description recorded for this department unit.";
+  const statusStr = (viewingDept.status || "Active").toUpperCase();
+
+  const handlePrint = () => {
+    window.print();
+  };
 
   return (
     <Modal
       isOpen={!!viewingDept}
       onClose={onClose}
       title="Department Overview & Clinical Management"
-      subtitle={`Detailed status & head doctor record for ${viewingDept.name}`}
-      maxWidth="max-w-2xl"
+      subtitle={`Detailed status & head doctor record for ${nameStr}`}
+      maxWidth="max-w-3xl"
     >
-      <div className="space-y-4 text-xs">
-        {/* Header Badge */}
-        <div className="flex items-center justify-between p-4 bg-slate-50 border border-slate-200/80 rounded-2xl">
-          <div className="flex items-center gap-3.5">
-            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 border ${meta.iconStyle}`}>
-              <DeptIcon className="w-6 h-6" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-base font-extrabold text-slate-900">{viewingDept.name}</h3>
-                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-blue-50 text-blue-700 border border-blue-200">
-                  {viewingDept.code}
-                </span>
+      <div className="space-y-4 text-xs text-slate-700 font-medium">
+        {/* Printable Action Bar (Hidden during print) */}
+        <div className="flex items-center justify-between p-3 bg-slate-50 border border-slate-200/80 rounded-2xl print:hidden">
+          <div className="flex items-center gap-2 text-slate-600 text-xs font-semibold">
+            <Printer className="w-4 h-4 text-blue-600" />
+            <span>Ready to print official Hospital Department Specification Sheet</span>
+          </div>
+          <button
+            type="button"
+            onClick={handlePrint}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-500/20 transition cursor-pointer flex items-center gap-2 active:scale-95"
+          >
+            <Printer className="w-4 h-4" />
+            <span>Print Department Sheet</span>
+          </button>
+        </div>
+
+        {/* PRINTABLE CONTAINER (Target for @media print CSS) */}
+        <div
+          id="printable-department-detail"
+          className="bg-white p-6 rounded-2xl border border-slate-200/80 text-slate-900 text-xs space-y-5 shadow-xs"
+        >
+          {/* Hospital Letterhead Header */}
+          <div className="flex items-start justify-between border-b-2 border-blue-600 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-xl bg-blue-600 text-white flex items-center justify-center font-black text-xl shadow-md">
+                <Building2 className="w-7 h-7" />
               </div>
-              <p className="text-slate-500 font-medium text-[11px] mt-0.5">
-                {viewingDept.status === "inactive" ? "Inactive Unit" : "Operational Hospital Department"}
-              </p>
+              <div>
+                <h1 className="text-lg font-extrabold text-blue-700 uppercase tracking-tight">
+                  CityCare Hospital &amp; Medical Research Center
+                </h1>
+                <p className="text-[11px] font-semibold text-slate-500">
+                  Hospital Administration &amp; Clinical Departments Directory
+                </p>
+                <p className="text-[10px] text-slate-400 font-mono">
+                  Department Code: {codeStr}
+                </p>
+              </div>
+            </div>
+
+            <div className="text-right">
+              <div className="inline-block px-3 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded-full font-black text-[11px] tracking-wider uppercase mb-1">
+                Department Master Data
+              </div>
+              <p className="text-[11px] font-bold text-slate-700 font-mono">{codeStr}</p>
+              <p className="text-[10px] text-slate-400 font-medium">{new Date().toLocaleDateString()}</p>
             </div>
           </div>
 
-          <span className={`px-3 py-1 rounded-full text-xs font-bold ${viewingDept.status === 'inactive' ? 'bg-slate-100 text-slate-500 border border-slate-200' : 'bg-emerald-50 text-emerald-600 border border-emerald-200'}`}>
-            {viewingDept.status === 'inactive' ? 'Inactive' : 'Active Department'}
-          </span>
-        </div>
-
-        {/* Head of Department Info */}
-        <div className="p-4 bg-white border border-slate-200/80 rounded-2xl shadow-2xs space-y-2">
-          <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">Head of Department (HOD)</span>
-          {hodName ? (
-            <div className="flex items-center gap-3 pt-1">
-              {hodDoctor.photoUrl ? (
-                <img
-                  src={hodDoctor.photoUrl}
-                  alt={hodName}
-                  className="w-10 h-10 rounded-full object-cover border border-slate-200 shrink-0"
-                />
-              ) : (
-                <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-700 font-bold text-xs flex items-center justify-center shrink-0">
-                  {hodName.replace("Dr. ", "").substring(0, 2).toUpperCase()}
-                </div>
-              )}
-              <div>
-                <p className="font-extrabold text-slate-900 text-sm">{hodName}</p>
-                <p className="text-[11px] font-semibold text-slate-500">{hodSpec}</p>
-              </div>
+          {/* Department Main Info */}
+          <div className="grid grid-cols-2 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200/70 text-xs">
+            <div className="space-y-1 border-r border-slate-200/80 pr-4">
+              <span className="text-[10px] font-extrabold text-blue-700 uppercase tracking-wider">Department Details</span>
+              <p className="font-extrabold text-slate-900 text-base pt-0.5">{nameStr}</p>
+              <p className="text-[11px] font-mono font-bold text-blue-600">Code: {codeStr}</p>
+              <p className="text-[11px] text-slate-500">Status: <span className="font-extrabold text-emerald-600">{statusStr}</span></p>
             </div>
-          ) : (
-            <p className="text-slate-400 font-semibold italic pt-1">No Head of Department currently assigned.</p>
-          )}
+
+            <div className="space-y-1 pl-2">
+              <span className="text-[10px] font-extrabold text-purple-700 uppercase tracking-wider">Head of Department (HOD)</span>
+              {hodName ? (
+                <div>
+                  <p className="font-extrabold text-slate-900 text-sm pt-0.5">{hodName}</p>
+                  <p className="text-[11px] font-semibold text-purple-700">{hodSpec}</p>
+                </div>
+              ) : (
+                <p className="text-slate-400 font-semibold italic pt-1">— Not Assigned —</p>
+              )}
+            </div>
+          </div>
+
+          {/* Description */}
+          <div>
+            <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-2 flex items-center gap-1.5 border-b border-slate-200 pb-1">
+              <FileText className="w-4 h-4 text-slate-600" />
+              <span>Department Overview &amp; Clinical Scope</span>
+            </h3>
+            <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl">
+              <p className="font-medium text-slate-800 leading-relaxed">{descStr}</p>
+            </div>
+          </div>
+
+          {/* Signatures & Footer */}
+          <div className="pt-8 flex items-end justify-between border-t border-slate-200">
+            <div className="space-y-0.5 text-[10px] text-slate-400">
+              <p className="font-semibold text-slate-600">Record Verification:</p>
+              <p>• Official department specification from CityCare Hospital EMR System.</p>
+              <p>• Record printed on {new Date().toLocaleString()}</p>
+            </div>
+
+            <div className="text-center space-y-1">
+              <div className="w-36 border-b-2 border-slate-400 pb-1 font-serif text-slate-600 italic">
+                {hodName || "Medical Superintendent"}
+              </div>
+              <p className="font-extrabold text-slate-900 text-[10px]">Head of Department / Administrator Signature</p>
+            </div>
+          </div>
         </div>
 
-        {/* Department Description */}
-        <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-2xl">
-          <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">Department Description</span>
-          <p className="font-semibold text-slate-800 leading-relaxed mt-1">
-            {viewingDept.description || "No description provided for this department unit."}
-          </p>
-        </div>
-
-        {/* Quick Nav Shortcuts */}
-        <div className="grid grid-cols-3 gap-3 pt-1">
+        {/* Quick Nav Shortcuts (Hidden during print) */}
+        <div className="grid grid-cols-3 gap-3 pt-1 print:hidden">
           <div
             onClick={() => {
               onClose();
-              navigate(`/doctors?departmentId=${viewingDept._id}`);
+              if (navigate) navigate(`/doctors?departmentId=${viewingDept._id}`);
             }}
             className="p-3 bg-slate-50/60 hover:bg-blue-50/50 border border-slate-200/80 hover:border-blue-200 rounded-xl transition cursor-pointer group"
           >
@@ -140,7 +192,7 @@ export default function DepartmentViewModal({ viewingDept, onClose, navigate }) 
           <div
             onClick={() => {
               onClose();
-              navigate(`/patients?departmentId=${viewingDept._id}`);
+              if (navigate) navigate(`/patients?departmentId=${viewingDept._id}`);
             }}
             className="p-3 bg-slate-50/60 hover:bg-indigo-50/50 border border-slate-200/80 hover:border-indigo-200 rounded-xl transition cursor-pointer group"
           >
@@ -156,7 +208,7 @@ export default function DepartmentViewModal({ viewingDept, onClose, navigate }) 
           <div
             onClick={() => {
               onClose();
-              navigate(`/appointments?departmentId=${viewingDept._id}`);
+              if (navigate) navigate(`/appointments?departmentId=${viewingDept._id}`);
             }}
             className="p-3 bg-slate-50/60 hover:bg-purple-50/50 border border-slate-200/80 hover:border-purple-200 rounded-xl transition cursor-pointer group"
           >
@@ -166,8 +218,19 @@ export default function DepartmentViewModal({ viewingDept, onClose, navigate }) 
             <h4 className="text-xs font-bold text-slate-900 group-hover:text-purple-600 transition-colors">
               Appointments
             </h4>
-            <p className="text-[11px] text-slate-400 leading-tight mt-0.5">Bookings & slots</p>
+            <p className="text-[11px] text-slate-400 leading-tight mt-0.5">Bookings &amp; slots</p>
           </div>
+        </div>
+
+        {/* Footer Close Button */}
+        <div className="pt-2 flex justify-end print:hidden">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition cursor-pointer"
+          >
+            Close
+          </button>
         </div>
       </div>
     </Modal>

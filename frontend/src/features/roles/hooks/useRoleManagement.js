@@ -129,8 +129,22 @@ export function useRoleManagement() {
     if (!activeMatrixRole || !activeMatrixRole._id) return;
     setSavingMatrix(true);
     try {
+      const fullModulePermissions = {
+        ...(activeMatrixRole.modulePermissions || {}),
+        ...matrixDraft,
+
+        // Map short keys to long keys for complete sync across components
+        "Patient Management": matrixDraft.Patient || activeMatrixRole.modulePermissions?.["Patient Management"] || "No Access",
+        "OPD Management": matrixDraft.Appointment || activeMatrixRole.modulePermissions?.["OPD Management"] || "No Access",
+        "IPD Management": matrixDraft.IPD || activeMatrixRole.modulePermissions?.["IPD Management"] || "No Access",
+        "Billing & Invoicing": matrixDraft.Billing || activeMatrixRole.modulePermissions?.["Billing & Invoicing"] || "No Access",
+        "User Management": matrixDraft.User || activeMatrixRole.modulePermissions?.["User Management"] || "No Access",
+        "Prescriptions": matrixDraft.Pharmacy || activeMatrixRole.modulePermissions?.["Prescriptions"] || "No Access",
+        "Reports": matrixDraft["Audit Log"] || activeMatrixRole.modulePermissions?.["Reports"] || "No Access",
+      };
+
       await updateRoleApi(activeMatrixRole._id, {
-        modulePermissions: matrixDraft,
+        modulePermissions: fullModulePermissions,
       });
       await fetchRoles();
       alert(`Permissions for role "${activeMatrixRole.name}" updated successfully!`);

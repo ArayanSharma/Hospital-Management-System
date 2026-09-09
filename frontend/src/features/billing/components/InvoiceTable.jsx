@@ -13,6 +13,7 @@ import {
   Ban,
   Plus,
   AlertCircle,
+  MailCheck,
 } from "lucide-react";
 import { formatRupee, getStatusBadgeConfig, formatReportDate } from "../helpers/invoiceCalculations.js";
 import CustomDropdown from "../../../components/ui/CustomDropdown.jsx";
@@ -112,13 +113,18 @@ export default function InvoiceTable({
                   >
                     {/* Invoice ID */}
                     <td className="py-3 px-3.5 whitespace-nowrap font-mono text-xs font-bold text-blue-600">
-                      <button
-                        type="button"
-                        onClick={() => onViewInvoice && onViewInvoice(row)}
-                        className="hover:underline cursor-pointer"
-                      >
-                        {row.invoiceNumber}
-                      </button>
+                      <div className="flex items-center gap-1.5" title="Medical invoice statement & GST payment receipt email dispatched to patient">
+                        <button
+                          type="button"
+                          onClick={() => onViewInvoice && onViewInvoice(row)}
+                          className="hover:underline cursor-pointer"
+                        >
+                          {row.invoiceNumber}
+                        </button>
+                        <span className="p-0.5 rounded bg-emerald-50 text-emerald-600 border border-emerald-200 shrink-0">
+                          <MailCheck className="w-2.5 h-2.5 stroke-[2.5]" />
+                        </span>
+                      </div>
                     </td>
 
                     {/* Patient Name + Phone */}

@@ -346,10 +346,75 @@ html.dark ::-webkit-scrollbar-thumb {
   background: #374151;
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background: #94A3B8;
-}
-
 html.dark ::-webkit-scrollbar-thumb:hover {
   background: #4B5563;
 }
+
+/* ==========================================================================
+   PRODUCTION PRINT ENGINE: Isolates OPD, Lab, Pharmacy, Supplier & Billing
+   ========================================================================== */
+@media print {
+  /* Hide all dashboard UI, navbars, sidebars, tables, buttons */
+  body * {
+    visibility: hidden !important;
+  }
+
+  /* Show ONLY the printable document containers */
+  #printable-opd-summary,
+  #printable-opd-summary *,
+  #printable-lab-report,
+  #printable-lab-report *,
+  #printable-pharmacy-receipt,
+  #printable-pharmacy-receipt *,
+  #printable-supplier-statement,
+  #printable-supplier-statement *,
+  #printable-billing-invoice,
+  #printable-billing-invoice *,
+  #printable-medicine-detail,
+  #printable-medicine-detail *,
+  #printable-inventory-detail,
+  #printable-inventory-detail *,
+  #printable-radiology-order,
+  #printable-radiology-order *,
+  #printable-lab-order,
+  #printable-lab-order *,
+  #printable-ipd-admission,
+  #printable-ipd-admission *,
+  #printable-appointment-slip,
+  #printable-appointment-slip *,
+  #printable-department-detail,
+  #printable-department-detail *,
+  #printable-doctor-detail,
+  #printable-doctor-detail *,
+  #printable-patient-detail,
+  #printable-patient-detail * {
+    visibility: visible !important;
+  }
+
+  #printable-opd-summary,
+  #printable-lab-report,
+  #printable-pharmacy-receipt,
+  #printable-supplier-statement,
+  #printable-billing-invoice,
+  #printable-medicine-detail,
+  #printable-inventory-detail,
+  #printable-radiology-order,
+  #printable-lab-order,
+  #printable-ipd-admission,
+  #printable-appointment-slip,
+  #printable-department-detail,
+  #printable-doctor-detail,
+  #printable-patient-detail {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 24px !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+}
+

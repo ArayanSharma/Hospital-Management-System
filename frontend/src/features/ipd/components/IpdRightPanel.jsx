@@ -33,13 +33,13 @@ export default function IpdRightPanel({
     fetchWardSummary();
   }, [refreshKey]);
 
-  const todayAdmissions = stats?.todayAdmissions ?? 6;
-  const todayDischarges = stats?.todayDischarges ?? 4;
-  const occupiedBeds = stats?.occupiedBeds ?? 78;
-  const totalBeds = stats?.totalBeds ?? 120;
-  const occPct = stats?.occupiedPercentage ?? "65.00%";
-  const averageStay = stats?.averageStay ?? "4.6";
-  const pendingDischarges = stats?.pendingDischarges ?? 3;
+  const todayAdmissions = stats?.todayAdmissions ?? 0;
+  const todayDischarges = stats?.todayDischarges ?? 0;
+  const occupiedBeds = stats?.occupiedBeds ?? 0;
+  const totalBeds = stats?.totalBeds ?? 0;
+  const occPct = stats?.occupiedPercentage ?? "0.00%";
+  const averageStay = stats?.averageStay ?? "0.0";
+  const pendingDischarges = stats?.pendingDischarges ?? 0;
 
   return (
     <div className="space-y-4">

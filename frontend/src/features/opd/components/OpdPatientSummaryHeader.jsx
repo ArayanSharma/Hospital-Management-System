@@ -2,30 +2,40 @@ import React from "react";
 import { User, Building2, Stethoscope } from "lucide-react";
 
 export default function OpdPatientSummaryHeader({ visit }) {
-  const patient = visit.patientId;
-  const patientName = patient?.name || "Sneha Verma";
-  const patientUhid = patient?.patientId || "PAT-000123";
+  if (!visit) return null;
 
-  const doctor = visit.doctorId;
-  const doctorName = doctor?.userId?.name || doctor?.name || "Dr. Rajesh Verma";
-  const deptName = doctor?.departmentId?.name || doctor?.specialization || "Cardiology";
+  const patient = visit.patientId || {};
+  const patientName = patient?.name || "Patient Record";
+  const patientUhid = patient?.patientId || patient?._id || "N/A";
+  const patientAge = patient?.age ? `${patient.age} Yrs` : "Age N/A";
+  const patientGender = patient?.gender || "Gender N/A";
+  const bloodGroup = patient?.bloodGroup || "Blood Group N/A";
+  const phone = patient?.phone || "N/A";
 
-  const visitDateFormatted = new Date(visit.visitDate).toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
-  const visitTimeFormatted = new Date(visit.visitDate).toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: true,
-  });
+  const doctor = visit.doctorId || {};
+  const doctorName = doctor?.userId?.name || doctor?.name || "Attending Physician";
+  const deptName = doctor?.departmentId?.name || visit.departmentId?.name || doctor?.specialization || "OPD Department";
+
+  const visitDateFormatted = visit.visitDate
+    ? new Date(visit.visitDate).toLocaleDateString("en-GB", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      })
+    : "";
+  const visitTimeFormatted = visit.visitDate
+    ? new Date(visit.visitDate).toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true,
+      })
+    : "";
 
   const sourceLabel = visit.appointmentId?.appointmentId
-    ? `Appointment ${visit.appointmentId.appointmentId}`
+    ? `Appointment #${visit.appointmentId.appointmentId}`
     : visit.visitType === "walk-in"
-    ? "Walk-in"
-    : "Direct Visit";
+    ? "Walk-in Visit"
+    : "Direct OPD Visit";
 
   return (
     <div className="space-y-2.5">
@@ -48,15 +58,15 @@ export default function OpdPatientSummaryHeader({ visit }) {
               {patientName} <span className="font-normal text-slate-400">({patientUhid})</span>
             </h4>
             <p className="text-[11px] text-slate-500 mt-0.5">
-              28 Years | {patient?.gender || "Female"} | {patient?.bloodGroup || "A+"}
+              {patientAge} | {patientGender} | {bloodGroup}
             </p>
-            <p className="text-[11px] text-slate-500">{patient?.phone || "+91 98765 43210"}</p>
+            <p className="text-[11px] text-slate-500">Phone: {phone}</p>
           </div>
         </div>
 
         <div className="text-right border-t sm:border-t-0 sm:border-l border-slate-200/80 pt-2 sm:pt-0 sm:pl-4 text-[11px]">
           <p className="text-slate-400">Visit Date &amp; Time</p>
-          <p className="font-bold text-slate-800">{visitDateFormatted}, {visitTimeFormatted}</p>
+          <p className="font-bold text-slate-800">{visitDateFormatted}{visitTimeFormatted && `, ${visitTimeFormatted}`}</p>
           <p className="text-slate-400 mt-1">Source</p>
           <p className="font-semibold text-blue-600">{sourceLabel}</p>
         </div>

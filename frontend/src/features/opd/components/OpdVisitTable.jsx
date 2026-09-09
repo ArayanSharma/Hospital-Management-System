@@ -15,6 +15,8 @@ import {
   UserCheck,
   Calendar,
   XCircle,
+  MailCheck,
+  Mail,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import TableSkeleton from "../../../components/ui/TableSkeleton.jsx";
@@ -26,6 +28,7 @@ function OpdActionMenu({
   onStatusChange,
   onAssignDoctor,
   onOpenCancelModal,
+  onPrintVisit,
 }) {
   const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
@@ -140,7 +143,11 @@ function OpdActionMenu({
                   type="button"
                   onClick={() => {
                     setIsOpen(false);
-                    window.print();
+                    if (onPrintVisit) {
+                      onPrintVisit(visit);
+                    } else if (onSelectVisit) {
+                      onSelectVisit(visit, "print");
+                    }
                   }}
                   className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-left font-semibold text-slate-700 hover:bg-slate-100 transition cursor-pointer"
                 >
@@ -302,6 +309,7 @@ export default function OpdVisitTable({
   onStatusChange,
   onAssignDoctor,
   onOpenCancelModal,
+  onPrintVisit,
 }) {
   return (
     <div>
@@ -367,7 +375,12 @@ export default function OpdVisitTable({
 
                     {/* Visit ID */}
                     <td className="py-3 px-3.5 font-mono font-medium text-slate-500 whitespace-nowrap">
-                      {visit.visitId || `VIS-${index + 1}`}
+                      <div className="flex items-center gap-1.5" title="Digital Prescription & Consultation summary dispatched to patient email">
+                        <span>{visit.visitId || `VIS-${index + 1}`}</span>
+                        <span className="p-0.5 rounded-md bg-emerald-50 text-emerald-600 border border-emerald-200 shrink-0">
+                          <MailCheck className="w-3 h-3 stroke-[2.5]" />
+                        </span>
+                      </div>
                     </td>
 
                     {/* Patient Cell */}
@@ -454,6 +467,7 @@ export default function OpdVisitTable({
                         onStatusChange={onStatusChange}
                         onAssignDoctor={onAssignDoctor}
                         onOpenCancelModal={onOpenCancelModal}
+                        onPrintVisit={onPrintVisit}
                       />
                     </td>
                   </tr>

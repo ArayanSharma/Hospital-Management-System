@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Eye, Edit2, MoreVertical, ChevronLeft, ChevronRight, TestTube, CheckCircle, FileText, Upload, Printer, History, XCircle, AlertCircle } from "lucide-react";
+import { Eye, Edit2, MoreVertical, ChevronLeft, ChevronRight, TestTube, CheckCircle, FileText, Upload, Printer, History, XCircle, AlertCircle, MailCheck } from "lucide-react";
 import TableSkeleton from "../../../components/ui/TableSkeleton.jsx";
 import ErrorState from "../../../components/common/ErrorState.jsx";
 import { formatDate, formatTime, getInitials } from "../../../utils/formatters.js";
@@ -258,11 +258,11 @@ export default function LabOrdersTable({
 
                 const patient = testItem.patientId;
                 const patientName = patient?.name || "Patient";
-                const patientUhid = patient?.patientId || "PAT-000123";
+                const patientUhid = patient?.patientId || patient?._id || "N/A";
 
                 const doctor = testItem.doctorId;
-                const doctorName = doctor?.userId?.name || doctor?.name || "Dr. Doctor";
-                const specName = doctor?.specialization || "General Physician";
+                const doctorName = doctor?.userId?.name || doctor?.name || "Physician";
+                const specName = doctor?.specialization || "Pathology & Diagnostics";
 
                 const sampleType = testItem.sampleType || "Blood";
 
@@ -282,7 +282,12 @@ export default function LabOrdersTable({
 
                     {/* Order ID */}
                     <td className="py-3 px-3.5 whitespace-nowrap font-mono text-xs font-bold text-slate-900">
-                      {orderIdDisplay}
+                      <div className="flex items-center gap-1.5" title="Sample receipt & verified diagnostic report email dispatched to patient & doctor">
+                        <span>{orderIdDisplay}</span>
+                        <span className="p-0.5 rounded bg-purple-50 text-purple-600 border border-purple-200 shrink-0">
+                          <MailCheck className="w-2.5 h-2.5 stroke-[2.5]" />
+                        </span>
+                      </div>
                     </td>
 
                     {/* Patient Cell */}

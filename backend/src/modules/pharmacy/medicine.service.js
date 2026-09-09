@@ -73,11 +73,33 @@ export const createMedicine = async (data, currentUser, requestMeta) => {
   }
 };
 
-export const getAllMedicines = async ({ search, category, manufacturer, status, page = 1, limit = 10, sortBy = "name", sortOrder = "asc" }) => {
+export const getAllMedicines = async ({ search, category, manufacturer, status, stockStatus, page = 1, limit = 10, sortBy = "name", sortOrder = "asc" }) => {
   const query = {};
-  if (status && status !== "all") {
-    query.status = status.toLowerCase() === "active" ? "active" : status.toLowerCase() === "inactive" ? "inactive" : status;
+
+  const effectiveStatus = stockStatus || status;
+  if (effectiveStatus && effectiveStatus !== "all") {
+    const s = String(effectiveStatus).toLowerCase();
+    if (s === "in_stock" || s === "instock") {
+      query.status = "active";
+      query.availableStock = { $gt: 20 };
+    } else if (s === "low_stock" || s === "lowstock") {
+      query.status = "active";
+      query.availableStock = { $lte: 20, $gt: 0 };
+    } else if (s === "out_of_stock" || s === "outofstock") {
+      query.$or = [{ status: "inactive" }, { availableStock: 0 }];
+    } else if (s === "expiring_soon" || s === "expiringsoon") {
+      query.expiryDate = { $exists: true };
+    } else if (s === "archived") {
+      query.status = { $in: ["archived", "Archived"] };
+    } else if (s === "active") {
+      query.status = "active";
+    } else if (s === "inactive") {
+      query.status = "inactive";
+    } else {
+      query.status = effectiveStatus;
+    }
   }
+
   if (category && category !== "all") query.category = category;
   if (manufacturer && manufacturer !== "all") query.manufacturer = manufacturer;
 

@@ -1,4 +1,5 @@
 import Role from "./role.model.js";
+import User from "../users/user.model.js";
 import AppError from "../../core/errors/AppError.js";
 import { getOrSetCache, invalidatePattern, delCache, acquireLock, releaseLock } from "../../utils/redisCache.js";
 
@@ -60,14 +61,18 @@ export const createRoleService = async (data) => {
 };
 
 export const getRoleByIdService = async (id) => {
-  const { data: role } = await getOrSetCache(
-    `hms:role:detail:${id}`,
-    () => Role.findById(id).populate("permissionIds"),
-    600
-  );
-
+  const role = await Role.findById(id).populate("permissionIds");
   if (!role) throw new AppError("Role not found", 404);
-  return role;
+  const roleObj = role.toObject();
+  const countByName = await User.countDocuments({ roleName: role.name });
+  const countById = await User.countDocuments({ roleId: role._id });
+  const userCount = Math.max(countByName, countById);
+
+  return {
+    ...roleObj,
+    userCount,
+    usersCount: userCount,
+  };
 };
 
 export const getAllRolesService = async (params = {}) => {
@@ -94,21 +99,51 @@ export const getAllRolesService = async (params = {}) => {
     ];
   }
 
-  const roles = await Role.find(query).sort({ isSystemRole: -1, createdAt: 1 });
-  const allRoles = await Role.find();
+  const [roles, allRoles, userCountsByName, userCountsById, totalUsers] = await Promise.all([
+    Role.find(query).sort({ isSystemRole: -1, createdAt: 1 }),
+    Role.find(),
+    User.aggregate([{ $group: { _id: "$roleName", count: { $sum: 1 } } }]),
+    User.aggregate([{ $group: { _id: "$roleId", count: { $sum: 1 } } }]),
+    User.countDocuments(),
+  ]);
+
+  const userCountMap = {};
+  userCountsByName.forEach((item) => {
+    if (item._id) {
+      userCountMap[String(item._id).toUpperCase()] = item.count;
+    }
+  });
+
+  userCountsById.forEach((item) => {
+    if (item._id) {
+      userCountMap[String(item._id)] = item.count;
+    }
+  });
+
+  const formattedRoles = roles.map((r) => {
+    const roleObj = r.toObject();
+    const countByName = userCountMap[roleObj.name.toUpperCase()] || 0;
+    const countById = userCountMap[String(roleObj._id)] || 0;
+    const userCount = Math.max(countByName, countById);
+
+    return {
+      ...roleObj,
+      userCount,
+      usersCount: userCount,
+    };
+  });
 
   const totalRoles = allRoles.length;
   const systemRolesCount = allRoles.filter((r) => r.roleType === "System" || r.isSystemRole).length;
   const customRolesCount = allRoles.filter((r) => r.roleType === "Custom" && !r.isSystemRole).length;
-  const totalUsersCount = allRoles.reduce((sum, r) => sum + (r.userCount || 0), 0);
 
   return {
-    roles,
+    roles: formattedRoles,
     overview: {
       totalRoles,
       systemRoles: systemRolesCount,
       customRoles: customRolesCount,
-      totalUsers: totalUsersCount,
+      totalUsers,
     },
   };
 };

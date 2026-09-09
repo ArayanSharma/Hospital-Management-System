@@ -1,45 +1,45 @@
 import { useSelector } from "react-redux";
 
-// Map navigation permission keys to Permission Matrix module names
+// Map navigation permission keys to Permission Matrix & Module Permissions names
 const PERM_TO_MODULE_MAP = {
-  "user:read": "User",
-  "role:read": "Role",
-  "permission:read": "Role",
-  "patient:read": "Patient",
-  "doctor:read": "Doctor",
-  "department:read": "Doctor",
-  "appointment:read": "Appointment",
-  "opd:read": "Appointment",
-  "admission:read": "IPD",
-  "lab_test:read": "Laboratory",
-  "radiology_test:read": "Radiology",
-  "medicine:read": "Pharmacy",
-  "invoice:read": "Billing",
-  "insurance:read": "Billing",
-  "report:read": "Audit Log",
-  "audit_log:read": "Audit Log",
-  "setting:read": "Role",
+  "user:read": ["User", "User Management"],
+  "role:read": ["Role", "User Management"],
+  "permission:read": ["Role", "User Management"],
+  "patient:read": ["Patient", "Patient Management"],
+  "doctor:read": ["Doctor", "User Management", "Patient Management"],
+  "department:read": ["Doctor", "Patient Management"],
+  "appointment:read": ["Appointment", "OPD Management"],
+  "opd:read": ["Appointment", "OPD Management"],
+  "admission:read": ["IPD", "IPD Management"],
+  "lab_test:read": ["Laboratory"],
+  "radiology_test:read": ["Radiology"],
+  "medicine:read": ["Pharmacy", "Inventory", "Prescriptions"],
+  "invoice:read": ["Billing", "Billing & Invoicing"],
+  "insurance:read": ["Billing", "Billing & Invoicing"],
+  "report:read": ["Reports", "Audit Log"],
+  "audit_log:read": ["Audit Log"],
+  "setting:read": ["Role", "User Management"],
 };
 
 // Map navigation permission keys to actionPermissions module names
 const PERM_TO_ACTION_MODULE_MAP = {
-  "user:read": "User Management",
-  "role:read": "User Management",
-  "permission:read": "User Management",
-  "patient:read": "Patient Management",
-  "doctor:read": "Patient Management",
-  "department:read": "Patient Management",
-  "appointment:read": "OPD Management",
-  "opd:read": "OPD Management",
-  "admission:read": "IPD Management",
-  "lab_test:read": "Laboratory",
-  "radiology_test:read": "Radiology",
-  "medicine:read": "Pharmacy",
-  "invoice:read": "Billing & Invoicing",
-  "insurance:read": "Billing & Invoicing",
-  "report:read": "Reports",
-  "audit_log:read": "Audit Log",
-  "setting:read": "User Management",
+  "user:read": ["User Management"],
+  "role:read": ["User Management"],
+  "permission:read": ["User Management"],
+  "patient:read": ["Patient Management"],
+  "doctor:read": ["User Management", "Patient Management"],
+  "department:read": ["Patient Management"],
+  "appointment:read": ["OPD Management"],
+  "opd:read": ["OPD Management"],
+  "admission:read": ["IPD Management"],
+  "lab_test:read": ["Laboratory"],
+  "radiology_test:read": ["Radiology"],
+  "medicine:read": ["Pharmacy", "Prescriptions"],
+  "invoice:read": ["Billing & Invoicing"],
+  "insurance:read": ["Billing & Invoicing"],
+  "report:read": ["Reports", "Audit Log"],
+  "audit_log:read": ["Audit Log"],
+  "setting:read": ["User Management"],
 };
 
 // Default fallback module permissions per role if roleId object is not yet populated
@@ -56,6 +56,7 @@ const DEFAULT_ROLE_MODULE_PERMISSIONS = {
     User: "Full Access",
     Role: "Full Access",
     "Audit Log": "Full Access",
+    IPD: "Full Access",
   },
   ADMIN: {
     Patient: "Full Access",
@@ -69,12 +70,13 @@ const DEFAULT_ROLE_MODULE_PERMISSIONS = {
     User: "Full Access",
     Role: "Full Access",
     "Audit Log": "Full Access",
+    IPD: "Full Access",
   },
   ACCOUNTANT: {
     Patient: "Read Only",
     Doctor: "No Access",
     Appointment: "Read Only",
-    Billing: "No Access",
+    Billing: "Full Access",
     Pharmacy: "No Access",
     Laboratory: "No Access",
     Radiology: "No Access",
@@ -82,19 +84,21 @@ const DEFAULT_ROLE_MODULE_PERMISSIONS = {
     User: "Read Only",
     Role: "No Access",
     "Audit Log": "No Access",
+    IPD: "No Access",
   },
   DOCTOR: {
-    Patient: "Read Only",
+    Patient: "Full Access",
     Doctor: "Full Access",
     Appointment: "Full Access",
     Billing: "Read Only",
-    Pharmacy: "No Access",
-    Laboratory: "Read Only",
-    Radiology: "Read Only",
+    Pharmacy: "Read Only",
+    Laboratory: "Full Access",
+    Radiology: "Full Access",
     Inventory: "No Access",
     User: "No Access",
     Role: "No Access",
     "Audit Log": "Read Only",
+    IPD: "Full Access",
   },
   NURSE: {
     Patient: "Full Access",
@@ -102,18 +106,19 @@ const DEFAULT_ROLE_MODULE_PERMISSIONS = {
     Appointment: "Full Access",
     Billing: "No Access",
     Pharmacy: "No Access",
-    Laboratory: "No Access",
-    Radiology: "No Access",
+    Laboratory: "Read Only",
+    Radiology: "Read Only",
     Inventory: "No Access",
     User: "No Access",
     Role: "No Access",
     "Audit Log": "No Access",
+    IPD: "Full Access",
   },
   RECEPTIONIST: {
     Patient: "Full Access",
     Doctor: "Read Only",
     Appointment: "Full Access",
-    Billing: "Read Only",
+    Billing: "Full Access",
     Pharmacy: "No Access",
     Laboratory: "No Access",
     Radiology: "No Access",
@@ -121,6 +126,7 @@ const DEFAULT_ROLE_MODULE_PERMISSIONS = {
     User: "No Access",
     Role: "No Access",
     "Audit Log": "No Access",
+    IPD: "Read Only",
   },
   PHARMACIST: {
     Patient: "Read Only",
@@ -134,6 +140,23 @@ const DEFAULT_ROLE_MODULE_PERMISSIONS = {
     User: "No Access",
     Role: "No Access",
     "Audit Log": "No Access",
+    IPD: "No Access",
+  },
+  PATIENT: {
+    Patient: "Limited Access",
+    "Patient Management": "Limited Access",
+    Appointment: "Full Access",
+    "OPD Management": "Full Access",
+    Pharmacy: "Read Only",
+    Prescriptions: "Read Only",
+    Laboratory: "Read Only",
+    Radiology: "Read Only",
+    Billing: "Read Only",
+    "Billing & Invoicing": "Read Only",
+    User: "No Access",
+    Role: "No Access",
+    "Audit Log": "No Access",
+    IPD: "No Access",
   },
 };
 
@@ -172,27 +195,23 @@ export const usePermission = () => {
     const actionPermissions =
       user?.roleId?.actionPermissions || user?.actionPermissions || user?.role?.actionPermissions || {};
 
-    const targetModuleName = PERM_TO_MODULE_MAP[permissionName];
+    const targetModuleNames = PERM_TO_MODULE_MAP[permissionName] || [];
 
-    // 3. Check modulePermissions
-    if (targetModuleName && modulePermissions[targetModuleName] !== undefined) {
-      const moduleAccess = modulePermissions[targetModuleName];
-      return moduleAccess !== "No Access";
-    }
-
-    // Alternate key check for Audit Log / AuditLog
-    if (permissionName === "audit_log:read" || permissionName === "report:read") {
-      const auditAccess = modulePermissions["Audit Log"] || modulePermissions["AuditLog"];
-      if (auditAccess !== undefined) {
-        return auditAccess !== "No Access";
+    // 3. Check modulePermissions for any candidate key
+    for (const modName of targetModuleNames) {
+      if (modulePermissions[modName] !== undefined) {
+        const moduleAccess = modulePermissions[modName];
+        if (moduleAccess !== "No Access") return true;
       }
     }
 
     // 4. Check actionPermissions object if present
-    const actionModName = PERM_TO_ACTION_MODULE_MAP[permissionName];
-    if (actionModName && actionPermissions[actionModName]) {
-      const actObj = actionPermissions[actionModName];
-      return !!(actObj.read || actObj.create || actObj.update || actObj.manage);
+    const actionModNames = PERM_TO_ACTION_MODULE_MAP[permissionName] || [];
+    for (const actName of actionModNames) {
+      if (actionPermissions[actName]) {
+        const actObj = actionPermissions[actName];
+        if (actObj.read || actObj.create || actObj.update || actObj.manage) return true;
+      }
     }
 
     // 5. Fallback check for permissionIds array if present
@@ -200,13 +219,28 @@ export const usePermission = () => {
       user?.roleId?.permissionIds || user?.permissions || user?.roleId?.permissions || [];
 
     if (Array.isArray(permissions) && permissions.length > 0) {
-      return permissions.some((p) => {
+      const match = permissions.some((p) => {
         if (typeof p === "string") return p === permissionName;
         return p?.name === permissionName;
       });
+      if (match) return true;
     }
 
-    // 6. Strict default for non-superadmin: hide if not explicitly granted
+    // If modulePermissions has keys for target module but all are "No Access", return false
+    if (targetModuleNames.some((modName) => modulePermissions[modName] === "No Access")) {
+      return false;
+    }
+
+    // 6. Default fallback check if default role rules grant access
+    const defaultRoleRule = DEFAULT_ROLE_MODULE_PERMISSIONS[roleName];
+    if (defaultRoleRule) {
+      for (const modName of targetModuleNames) {
+        if (defaultRoleRule[modName] && defaultRoleRule[modName] !== "No Access") {
+          return true;
+        }
+      }
+    }
+
     return false;
   };
 

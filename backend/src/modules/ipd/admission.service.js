@@ -10,6 +10,7 @@ import { createAuditLog } from "../audit-logs/audit-log.service.js";
 import { generateSequentialId } from "../../utils/generateId.js";
 import { notifyAdmissionEvent } from "../../utils/notificationDispatcher.js";
 import { getOrSetCache, invalidatePattern, delCache, acquireLock, releaseLock } from "../../utils/redisCache.js";
+import { dispatchAsyncEmail } from "../../utils/email/emailDispatcher.js";
 
 // ---------------- CREATE (Admission + Bed occupy — transaction with REDIS ATOMIC LOCK) ----------------
 export const createAdmission = async (data, currentUser, requestMeta) => {
@@ -132,6 +133,24 @@ export const createAdmission = async (data, currentUser, requestMeta) => {
         action: "admitted",
       });
 
+      // Dispatch IPD Admission Receipt Email to Patient / Family
+      if (patient?.email) {
+        const ward = wardId ? await Ward.findById(wardId) : null;
+        dispatchAsyncEmail({
+          to: patient.email,
+          type: "ipd_admission",
+          data: {
+            admissionId: admission[0].admissionId,
+            patientName: patient.name,
+            wardName: ward?.name || "IPD Ward",
+            bedNumber: bed.bedNumber,
+            doctorName: doctor?.name || "Attending Physician",
+            admissionDate: new Date(admission[0].admissionDate).toLocaleString("en-GB"),
+            dailyRent: admission[0].dailyRent,
+          },
+        });
+      }
+
       return admission[0];
     } catch (err) {
       await session.abortTransaction();
@@ -233,20 +252,20 @@ export const getAllAdmissions = async ({
   return {
     admissions: filteredAdmissions,
     stats: {
-      totalBeds: totalBeds || 120,
-      availableBeds: availableBeds || 32,
+      totalBeds: totalBeds || 0,
+      availableBeds: availableBeds || 0,
       availablePercentage: `${availPct}%`,
-      occupiedBeds: occupiedBeds || 78,
+      occupiedBeds: occupiedBeds || 0,
       occupiedPercentage: `${occPct}%`,
-      maintenanceBeds: maintenanceBeds || 10,
+      maintenanceBeds: maintenanceBeds || 0,
       maintenancePercentage: `${maintPct}%`,
-      currentlyAdmitted: currentlyAdmitted || 42,
-      todayAdmissions: todayAdmissions || 6,
-      todayDischarges: todayDischarges || 4,
-      totalAdmissions: total || 78,
-      dischargedThisMonth: dischargedThisMonth || 18,
-      averageStay: "4.6",
-      pendingDischarges: 3,
+      currentlyAdmitted: currentlyAdmitted || 0,
+      todayAdmissions: todayAdmissions || 0,
+      todayDischarges: todayDischarges || 0,
+      totalAdmissions: total || 0,
+      dischargedThisMonth: dischargedThisMonth || 0,
+      averageStay: "0.0",
+      pendingDischarges: 0,
     },
     pagination: {
       total,
@@ -382,12 +401,38 @@ export const dischargePatient = async (id, dischargeSummary, currentUser, reques
         userAgent: requestMeta.userAgent,
       });
 
-      if (doctor?.userId) {
-        await notifyAdmissionEvent({
-          userId: doctor.userId,
-          admissionId: admission._id,
-          action: "discharged",
-        });
+      // Dispatch Discharge Summary & Post-Care Guidelines Email
+      try {
+        const [patient, doctor] = await Promise.all([
+          Patient.findById(admission.patientId),
+          Doctor.findById(admission.doctorId).populate("userId", "name email"),
+        ]);
+
+        if (patient?.email) {
+          dispatchAsyncEmail({
+            to: patient.email,
+            type: "ipd_discharge",
+            data: {
+              admissionId: admission.admissionId,
+              patientName: patient.name,
+              doctorName: doctor?.userId?.name || doctor?.name || "Primary Physician",
+              admissionDate: new Date(admission.admissionDate).toLocaleDateString("en-GB"),
+              dischargeDate: new Date(admission.dischargeDate).toLocaleDateString("en-GB"),
+              dischargeSummary: admission.dischargeSummary,
+              postCareGuidelines: "• Continue prescribed medications as instructed.\n• Schedule follow-up consultation in 7 days.\n• Contact emergency hotline if severe pain or fever arises.",
+            },
+          });
+        }
+
+        if (doctor?.userId) {
+          await notifyAdmissionEvent({
+            userId: doctor.userId,
+            admissionId: admission._id,
+            action: "discharged",
+          });
+        }
+      } catch (dischargeErr) {
+        console.error("Discharge email/notification error:", dischargeErr);
       }
 
       return admission;
@@ -475,6 +520,38 @@ export const transferBed = async (id, { newWardId, newBedId, transferReason }, c
         });
       } catch (auditErr) {
         console.error("Audit log error on bed transfer:", auditErr);
+      }
+
+      // Dispatch Bed Transfer Email Notification to Doctor & Patient
+      try {
+        const [patient, doctor, oldBed, newBedObj, newWardObj] = await Promise.all([
+          Patient.findById(admission.patientId),
+          Doctor.findById(admission.doctorId).populate("userId", "name email"),
+          oldBedId ? Bed.findById(oldBedId).populate("wardId", "name") : null,
+          Bed.findById(newBedId),
+          newWardId ? Ward.findById(newWardId) : null,
+        ]);
+
+        const recipients = [];
+        if (patient?.email) recipients.push(patient.email);
+        if (doctor?.userId?.email) recipients.push(doctor.userId.email);
+
+        if (recipients.length > 0) {
+          dispatchAsyncEmail({
+            to: recipients,
+            type: "bed_transfer",
+            data: {
+              admissionId: admission.admissionId,
+              patientName: patient?.name || "Patient",
+              fromWardBed: `${oldBed?.wardId?.name || "Ward"} / Bed ${oldBed?.bedNumber || "N/A"}`,
+              toWardBed: `${newWardObj?.name || "Ward"} / Bed ${newBedObj?.bedNumber || "N/A"}`,
+              transferReason: transferReason || "Clinical requirement / Bed upgrade",
+              transferDate: new Date().toLocaleString("en-GB"),
+            },
+          });
+        }
+      } catch (transferEmailErr) {
+        console.error("Bed transfer email notification error:", transferEmailErr);
       }
 
       return admission;

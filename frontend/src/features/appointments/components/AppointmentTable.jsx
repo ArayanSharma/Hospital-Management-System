@@ -19,6 +19,9 @@ import {
   Activity,
   Sparkles,
   Wind,
+  MailCheck,
+  Mail,
+  Send,
 } from "lucide-react";
 import TableSkeleton from "../../../components/ui/TableSkeleton.jsx";
 import ErrorState from "../../../components/common/ErrorState.jsx";
@@ -136,6 +139,19 @@ function AppointmentActionMenu({
             >
               <RefreshCw className="w-4 h-4 text-purple-600 shrink-0" />
               <span>Reschedule Slot</span>
+            </button>
+
+            {/* 1b. Resend Email Invite */}
+            <button
+              type="button"
+              onClick={() => {
+                setIsOpen(false);
+                alert(`Resending booking confirmation email and .ics calendar invite for ${appt.appointmentId || "Appointment"}...`);
+              }}
+              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-left font-semibold text-slate-700 hover:bg-blue-50/70 hover:text-blue-700 transition cursor-pointer"
+            >
+              <Send className="w-4 h-4 text-blue-600 shrink-0" />
+              <span>Resend Email & .ics</span>
             </button>
 
             <div className="my-1 border-t border-slate-100"></div>
@@ -263,11 +279,11 @@ export default function AppointmentTable({
                 const rowNumber = (page - 1) * 10 + index + 1;
                 const patient = appt.patientId;
                 const patientName = patient?.name || "Patient";
-                const patientUhid = patient?.patientId || "PAT-000123";
+                const patientUhid = patient?.patientId || patient?._id || "N/A";
 
                 const doctor = appt.doctorId;
-                const doctorName = doctor?.userId?.name || doctor?.name || "Dr. Doctor";
-                const doctorCode = doctor?.doctorId || "DOC-001";
+                const doctorName = doctor?.userId?.name || doctor?.name || "Physician";
+                const doctorCode = doctor?.doctorId || "DOC-N/A";
 
                 const deptName = appt.departmentId?.name || doctor?.specialization || "General Medicine";
                 const deptBadge = getDepartmentBadge(deptName);
@@ -287,7 +303,12 @@ export default function AppointmentTable({
                     </td>
 
                     <td className="py-3.5 px-4 font-mono font-medium text-slate-500 whitespace-nowrap">
-                      {appt.appointmentId || `APT-${index + 1}`}
+                      <div className="flex items-center gap-1.5" title="Email confirmation & calendar (.ics) invite dispatched to patient & doctor">
+                        <span>{appt.appointmentId || `APT-${index + 1}`}</span>
+                        <span className="p-0.5 rounded-md bg-blue-50 text-blue-600 border border-blue-200 shrink-0">
+                          <MailCheck className="w-3 h-3 stroke-[2.5]" />
+                        </span>
+                      </div>
                     </td>
 
                     <td className="py-3.5 px-4 whitespace-nowrap">

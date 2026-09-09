@@ -3,6 +3,7 @@ import AppError from "../../core/errors/AppError.js";
 import { ErrorCodes } from "../../core/errors/errorCodes.js";
 import { createAuditLog } from "../audit-logs/audit-log.service.js";
 import { getOrSetCache, invalidatePattern, delCache, acquireLock, releaseLock } from "../../utils/redisCache.js";
+import { dispatchAsyncEmail } from "../../utils/email/emailDispatcher.js";
 
 // ---------------- CREATE SUPPLIER (With Redis Mutex Lock) ----------------
 export const createSupplier = async (data, currentUser, requestMeta) => {
@@ -322,4 +323,45 @@ export const toggleSupplierArchiveService = async (id, currentUser, requestMeta)
   }
 
   return { message: `Supplier ${supplier.status === "archived" ? "archived" : "restored"} successfully`, supplier };
+};
+
+export const sendPurchaseOrderEmailService = async (supplierId, poData, currentUser, requestMeta) => {
+  const supplier = await Supplier.findById(supplierId);
+  if (!supplier) {
+    throw new AppError("Supplier not found", 404, ErrorCodes.NOT_FOUND);
+  }
+
+  const recipientEmail = supplier.email || poData.email || "arayan.sharma.dev@gmail.com";
+  const poNumber = poData.poNumber || `PO-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+
+  const items = poData.items || [
+    { medicineName: poData.itemName || "Essential Pharmaceuticals Stock", quantity: poData.quantity || 100, unitPrice: poData.unitPrice || 50 }
+  ];
+  const totalOrderValue = poData.totalOrderValue || items.reduce((sum, i) => sum + (i.quantity * i.unitPrice), 0);
+
+  dispatchAsyncEmail({
+    to: recipientEmail,
+    type: "supplier_purchase_order",
+    data: {
+      supplierName: supplier.name,
+      poNumber,
+      items,
+      totalOrderValue,
+      expectedDeliveryDate: poData.expectedDeliveryDate || "Within 3 Business Days",
+    },
+  });
+
+  if (currentUser) {
+    await createAuditLog({
+      userId: currentUser.id,
+      action: "SEND_PO_EMAIL",
+      resource: "supplier",
+      resourceId: supplier._id,
+      newValue: { poNumber, recipientEmail, totalOrderValue },
+      ipAddress: requestMeta?.ipAddress || "",
+      userAgent: requestMeta?.userAgent || "",
+    });
+  }
+
+  return { message: `Purchase Order ${poNumber} email dispatched successfully to ${supplier.name} (${recipientEmail})`, poNumber };
 };

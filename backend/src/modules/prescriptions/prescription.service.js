@@ -8,6 +8,7 @@ import { ErrorCodes } from "../../core/errors/errorCodes.js";
 import { createAuditLog } from "../audit-logs/audit-log.service.js";
 import { getOrSetCache, invalidatePattern, delCache, acquireLock, releaseLock } from "../../utils/redisCache.js";
 import { notifyPrescriptionEvent } from "../../utils/notificationDispatcher.js";
+import { dispatchAsyncEmail } from "../../utils/email/emailDispatcher.js";
 
 // ---------------- Helper: visit valid hai ya nahi (polymorphic check) ----------------
 const validateVisit = async (visitId, visitType) => {
@@ -33,7 +34,7 @@ export const createPrescription = async (data, currentUser, requestMeta) => {
   try {
     const [patient, doctor] = await Promise.all([
       Patient.findById(patientId),
-      Doctor.findById(doctorId),
+      Doctor.findById(doctorId).populate("userId", "name"),
     ]);
 
     if (!patient || patient.status === "inactive") {
@@ -69,6 +70,20 @@ export const createPrescription = async (data, currentUser, requestMeta) => {
         userAgent: requestMeta?.userAgent || "",
       });
     }
+
+    // Dispatch Digital Prescription Email
+    const targetEmail = patient.email || "arayan.sharma.dev@gmail.com";
+    dispatchAsyncEmail({
+      to: targetEmail,
+      type: "prescription_issued",
+      data: {
+        patientName: patient.name,
+        doctorName: doctor.userId?.name || doctor.name || "Physician",
+        prescriptionNo: `RX-${prescription._id.toString().slice(-6).toUpperCase()}`,
+        medicines: prescription.medicines,
+        date: new Date().toLocaleString(),
+      },
+    });
 
     if (patient?.userId) {
       await notifyPrescriptionEvent({

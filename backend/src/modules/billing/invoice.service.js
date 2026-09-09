@@ -7,6 +7,7 @@ import { createAuditLog } from "../audit-logs/audit-log.service.js";
 import { generateSequentialId } from "../../utils/generateId.js";
 import { getOrSetCache, delCache, acquireLock, releaseLock } from "../../utils/redisCache.js";
 import { notifyInvoiceEvent } from "../../utils/notificationDispatcher.js";
+import { dispatchAsyncEmail } from "../../utils/email/emailDispatcher.js";
 
 // ---------------- GET NEXT INVOICE NUMBER ----------------
 export const getNextInvoiceNumberService = async () => {
@@ -227,6 +228,23 @@ export const createInvoice = async (data, currentUser, requestMeta) => {
       grandTotal: invoice.total,
       status: "generated",
     });
+
+    if (patient.email) {
+      dispatchAsyncEmail({
+        to: patient.email,
+        type: "invoice_generated",
+        data: {
+          invoiceNo: invoice.invoiceNumber,
+          patientName: patient.name,
+          items: invoice.items,
+          subtotal: invoice.subtotal,
+          taxAmount: invoice.gstAmount || invoice.tax,
+          grandTotal: invoice.total,
+          dueDate: invoice.dueDate ? new Date(invoice.dueDate).toLocaleDateString("en-GB") : new Date().toLocaleDateString("en-GB"),
+          paymentTerms: invoice.paymentTerms,
+        },
+      });
+    }
   }
 
   return invoice;

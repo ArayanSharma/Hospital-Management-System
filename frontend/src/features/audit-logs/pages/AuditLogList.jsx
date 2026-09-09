@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { History, Eye } from "lucide-react";
+import { History, Eye, MailCheck } from "lucide-react";
 import { getAuditLogsApi } from "../services/auditLog.api.js";
 import Table from "../../../components/ui/Table.jsx";
 import Pagination from "../../../components/ui/Pagination.jsx";
@@ -57,15 +57,29 @@ export default function AuditLogList() {
     {
       key: "action",
       label: "Action",
-      render: (row) => (
-        <span
-          className={`inline-block text-[11px] font-semibold tracking-wider px-2.5 py-0.5 rounded-full border ${
-            ACTION_BADGES[row.action] || "bg-gray-100 text-gray-700 border-gray-200"
-          }`}
-        >
-          {row.action}
-        </span>
-      ),
+      render: (row) => {
+        const isSecurityAlert =
+          row.action?.toUpperCase().includes("BREACH") ||
+          row.action?.toUpperCase().includes("SECURITY") ||
+          row.action?.toUpperCase().includes("DELETE");
+        return (
+          <div className="flex items-center gap-1.5">
+            <span
+              className={`inline-block text-[11px] font-semibold tracking-wider px-2.5 py-0.5 rounded-full border ${
+                ACTION_BADGES[row.action] || "bg-gray-100 text-gray-700 border-gray-200"
+              }`}
+            >
+              {row.action}
+            </span>
+            {isSecurityAlert && (
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-rose-50 text-rose-700 text-[10px] font-bold border border-rose-200" title="Security Audit Breach Email Sent to Super Admin">
+                <MailCheck className="w-3 h-3 text-rose-600" />
+                <span>Alert Sent</span>
+              </span>
+            )}
+          </div>
+        );
+      },
     },
     {
       key: "resource",

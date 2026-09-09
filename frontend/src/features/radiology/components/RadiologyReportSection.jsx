@@ -8,7 +8,7 @@ import RadiologyReportPreviewCard from "./report/RadiologyReportPreviewCard.jsx"
 import RadiologyStudyDetailsTab from "./report/RadiologyStudyDetailsTab.jsx";
 import RadiologyReportHistoryTab from "./report/RadiologyReportHistoryTab.jsx";
 
-export default function RadiologyReportSection({ selectedOrder, onReportUpdated }) {
+export default function RadiologyReportSection({ selectedOrder, onReportUpdated, onPrintReport }) {
   const {
     activeTab,
     setActiveTab,
@@ -48,6 +48,9 @@ export default function RadiologyReportSection({ selectedOrder, onReportUpdated 
         setActiveTab={setActiveTab}
         orderId={orderId}
         historyCount={historyLogs.length}
+        onPrintReport={() => {
+          if (onPrintReport) onPrintReport(selectedOrder);
+        }}
       />
 
       {/* 2. TAB VIEW 1: STUDY DETAILS */}

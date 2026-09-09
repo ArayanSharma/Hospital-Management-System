@@ -2,18 +2,18 @@ import React from "react";
 import { FlaskConical, Clock, Lock, CheckCircle2, XCircle } from "lucide-react";
 
 export default function LabStatCards({ stats }) {
-  const totalOrders = stats?.totalOrders ?? 126;
-  const pendingOrders = stats?.pendingOrders ?? 42;
-  const pendingPct = stats?.pendingPercentage ?? "33.33%";
+  const totalOrders = stats?.totalOrders ?? 0;
+  const pendingOrders = stats?.pendingOrders ?? 0;
+  const pendingPct = stats?.pendingPercentage ?? "0.00%";
 
-  const sampleCollectedOrders = stats?.sampleCollectedOrders ?? 36;
-  const sampleCollectedPct = stats?.sampleCollectedPercentage ?? "28.57%";
+  const sampleCollectedOrders = stats?.sampleCollectedOrders ?? 0;
+  const sampleCollectedPct = stats?.sampleCollectedPercentage ?? "0.00%";
 
-  const completedOrders = stats?.completedOrders ?? 40;
-  const completedPct = stats?.completedPercentage ?? "31.75%";
+  const completedOrders = stats?.completedOrders ?? 0;
+  const completedPct = stats?.completedPercentage ?? "0.00%";
 
-  const cancelledOrders = stats?.cancelledOrders ?? 8;
-  const cancelledPct = stats?.cancelledPercentage ?? "6.35%";
+  const cancelledOrders = stats?.cancelledOrders ?? 0;
+  const cancelledPct = stats?.cancelledPercentage ?? "0.00%";
 
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">

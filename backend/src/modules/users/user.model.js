@@ -168,6 +168,17 @@ const userSchema = new mongoose.Schema(
       default: "31 May 2025 \n 10:30 AM",
     },
 
+    authProvider: {
+      type: String,
+      enum: ["local", "google"],
+      default: "local",
+    },
+
+    firebaseUid: {
+      type: String,
+      default: null,
+    },
+
     refreshToken: {
       type: String,
       default: null,

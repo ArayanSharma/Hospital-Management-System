@@ -1,4 +1,5 @@
 import React from "react";
+import { MailCheck } from "lucide-react";
 
 export default function RecentPurchaseOrdersCard({
   items = [],
@@ -29,7 +30,13 @@ export default function RecentPurchaseOrdersCard({
             {items.map((row) => (
               <div key={row.id || row._id} className="p-2 rounded-xl hover:bg-slate-50 border border-transparent hover:border-slate-100 transition-colors">
                 <div className="flex items-center justify-between gap-2 mb-0.5">
-                  <span className="text-xs font-bold text-blue-600">{row.poNo}</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-bold text-blue-600">{row.poNo}</span>
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-blue-50 text-blue-700 text-[10px] font-bold border border-blue-200" title="Automatic PO Email Sent to Vendor">
+                      <MailCheck className="w-3 h-3 text-blue-600" />
+                      <span>PO Sent</span>
+                    </span>
+                  </div>
                   <span className={`px-2 py-0.5 text-[10px] font-bold rounded-md ${row.status === "Received" ? "bg-emerald-50 text-emerald-600" : "bg-amber-50 text-amber-600"}`}>
                     {row.status}
                   </span>

@@ -7,6 +7,7 @@ import {
   getCurrentUser,
   getRegistrationOptions,
   updateCompleteProfile,
+  requestPasswordReset,
 } from "./auth.service.js";
 import { successResponse } from "../../core/responses/apiResponse.js";
 import { asyncHandler } from "../../utils/asyncHandler.js";
@@ -62,8 +63,8 @@ export const login = asyncHandler(async (req, res) => {
 });
 
 export const googleLogin = asyncHandler(async (req, res) => {
-  const { idToken, email, name, photoUrl } = req.body;
-  const { user, accessToken, refreshToken } = await googleLoginUser({ email, name, photoUrl });
+  const { idToken, email, name, photoUrl, firebaseUid } = req.body;
+  const { user, accessToken, refreshToken } = await googleLoginUser({ email, name, photoUrl, firebaseUid });
 
   res.cookie("refreshToken", refreshToken, REFRESH_COOKIE_OPTIONS);
 
@@ -139,4 +140,9 @@ export const completeProfile = asyncHandler(async (req, res) => {
   });
 
   return successResponse(res, 200, "Profile completed successfully", updatedUser);
+});
+
+export const forgotPassword = asyncHandler(async (req, res) => {
+  const result = await requestPasswordReset(req.body.email);
+  return successResponse(res, 200, result.message);
 });

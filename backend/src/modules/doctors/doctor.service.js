@@ -9,6 +9,7 @@ import { ErrorCodes } from "../../core/errors/errorCodes.js";
 import { createAuditLog } from "../audit-logs/audit-log.service.js";
 import { generateSequentialId } from "../../utils/generateId.js";
 import { getOrSetCache, invalidatePattern, delCache } from "../../utils/redisCache.js";
+import { dispatchAsyncEmail } from "../../utils/email/emailDispatcher.js";
 
 // ---------------- CREATE (User + Doctor atomic creation with transaction safety) ----------------
 export const createDoctor = async (data, currentUser, requestMeta) => {
@@ -95,6 +96,19 @@ export const createDoctor = async (data, currentUser, requestMeta) => {
     // Invalidate Redis Doctor Caches
     await invalidatePattern("hms:doctor:*");
     await invalidatePattern("hms:route:docs*");
+
+    // Dispatch Doctor Onboarding Email
+    dispatchAsyncEmail({
+      to: normalizedEmail,
+      type: "doctor_onboarding",
+      data: {
+        doctorName: name?.trim(),
+        doctorId,
+        specialization: specialization?.trim() || "General Practice",
+        department: department.name,
+        consultationFee: Number(consultationFee || 500),
+      },
+    });
 
     await createAuditLog({
       userId: currentUser.id,

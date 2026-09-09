@@ -7,6 +7,7 @@ import { ErrorCodes } from "../../core/errors/errorCodes.js";
 import { createAuditLog } from "../audit-logs/audit-log.service.js";
 import { generateSequentialId } from "../../utils/generateId.js";
 import { getOrSetCache, invalidatePattern, delCache, acquireLock, releaseLock } from "../../utils/redisCache.js";
+import { dispatchAsyncEmail } from "../../utils/email/emailDispatcher.js";
 
 // ---------------- CREATE (With Redis Mutex Lock) ----------------
 export const createOPDVisit = async (data, currentUser, requestMeta) => {
@@ -243,6 +244,33 @@ export const updateOPDVisit = async (id, data, currentUser, requestMeta) => {
       ipAddress: requestMeta?.ipAddress || "",
       userAgent: requestMeta?.userAgent || "",
     });
+  }
+
+  // Dispatch OPD Prescription / Consultation Summary email if prescription/diagnosis updated or visit completed
+  if (prescription || diagnosis || status === "completed") {
+    try {
+      const [patient, doctor] = await Promise.all([
+        Patient.findById(visit.patientId),
+        Doctor.findById(visit.doctorId).populate("userId", "name email"),
+      ]);
+
+      if (patient?.email) {
+        dispatchAsyncEmail({
+          to: patient.email,
+          type: "opd_prescription",
+          data: {
+            visitId: visit.visitId,
+            patientName: patient.name,
+            doctorName: doctor?.userId?.name || doctor?.name || "Attending Physician",
+            diagnosis: visit.diagnosis || diagnosis || "OPD Consultation Completed",
+            vitals: visit.vitals,
+            medicines: visit.prescription?.medicines || [],
+          },
+        });
+      }
+    } catch (opdEmailErr) {
+      console.error("Failed to send OPD prescription email:", opdEmailErr);
+    }
   }
 
   return visit;
