@@ -11,18 +11,18 @@ This document covers system compliance logging, notification dispatching, analyt
 ## 1. Audit Logs Module (`src/modules/audit-logs`)
 
 ### Purpose & Business Motivation
-Provides immutable security compliance logging. Captures every record mutation (CREATE, UPDATE, DELETE) across all hospital modules, recording who performed the change (`userId`), target entity (`resource` & `resourceId`), previous snapshot (`oldValue`), updated snapshot (`newValue`), IP Address, and browser User-Agent.
+Provides immutable security compliance logging. Captures every record mutation (CREATE, UPDATE, DELETE, LOGIN, LOGOUT) across all hospital modules, recording who performed the change (`userId`), target entity (`resource` & `resourceId`), previous snapshot (`oldValue`), updated snapshot (`newValue`), IP Address, and browser User-Agent.
 
 ### Data Model (`audit-log.model.js`)
 - `userId`: Ref `User` (User who performed action).
 - `action`: Enum (`"CREATE"`, `"UPDATE"`, `"DELETE"`, `"LOGIN"`, `"LOGOUT"`).
-- `resource`: String (e.g. `"patient"`, `"appointment"`, `"invoice"`).
+- `resource`: String (e.g. `"patient"`, `"appointment"`, `"invoice"`, `"department"`).
 - `resourceId`: ObjectId / String of modified document.
 - `oldValue`: Object (Pre-mutation document state snapshot).
 - `newValue`: Object (Post-mutation document state snapshot).
 - `ipAddress`: String.
 - `userAgent`: String.
-- `createdAt`: Date (Indexed for date-range queries).
+- `createdAt`: Date (Indexed for fast date-range queries).
 
 ---
 
@@ -57,6 +57,7 @@ Delivers real-time in-app alerts and notifications to hospital staff members (e.
 
 1. **`createNotification(data)`**:
    - Creates in-app alert entry for target `userId`.
+   - Emits real-time event via Socket.IO target room `user:<userId>`.
 
 2. **`getUserNotifications(userId, isRead)`**:
    - Returns notifications list for logged-in user.
@@ -75,7 +76,7 @@ Generates aggregated analytical intelligence and hospital KPIs for hospital mana
 
 1. **`getRevenueReport({ startDate, endDate })`**:
    - Aggregates paid invoices and pharmacy sales across date range.
-   - Breakdown by payment methods (Cash vs Card vs UPI).
+   - Breakdown by payment methods (Cash vs Card vs UPI vs NetBanking).
 
 2. **`getPatientDemographicsReport()`**:
    - Aggregates total registered patients grouped by Gender, Age Brackets, and Blood Groups.

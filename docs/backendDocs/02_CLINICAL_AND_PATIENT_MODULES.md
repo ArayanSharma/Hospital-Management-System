@@ -1,13 +1,14 @@
 # 02. Clinical & Patient Modules Documentation
 
-This document covers all core patient care and hospital clinical operation modules:
+This document covers all core patient care, doctor management, department hierarchy, and hospital clinical operation modules:
 1. **Patients (`patients`)**
 2. **Doctors (`doctors`)**
-3. **OPD (`opd`)**
-4. **Appointments (`appointments`)**
-5. **IPD (`ipd`)**
-6. **Wards (`wards`)**
-7. **Beds (`beds`)**
+3. **Departments (`departments`)**
+4. **OPD (`opd`)**
+5. **Appointments (`appointments`)**
+6. **IPD (`ipd`)**
+7. **Wards (`wards`)**
+8. **Beds (`beds`)**
 
 ---
 
@@ -21,7 +22,7 @@ Stores master medical demographics and identification records for all hospital p
 - `name`: String (Required).
 - `dateOfBirth`: Date (Required).
 - `gender`: Enum (`"male"`, `"female"`, `"other"`).
-- `phone`: String (Required, indexed for fast phone search).
+- `phone`: String (Required, indexed for fast phone lookup).
 - `email`: String (Optional).
 - `address`: `{ street, city, state, zipCode }`.
 - `bloodGroup`: Enum (`"A+"`, `"A-"`, `"B+"`, `"B-"`, `"AB+"`, `"AB-"`, `"O+"`, `"O-"`).
@@ -71,7 +72,30 @@ Tracks physician profiles, specializations, medical license numbers, department 
 
 ---
 
-## 3. OPD Module (`src/modules/opd`)
+## 3. Departments Module (`src/modules/departments`)
+
+### Purpose & Business Motivation
+Defines medical departments (e.g. Cardiology, Neurology, Pediatrics, Orthopedics) and assigns Head of Department (HOD) physicians.
+
+### Data Model (`department.model.js`)
+- `name`: String (Unique, case-insensitive check).
+- `code`: String (Unique uppercase code, e.g. `CARD-01`).
+- `description`: String.
+- `headDoctorId`: Ref `Doctor` (Optional HOD appointment).
+- `status`: Enum (`"active"`, `"inactive"`).
+
+---
+
+### Key Functions & Business Logic (`department.service.js`)
+1. **`createDepartment(data, currentUser, requestMeta)`**: Validates unique name/code, assigns head doctor, invalidates Redis caches (`hms:dept:*`), and logs audit entry.
+2. **`getAllDepartments({ page, limit, status, search, hodDoctorId })`**: Returns paginated departments along with aggregated statistics (`totalDepartments`, `activeDepartments`, `hodPercentage`).
+3. **`updateDepartment(id, data, currentUser, requestMeta)`**:
+   - **Safety Guard**: Prevents deactivating a department if active doctors are currently assigned (`assignedDoctorCount > 0`).
+4. **`deleteDepartment(id, currentUser, requestMeta)`**: Soft-deactivates department after verifying zero active assigned doctors.
+
+---
+
+## 4. OPD Module (`src/modules/opd`)
 
 ### Purpose & Business Motivation
 Handles Outpatient Department (OPD) walk-in consultations, queue token generation, vital sign recording, and OPD consultation status (`waiting`, `in-consultation`, `completed`).
@@ -102,7 +126,7 @@ Handles Outpatient Department (OPD) walk-in consultations, queue token generatio
 
 ---
 
-## 4. Appointments Module (`src/modules/appointments`)
+## 5. Appointments Module (`src/modules/appointments`)
 
 ### Purpose & Business Motivation
 Manages pre-booked patient-doctor appointments, slot scheduling, collision detection, rescheduling, and cancellation with automated notifications.
@@ -123,18 +147,18 @@ Manages pre-booked patient-doctor appointments, slot scheduling, collision detec
 ### Key Functions & Business Logic (`appointment.service.js`)
 
 1. **`createAppointment(data)`**:
-   - **Collision Prevention Logic (`checkDoctorConflict`)**: Queries all active scheduled appointments for the target doctor on `appointmentDate`. Executes `isTimeOverlapping(startTime, endTime, existingStart, existingEnd)`. Throws `409 Conflict` if slot overlaps!
+   - **Collision Prevention Logic (`checkDoctorConflict`)**: Queries active scheduled appointments for target doctor on `appointmentDate`. Executes `checkTimeOverlap(startTime, endTime, existingStart, existingEnd)`. Throws `409 CONFLICT` if slot overlaps!
    - Sends automated in-app notification to doctor's user account (`createNotification`).
 
 2. **`updateAppointment(id, data)`**:
-   - Excludes self ID when re-checking slot overlap during rescheduling.
+   - Excludes current appointment ID when re-checking slot overlap during rescheduling.
 
 3. **`changeAppointmentStatus(id, status, cancelledReason)`**:
-   - Updates status. If `"cancelled"`, records `cancelledReason` and sends cancellation alert notification to the doctor.
+   - Updates status. If `"cancelled"`, records `cancelledReason` and notifies doctor.
 
 ---
 
-## 5. IPD Module (`src/modules/ipd`)
+## 6. IPD Module (`src/modules/ipd`)
 
 ### Purpose & Business Motivation
 Manages Inpatient Department (IPD) admissions, bed allocation, attending doctors, nursing care logs, and discharge summaries.
@@ -156,8 +180,8 @@ Manages Inpatient Department (IPD) admissions, bed allocation, attending doctors
 ### Key Functions & Business Logic (`admission.service.js`)
 
 1. **`admitPatient(data)`**:
-   - Checks if `bedId` is currently `"available"`.
-   - In a single transaction:
+   - Verifies `bedId` is currently `"available"`.
+   - In a single Mongoose transaction:
      - Creates `Admission` record with status `"admitted"`.
      - Updates `Bed` status to `"occupied"`.
 
@@ -165,11 +189,10 @@ Manages Inpatient Department (IPD) admissions, bed allocation, attending doctors
    - Updates admission record with `dischargeDate` and `dischargeSummary`.
    - Changes status to `"discharged"`.
    - Releases the bed: updates `Bed` status back to `"available"`.
-   - Generates final IPD billing entry.
 
 ---
 
-## 6. Wards Module (`src/modules/wards`)
+## 7. Wards Module (`src/modules/wards`)
 
 ### Purpose & Business Motivation
 Defines physical hospital wards (e.g. ICU, General Ward Male, Pediatric Ward, Deluxe Private Rooms).
@@ -183,7 +206,7 @@ Defines physical hospital wards (e.g. ICU, General Ward Male, Pediatric Ward, De
 
 ---
 
-## 7. Beds Module (`src/modules/beds`)
+## 8. Beds Module (`src/modules/beds`)
 
 ### Purpose & Business Motivation
 Tracks individual bed numbers inside wards and their live occupancy state.
@@ -202,6 +225,7 @@ Tracks individual bed numbers inside wards and their live occupancy state.
 | **Patients** | `POST` | `/api/v1/patients` | Register new patient |
 | **Patients** | `GET` | `/api/v1/patients` | Paginated search patients |
 | **Doctors** | `GET` | `/api/v1/doctors` | List doctors & availability |
+| **Departments** | `GET` | `/api/v1/departments` | List hospital departments & stats |
 | **OPD** | `POST` | `/api/v1/opd-visits` | Issue new OPD consultation token |
 | **Appointments** | `POST` | `/api/v1/appointments` | Book appointment (with overlap check) |
 | **Appointments** | `PATCH` | `/api/v1/appointments/:id/status` | Complete / Cancel appointment |

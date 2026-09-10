@@ -17,6 +17,7 @@ export default function RadiologyFiltersBar({
   setFromDate,
   toDate,
   setToDate,
+  onReset,
 }) {
   const statusOptions = [
     { value: "pending", label: "Pending" },
@@ -42,6 +43,18 @@ export default function RadiologyFiltersBar({
     { value: "emergency", label: "Emergency" },
   ];
 
+  const hasActiveFilters = Boolean(search || status || modality || priority || fromDate || toDate);
+
+  const handleReset = () => {
+    if (setSearch) setSearch("");
+    if (setStatus) setStatus("");
+    if (setModality) setModality("");
+    if (setPriority) setPriority("");
+    if (setFromDate) setFromDate("");
+    if (setToDate) setToDate("");
+    if (onReset) onReset();
+  };
+
   return (
     <div className="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-2xs flex flex-row items-end gap-2.5 overflow-x-auto text-xs">
       {/* Search Input Box */}
@@ -54,7 +67,7 @@ export default function RadiologyFiltersBar({
         />
       </div>
 
-      {/* Filter Controls: Status | Modality | Priority | Date Range | Filters Button */}
+      {/* Filter Controls: Status | Modality | Priority | Date Range | Reset Button */}
       <div className="shrink-0 flex items-end gap-2.5">
         <FilterSelect
           label="Status"
@@ -93,7 +106,11 @@ export default function RadiologyFiltersBar({
           setToDate={setToDate}
         />
 
-        <FilterButton />
+        <FilterButton
+          onReset={handleReset}
+          hasActiveFilters={hasActiveFilters}
+          label="Reset"
+        />
       </div>
     </div>
   );

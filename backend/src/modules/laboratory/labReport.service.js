@@ -7,6 +7,7 @@ import { notifyLabResultEvent } from "../../utils/notificationDispatcher.js";
 import Doctor from "../doctors/doctor.model.js";
 import { invalidatePattern, delCache } from "../../utils/redisCache.js";
 import { dispatchAsyncEmail } from "../../utils/email/emailDispatcher.js";
+import { createAuditLog } from "../audit-logs/audit-log.service.js";
 
 // ---------------- CREATE / UPSERT DRAFT REPORT ----------------
 export const createLabReport = async (data, currentUser, requestMeta) => {

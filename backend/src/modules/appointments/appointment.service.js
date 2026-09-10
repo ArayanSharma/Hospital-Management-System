@@ -6,7 +6,8 @@ import AppError from "../../core/errors/AppError.js";
 import { ErrorCodes } from "../../core/errors/errorCodes.js";
 import { createAuditLog } from "../audit-logs/audit-log.service.js";
 import { isTimeOverlapping } from "../../utils/timeOverlap.js";
-import { notifyAppointmentEvent } from "../../utils/notificationDispatcher.js";
+import { generateSequentialId } from "../../utils/generateId.js";
+import { acquireLock, releaseLock, delCache } from "../../utils/redisCache.js";
 import { dispatchAsyncEmail } from "../../utils/email/emailDispatcher.js";
 
 // Helper: conflict check
@@ -31,18 +32,35 @@ const checkDoctorConflict = async (doctorId, appointmentDate, startTime, endTime
 };
 
 // ---------------- CREATE WITH REDIS ATOMIC LOCK & EDGE CASE GUARDS ----------------
+const convertTo24Hour = (timeStr) => {
+  if (!timeStr) return "";
+  const trimmed = String(timeStr).trim();
+  if (/^([0-1][0-9]|2[0-3]):[0-5][0-9]$/.test(trimmed)) return trimmed;
+  const match = trimmed.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (match) {
+    let hours = parseInt(match[1], 10);
+    const minutes = match[2];
+    const period = match[3].toUpperCase();
+    if (period === "PM" && hours < 12) hours += 12;
+    if (period === "AM" && hours === 12) hours = 0;
+    return `${String(hours).padStart(2, "0")}:${minutes}`;
+  }
+  return trimmed;
+};
+
 export const createAppointment = async (data, currentUser, requestMeta) => {
   const {
     patientId,
     doctorId,
     departmentId,
     appointmentDate,
-    startTime,
-    endTime,
     reason,
     notes,
     sendNotification,
   } = data;
+
+  const startTime = convertTo24Hour(data.startTime);
+  const endTime = convertTo24Hour(data.endTime);
 
   // 1. Time Format Validation (HH:mm)
   const timeRegex = /^([0-1][0-9]|2[0-3]):[0-5][0-9]$/;
@@ -122,15 +140,17 @@ export const createAppointment = async (data, currentUser, requestMeta) => {
     // Invalidate cached stats
     await delCache("hms:stats:appointments");
 
-    await createAuditLog({
-      userId: currentUser.id,
-      action: "CREATE",
-      resource: "appointment",
-      resourceId: appointment._id,
-      newValue: appointment.toObject(),
-      ipAddress: requestMeta.ipAddress,
-      userAgent: requestMeta.userAgent,
-    });
+    if (currentUser) {
+      await createAuditLog({
+        userId: currentUser.id || currentUser._id,
+        action: "CREATE",
+        resource: "appointment",
+        resourceId: appointment._id,
+        newValue: appointment.toObject(),
+        ipAddress: requestMeta?.ipAddress || "",
+        userAgent: requestMeta?.userAgent || "",
+      });
+    }
 
     // Dispatch dual confirmation emails (Patient & Doctor) with .ics calendar invite
     const recipients = [];
@@ -296,8 +316,8 @@ export const updateAppointment = async (id, data, currentUser, requestMeta) => {
 
   if (appointmentDate || startTime || endTime) {
     const newDate = appointmentDate || appointment.appointmentDate;
-    const newStart = startTime || appointment.startTime;
-    const newEnd = endTime || appointment.endTime;
+    const newStart = startTime ? convertTo24Hour(startTime) : appointment.startTime;
+    const newEnd = endTime ? convertTo24Hour(endTime) : appointment.endTime;
 
     if (newStart >= newEnd) {
       throw new AppError("End time must be after start time", 400, ErrorCodes.VALIDATION_ERROR);
@@ -328,16 +348,18 @@ export const updateAppointment = async (id, data, currentUser, requestMeta) => {
 
   await delCache("hms:stats:appointments");
 
-  await createAuditLog({
-    userId: currentUser.id,
-    action: "UPDATE",
-    resource: "appointment",
-    resourceId: appointment._id,
-    oldValue,
-    newValue: appointment.toObject(),
-    ipAddress: requestMeta.ipAddress,
-    userAgent: requestMeta.userAgent,
-  });
+    if (currentUser) {
+      await createAuditLog({
+        userId: currentUser.id || currentUser._id,
+        action: "UPDATE",
+        resource: "appointment",
+        resourceId: appointment._id,
+        oldValue,
+        newValue: appointment.toObject(),
+        ipAddress: requestMeta?.ipAddress || "",
+        userAgent: requestMeta?.userAgent || "",
+      });
+    }
 
   // Dispatch Appointment Rescheduled Email if date/time slot was updated
   if (appointmentDate || startTime || endTime) {
@@ -411,16 +433,18 @@ export const changeAppointmentStatus = async (id, newStatus, cancelledReason, cu
 
   // Audit Log & Notification (Safe Execution)
   try {
-    await createAuditLog({
-      userId: currentUser.id,
-      action: "UPDATE",
-      resource: "appointment",
-      resourceId: appointment._id,
-      oldValue,
-      newValue: appointment.toObject(),
-      ipAddress: requestMeta.ipAddress,
-      userAgent: requestMeta.userAgent,
-    });
+    if (currentUser) {
+      await createAuditLog({
+        userId: currentUser.id || currentUser._id,
+        action: "UPDATE",
+        resource: "appointment",
+        resourceId: appointment._id,
+        oldValue,
+        newValue: appointment.toObject(),
+        ipAddress: requestMeta?.ipAddress || "",
+        userAgent: requestMeta?.userAgent || "",
+      });
+    }
   } catch (auditErr) {
     console.error("Audit log error on appointment status change:", auditErr);
   }

@@ -1,5 +1,6 @@
 import React from "react";
-import { Paperclip, UploadCloud } from "lucide-react";
+import { Paperclip } from "lucide-react";
+import FileUploadBox from "../../../../components/common/FileUploadBox.jsx";
 
 export default function OrderAdditionalSection({
   clinicalNotes,
@@ -36,14 +37,7 @@ export default function OrderAdditionalSection({
         {/* Attach Documents (Optional) */}
         <div>
           <label className="block text-[11px] font-bold text-slate-700 mb-1">Attach Documents (Optional)</label>
-          <div className="border-2 border-dashed border-slate-200 rounded-2xl p-4 text-center bg-slate-50/50 hover:bg-slate-50 transition cursor-pointer flex flex-col items-center justify-center space-y-1">
-            <UploadCloud className="w-6 h-6 text-blue-600" />
-            <p className="text-xs font-bold text-slate-800">
-              <span className="text-blue-600 underline">Click to upload</span> or drag and drop
-            </p>
-            <p className="text-[10px] text-slate-400 font-medium">PDF, JPG, PNG (Max. 5MB each)</p>
-            {fileName && <p className="text-[10px] font-bold text-emerald-600 truncate">{fileName}</p>}
-          </div>
+          <FileUploadBox fileName={fileName} setFileName={setFileName} compact={true} />
         </div>
       </div>
     </div>

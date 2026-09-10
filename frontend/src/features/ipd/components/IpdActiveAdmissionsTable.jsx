@@ -1,5 +1,5 @@
 import React from "react";
-import { Eye, MoreVertical, ChevronLeft, ChevronRight, Filter, UserCheck, MailCheck } from "lucide-react";
+import { Eye, MoreVertical, ChevronLeft, ChevronRight, RotateCcw, UserCheck, MailCheck } from "lucide-react";
 import SearchInput from "../../../components/common/SearchInput.jsx";
 import TableSkeleton from "../../../components/ui/TableSkeleton.jsx";
 import ErrorState from "../../../components/common/ErrorState.jsx";
@@ -27,6 +27,16 @@ export default function IpdActiveAdmissionsTable({
   onSelectAdmission,
   onDischarge,
 }) {
+  const hasActiveFilters = Boolean(wardId || doctorId || status || date || search);
+
+  const handleResetFilters = () => {
+    if (setWardId) setWardId("");
+    if (setDoctorId) setDoctorId("");
+    if (setStatus) setStatus("");
+    if (setDate) setDate("");
+    if (setSearch) setSearch("");
+    if (setPage) setPage(1);
+  };
   return (
     <div className="bg-white border border-slate-200/80 rounded-2xl shadow-2xs overflow-hidden p-4 space-y-3">
       {/* Title Header & Discharge Button */}
@@ -98,9 +108,16 @@ export default function IpdActiveAdmissionsTable({
 
         <button
           type="button"
-          className="p-1.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100 cursor-pointer"
+          onClick={handleResetFilters}
+          disabled={!hasActiveFilters}
+          title={hasActiveFilters ? "Reset all active filters" : "No active filters to reset"}
+          className={`p-2 rounded-xl border transition-all duration-200 cursor-pointer flex items-center justify-center ${
+            hasActiveFilters
+              ? "border-blue-300 bg-blue-50 text-blue-600 hover:bg-blue-100 hover:border-blue-400 active:scale-95 shadow-2xs"
+              : "border-slate-200 bg-slate-50 text-slate-400 opacity-60 cursor-not-allowed"
+          }`}
         >
-          <Filter className="w-3.5 h-3.5" />
+          <RotateCcw className={`w-3.5 h-3.5 ${hasActiveFilters ? "stroke-[2.5]" : ""}`} />
         </button>
       </div>
 

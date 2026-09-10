@@ -17,14 +17,14 @@ import PatientAutocomplete from "../../../components/common/PatientAutocomplete.
 import api from "../../../lib/axios.js";
 
 const DEFAULT_TIME_SLOTS = [
-  { start: "09:00 AM", end: "09:30 AM" },
-  { start: "09:30 AM", end: "10:00 AM" },
-  { start: "10:00 AM", end: "10:30 AM" },
-  { start: "10:30 AM", end: "11:00 AM" },
-  { start: "11:00 AM", end: "11:30 AM" },
-  { start: "11:30 AM", end: "12:00 PM" },
-  { start: "02:00 PM", end: "02:30 PM" },
-  { start: "02:30 PM", end: "03:00 PM" },
+  { label: "09:00 AM - 09:30 AM", start: "09:00", end: "09:30" },
+  { label: "09:30 AM - 10:00 AM", start: "09:30", end: "10:00" },
+  { label: "10:00 AM - 10:30 AM", start: "10:00", end: "10:30" },
+  { label: "10:30 AM - 11:00 AM", start: "10:30", end: "11:00" },
+  { label: "11:00 AM - 11:30 AM", start: "11:00", end: "11:30" },
+  { label: "11:30 AM - 12:00 PM", start: "11:30", end: "12:00" },
+  { label: "02:00 PM - 02:30 PM", start: "14:00", end: "14:30" },
+  { label: "02:30 PM - 03:00 PM", start: "14:30", end: "15:00" },
 ];
 
 export default function AppointmentForm({ onSubmit, onCancel, submitting, conflictError }) {
@@ -87,7 +87,7 @@ export default function AppointmentForm({ onSubmit, onCancel, submitting, confli
   };
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 max-h-[80vh] overflow-y-auto pr-1">
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
       {/* 1. Patient Information Box */}
       <div className="bg-blue-50/30 border border-blue-100 rounded-2xl p-4 space-y-3">
         <div className="flex items-center gap-2 text-xs font-bold text-blue-700 uppercase tracking-wider mb-1">
@@ -273,7 +273,7 @@ export default function AppointmentForm({ onSubmit, onCancel, submitting, confli
                         : "bg-white text-slate-700 border-slate-200 hover:border-blue-300 hover:bg-blue-50/50"
                     }`}
                   >
-                    {slot.start} - {slot.end}
+                    {slot.label}
                   </button>
                 );
               })}

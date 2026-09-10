@@ -37,23 +37,36 @@ export const createPatient = async (data, currentUser, requestMeta) => {
       }
     }
 
-    const patientId = await generateSequentialId(Patient, "PAT", "patientId");
+    let patient;
+    let attempts = 3;
+    while (attempts > 0) {
+      try {
+        const patientId = await generateSequentialId(Patient, "PAT", "patientId");
 
-    const patient = await Patient.create({
-      patientId,
-      name,
-      dateOfBirth,
-      gender: gender ? gender.toLowerCase() : "other",
-      phone: sanitizedPhone,
-      email: email ? email.toLowerCase() : null,
-      address,
-      bloodGroup,
-      maritalStatus: maritalStatus ? maritalStatus.toLowerCase() : "single",
-      occupation,
-      nationality,
-      notes,
-      emergencyContact,
-    });
+        patient = await Patient.create({
+          patientId,
+          name,
+          dateOfBirth,
+          gender: gender ? gender.toLowerCase() : "other",
+          phone: sanitizedPhone,
+          email: email ? email.toLowerCase() : null,
+          address,
+          bloodGroup,
+          maritalStatus: maritalStatus ? maritalStatus.toLowerCase() : "single",
+          occupation,
+          nationality,
+          notes,
+          emergencyContact,
+        });
+        break;
+      } catch (err) {
+        if (err.code === 11000 && attempts > 1) {
+          attempts--;
+          continue;
+        }
+        throw err;
+      }
+    }
 
     await invalidatePattern("hms:patient:*");
     await invalidatePattern("hms:route:patient*");

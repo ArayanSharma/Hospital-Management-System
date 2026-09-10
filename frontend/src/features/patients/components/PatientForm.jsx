@@ -72,7 +72,7 @@ export default function PatientForm({ defaultValues, onSubmit, onCancel, submitt
   };
 
   return (
-    <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-4 max-h-[80vh] overflow-y-auto pr-1">
+    <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-4">
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
         {/* LEFT COLUMN: Personal Information (Span 7) */}
         <div className="lg:col-span-7 bg-blue-50/30 border border-blue-100 rounded-2xl p-4 space-y-3">

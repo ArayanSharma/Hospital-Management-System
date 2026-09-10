@@ -5,6 +5,7 @@ import { ErrorCodes } from "../../core/errors/errorCodes.js";
 import { notifyRadiologyEvent } from "../../utils/notificationDispatcher.js";
 import Doctor from "../doctors/doctor.model.js";
 import { invalidatePattern, delCache, getOrSetCache } from "../../utils/redisCache.js";
+import { createAuditLog } from "../audit-logs/audit-log.service.js";
 
 export const createRadiologyReport = async (data, currentUser, requestMeta) => {
   const {

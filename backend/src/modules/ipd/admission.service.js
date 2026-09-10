@@ -116,15 +116,17 @@ export const createAdmission = async (data, currentUser, requestMeta) => {
       await invalidatePattern("hms:ipd:*");
       await invalidatePattern("hms:route:ipd*");
 
-      await createAuditLog({
-        userId: currentUser.id,
-        action: "CREATE",
-        resource: "admission",
-        resourceId: admission[0]._id,
-        newValue: admission[0].toObject(),
-        ipAddress: requestMeta.ipAddress,
-        userAgent: requestMeta.userAgent,
-      });
+      if (currentUser) {
+        await createAuditLog({
+          userId: currentUser.id || currentUser._id,
+          action: "CREATE",
+          resource: "admission",
+          resourceId: admission[0]._id,
+          newValue: admission[0].toObject(),
+          ipAddress: requestMeta?.ipAddress || "",
+          userAgent: requestMeta?.userAgent || "",
+        });
+      }
 
       await notifyAdmissionEvent({
         userId: doctor.userId,
@@ -390,16 +392,18 @@ export const dischargePatient = async (id, dischargeSummary, currentUser, reques
       await invalidatePattern("hms:ipd:*");
       await invalidatePattern("hms:route:ipd*");
 
-      await createAuditLog({
-        userId: currentUser.id,
-        action: "UPDATE",
-        resource: "admission",
-        resourceId: admission._id,
-        oldValue,
-        newValue: admission.toObject(),
-        ipAddress: requestMeta.ipAddress,
-        userAgent: requestMeta.userAgent,
-      });
+      if (currentUser) {
+        await createAuditLog({
+          userId: currentUser.id || currentUser._id,
+          action: "UPDATE",
+          resource: "admission",
+          resourceId: admission._id,
+          oldValue,
+          newValue: admission.toObject(),
+          ipAddress: requestMeta?.ipAddress || "",
+          userAgent: requestMeta?.userAgent || "",
+        });
+      }
 
       // Dispatch Discharge Summary & Post-Care Guidelines Email
       try {
