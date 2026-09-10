@@ -1,23 +1,28 @@
 import { useEffect } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 
 export default function Modal({ isOpen, onClose, title, subtitle, children, maxWidth = "max-w-4xl" }) {
-  // Prevent background page body scrolling when modal is open
+  // Prevent background layout scrolling when modal is open
   useEffect(() => {
+    const mainEl = document.querySelector("main");
     if (isOpen) {
       document.body.style.overflow = "hidden";
+      if (mainEl) mainEl.style.overflow = "hidden";
     } else {
       document.body.style.overflow = "";
+      if (mainEl) mainEl.style.overflow = "";
     }
     return () => {
       document.body.style.overflow = "";
+      if (mainEl) mainEl.style.overflow = "";
     };
   }, [isOpen]);
 
   if (!isOpen) return null;
 
-  return (
-    <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center z-50 p-4 overflow-hidden">
+  return createPortal(
+    <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center z-[9999] p-4 sm:p-6 overflow-hidden">
       <div className={`bg-white rounded-2xl shadow-2xl w-full ${maxWidth} max-h-[90vh] flex flex-col border border-slate-200/90 overflow-hidden`}>
         {/* Modal Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-white shrink-0">
@@ -35,6 +40,7 @@ export default function Modal({ isOpen, onClose, title, subtitle, children, maxW
         {/* Single Clean Modal Content Scroller */}
         <div className="p-6 overflow-y-auto flex-1">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

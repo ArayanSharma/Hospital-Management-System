@@ -19,6 +19,7 @@ export const createDoctorSchema = z.object({
     consultationFee: z.number().min(0, "Consultation fee is required"),
     availability: z.array(availabilitySchema).optional(),
     additionalInfo: z.string().trim().optional(),
+    photoUrl: z.string().optional().nullable(),
   }),
 });
 
@@ -32,5 +33,6 @@ export const updateDoctorSchema = z.object({
     availability: z.array(availabilitySchema).optional(),
     additionalInfo: z.string().trim().optional(),
     status: z.enum(["active", "inactive"]).optional(),
+    photoUrl: z.string().optional().nullable(),
   }),
 });

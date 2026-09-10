@@ -254,7 +254,10 @@ export default function IPDManagementPage() {
               stats={stats}
               refreshKey={refreshKey}
               onAdmitOpen={() => setAdmitModalOpen(true)}
-              onDischargeOpen={() => setDischargeModalOpen(true)}
+              onDischargeOpen={() => {
+                setSelectedAdmission(null);
+                setDischargeModalOpen(true);
+              }}
               onTransferOpen={() => setTransferModalOpen(true)}
               onBedTransferOpen={() => setTransferModalOpen(true)}
               onViewBedsOpen={() => setViewBedsModalOpen(true)}
@@ -285,9 +288,13 @@ export default function IPDManagementPage() {
 
       <DischargePatientModal
         isOpen={dischargeModalOpen}
-        onClose={() => setDischargeModalOpen(false)}
+        onClose={() => {
+          setDischargeModalOpen(false);
+          setSelectedAdmission(null);
+        }}
         onSuccess={handleRefreshAll}
         admissions={admissions}
+        selectedAdmission={selectedAdmission}
       />
 
       <AddWardBedModal

@@ -60,6 +60,7 @@ export default function DoctorList() {
       experience: doctor.experience,
       consultationFee: doctor.consultationFee,
       availability: doctor.availability,
+      photoUrl: doctor.photoUrl,
     });
     setModalOpen(true);
   };

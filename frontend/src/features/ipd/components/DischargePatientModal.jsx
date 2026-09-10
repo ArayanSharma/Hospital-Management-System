@@ -27,7 +27,9 @@ export default function DischargePatientModal({ isOpen, onClose, onSuccess, admi
 
   if (!isOpen) return null;
 
-  const currentSelectedAdm = activeAdmittedList.find((adm) => adm._id === selectedAdmId);
+  const currentSelectedAdm =
+    activeAdmittedList.find((adm) => adm._id === selectedAdmId) ||
+    (selectedAdmission?._id === selectedAdmId ? selectedAdmission : null);
 
   const handleDischarge = async (e) => {
     e.preventDefault();
@@ -85,14 +87,21 @@ export default function DischargePatientModal({ isOpen, onClose, onSuccess, admi
               onChange={(e) => setSelectedAdmId(e.target.value)}
               className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 focus:outline-none cursor-pointer"
             >
-              {activeAdmittedList.length === 0 ? (
+              {activeAdmittedList.length === 0 && !selectedAdmission ? (
                 <option value="">No currently admitted patients to discharge</option>
               ) : (
-                activeAdmittedList.map((adm) => (
-                  <option key={adm._id} value={adm._id}>
-                    {adm.patientId?.name || "Patient"} ({adm.bedId?.bedNumber || "Bed"}) — {adm.wardId?.name || "Ward"}
-                  </option>
-                ))
+                <>
+                  {selectedAdmission && !activeAdmittedList.some((a) => a._id === selectedAdmission._id) && (
+                    <option key={selectedAdmission._id} value={selectedAdmission._id}>
+                      {selectedAdmission.patientId?.name || "Patient"} ({selectedAdmission.bedId?.bedNumber || "Bed"}) — {selectedAdmission.wardId?.name || "Ward"}
+                    </option>
+                  )}
+                  {activeAdmittedList.map((adm) => (
+                    <option key={adm._id} value={adm._id}>
+                      {adm.patientId?.name || "Patient"} ({adm.bedId?.bedNumber || "Bed"}) — {adm.wardId?.name || "Ward"}
+                    </option>
+                  ))}
+                </>
               )}
             </select>
           </div>

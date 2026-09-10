@@ -11,6 +11,12 @@ export const errorHandler = (err, req, res, next) => {
     statusCode = 413;
     message = "Uploaded file or report size is too large. Maximum allowed size is 50MB.";
     errorCode = ErrorCodes.VALIDATION_ERROR;
+  } else if (err.code === 11000) {
+    statusCode = 409;
+    const field = err.keyValue ? Object.keys(err.keyValue)[0] : "field";
+    const val = err.keyValue ? err.keyValue[field] : "";
+    message = `A record with duplicate ${field} '${val}' already exists.`;
+    errorCode = ErrorCodes.VALIDATION_ERROR;
   }
 
   return errorResponse(res, statusCode, message, errorCode, errors);

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
@@ -12,6 +12,7 @@ import {
   Plus,
   Clock,
   Upload,
+  X,
 } from "lucide-react";
 import { createDoctorSchema, updateDoctorSchema } from "../validation/doctor.schema.js";
 import { useDepartmentOptions } from "../../../hooks/useDepartmentOptions.js";
@@ -31,6 +32,8 @@ export default function DoctorForm({ defaultValues, isEdit, onSubmit, onCancel, 
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [schedule, setSchedule] = useState(DEFAULT_DAYS);
+  const [photoUrl, setPhotoUrl] = useState(defaultValues?.photoUrl || "");
+  const fileInputRef = useRef(null);
 
   const {
     register,
@@ -46,6 +49,20 @@ export default function DoctorForm({ defaultValues, isEdit, onSubmit, onCancel, 
       consultationFee: 650,
     },
   });
+
+  const handlePhotoChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      alert("File size exceeds 5MB limit");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setPhotoUrl(event.target.result);
+    };
+    reader.readAsDataURL(file);
+  };
 
   const toggleDayActive = (index) => {
     setSchedule((prev) =>
@@ -65,6 +82,7 @@ export default function DoctorForm({ defaultValues, isEdit, onSubmit, onCancel, 
 
     const payload = {
       ...data,
+      photoUrl: photoUrl || undefined,
       availability: [
         {
           day: dayRange,
@@ -78,7 +96,7 @@ export default function DoctorForm({ defaultValues, isEdit, onSubmit, onCancel, 
   };
 
   return (
-    <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-4 max-h-[80vh] overflow-y-auto pr-1">
+    <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-4">
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
         {/* LEFT COLUMN: User Account Info & Availability Schedule (Span 6) */}
         <div className="lg:col-span-6 space-y-4">
@@ -256,19 +274,67 @@ export default function DoctorForm({ defaultValues, isEdit, onSubmit, onCancel, 
               <span>Profile Photo</span>
             </div>
 
-            <div className="border-2 border-dashed border-slate-200 rounded-2xl p-4 text-center bg-white hover:border-emerald-300 transition">
-              <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center mx-auto mb-2">
-                <Upload className="w-5 h-5 text-emerald-600" />
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              className="hidden"
+              onChange={handlePhotoChange}
+            />
+
+            {photoUrl ? (
+              <div className="flex items-center justify-between bg-white border border-emerald-200/80 rounded-2xl p-3 shadow-2xs">
+                <div className="flex items-center gap-3">
+                  <img
+                    src={photoUrl}
+                    alt="Doctor Preview"
+                    className="w-12 h-12 rounded-xl object-cover border border-slate-200 shadow-2xs shrink-0"
+                  />
+                  <div>
+                    <p className="text-xs font-bold text-slate-800">Photo Uploaded</p>
+                    <p className="text-[10px] text-emerald-600 font-semibold">Image attached successfully</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition cursor-pointer"
+                  >
+                    Change
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPhotoUrl("")}
+                    className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-xl transition cursor-pointer"
+                    title="Remove Photo"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
-              <p className="text-xs font-bold text-slate-800">Upload Photo</p>
-              <p className="text-[10px] text-slate-400 mt-0.5">JPG, PNG or WEBP (Max: 2MB)</p>
-              <button
-                type="button"
-                className="mt-3 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold px-4 py-1.5 rounded-xl shadow-2xs transition cursor-pointer"
+            ) : (
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                className="border-2 border-dashed border-slate-200 rounded-2xl p-4 text-center bg-white hover:border-emerald-400 transition cursor-pointer group"
               >
-                Choose File
-              </button>
-            </div>
+                <div className="w-10 h-10 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto mb-2 group-hover:scale-110 transition-transform">
+                  <Upload className="w-5 h-5 text-emerald-600" />
+                </div>
+                <p className="text-xs font-bold text-slate-800">Upload Photo</p>
+                <p className="text-[10px] text-slate-400 mt-0.5">JPG, PNG or WEBP (Max: 5MB)</p>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    fileInputRef.current?.click();
+                  }}
+                  className="mt-3 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold px-4 py-1.5 rounded-xl shadow-2xs transition cursor-pointer"
+                >
+                  Choose File
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Professional Information Box */}
