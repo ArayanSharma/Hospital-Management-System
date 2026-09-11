@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
-import { Plus, Headset, ChevronDown } from "lucide-react";
+import { Plus, Headset, ChevronDown, X } from "lucide-react";
 import { navigationItems } from "../../config/navigation.js";
 import { usePermission } from "../../hooks/usePermission.js";
 
@@ -36,7 +36,7 @@ const SECTIONS = [
   },
 ];
 
-export default function Sidebar() {
+export default function Sidebar({ onClose }) {
   const location = useLocation();
   const { hasPermission } = usePermission();
 
@@ -67,6 +67,9 @@ export default function Sidebar() {
     } else {
       // Auto-close/collapse sub-menus when clicking any other module outside of Pharmacy
       setOpenSubMenus({});
+      if (onClose && window.innerWidth < 768) {
+        onClose();
+      }
     }
   };
 
@@ -77,20 +80,34 @@ export default function Sidebar() {
   );
 
   return (
-    <aside className="w-64 bg-white dark:bg-slate-900 border-r border-slate-200/90 dark:border-slate-800 flex flex-col shrink-0 min-h-screen select-none transition-colors duration-300">
+    <aside className="w-full md:w-64 bg-white dark:bg-slate-900 border-r border-slate-200/90 dark:border-slate-800 flex flex-col shrink-0 h-full select-none transition-colors duration-300">
       {/* Brand Header */}
-      <div className="flex items-center gap-3 px-6 py-5 border-b border-slate-100 dark:border-slate-800">
-        <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-sm shadow-blue-500/20 shrink-0">
-          <Plus className="w-5 h-5 stroke-[2.5]" />
+      <div className="flex items-center justify-between px-6 py-5 border-b border-slate-100 dark:border-slate-800">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-sm shadow-blue-500/20 shrink-0">
+            <Plus className="w-5 h-5 stroke-[2.5]" />
+          </div>
+          <div className="min-w-0">
+            <h1 className="text-slate-900 dark:text-slate-100 font-bold text-base leading-tight tracking-tight">
+              CityCare
+            </h1>
+            <p className="text-xs font-medium text-slate-400 dark:text-slate-400 leading-none mt-0.5">
+              Hospital
+            </p>
+          </div>
         </div>
-        <div className="min-w-0">
-          <h1 className="text-slate-900 dark:text-slate-100 font-bold text-base leading-tight tracking-tight">
-            CityCare
-          </h1>
-          <p className="text-xs font-medium text-slate-400 dark:text-slate-400 leading-none mt-0.5">
-            Hospital
-          </p>
-        </div>
+
+        {/* Close Button for Mobile Drawer */}
+        {onClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            className="md:hidden p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+            aria-label="Close menu"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        )}
       </div>
 
       {/* Navigation List grouped by SECTIONS */}
@@ -197,6 +214,11 @@ export default function Sidebar() {
                               key={sub.path}
                               to={sub.path}
                               end={sub.path === "/pharmacy"}
+                              onClick={() => {
+                                if (onClose && window.innerWidth < 768) {
+                                  onClose();
+                                }
+                              }}
                               className={`flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-[11.5px] font-medium transition-all duration-150 ${
                                 isSubActive
                                   ? "bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 font-semibold"

@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { create, getAll, exportCSV, getById, update, remove } from "./patient.controller.js";
+import { create, getAll, exportCSV, getById, getFullDetails, update, remove } from "./patient.controller.js";
 import { authenticate } from "../../middleware/auth.middleware.js";
 import { checkPermission } from "../../middleware/permission.middleware.js";
 import { validate } from "../../middleware/validation.middleware.js";
@@ -18,6 +18,7 @@ router.post(
 );
 router.get("/export", authenticate, checkPermission("patient:read"), sensitiveRateLimiter, exportCSV);
 router.get("/", authenticate, checkPermission("patient:read"), routeCache(60, "hms:route:patient", true), getAll);
+router.get("/:id/full-details", authenticate, checkPermission("patient:read"), getFullDetails);
 router.get("/:id", authenticate, checkPermission("patient:read"), routeCache(300, "hms:route:patient", true), getById);
 router.patch(
   "/:id",

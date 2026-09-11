@@ -25,8 +25,8 @@ export default function UserTable({
 
   return (
     <div className="bg-white border border-slate-200/90 rounded-2xl p-4 shadow-2xs space-y-4">
-      <div className="border border-slate-200/80 rounded-xl overflow-hidden">
-        <table className="w-full text-left text-xs border-collapse">
+      <div className="border border-slate-200/80 rounded-xl overflow-x-auto scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-slate-100">
+        <table className="w-full text-left text-xs border-collapse min-w-[850px]">
           <thead>
             <tr className="bg-slate-50/80 border-b border-slate-200/80 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
               <th className="py-3 px-3 w-8 text-center">#</th>
@@ -59,7 +59,7 @@ export default function UserTable({
                 const statusStyle = getStatusBadgeStyle(u.status);
 
                 return (
-                  <tr key={u._id || idx} className="hover:bg-slate-50/50 transition-colors">
+                  <tr key={u._id || idx} className="hover:bg-blue-50/30 transition-colors group">
                     {/* # */}
                     <td className="py-3 px-3 text-center font-bold text-slate-500">
                       {(page - 1) * 10 + idx + 1}
@@ -67,25 +67,29 @@ export default function UserTable({
 
                     {/* User Avatar + Full Name + Email */}
                     <td className="py-3 px-3">
-                      <div className="flex items-center gap-3">
+                      <div
+                        onClick={() => onViewUser(u)}
+                        className="flex items-center gap-3 cursor-pointer group-hover:text-blue-600 transition"
+                        title="Click to view full user profile details"
+                      >
                         {u.avatar ? (
                           <img
                             src={u.avatar}
                             alt={u.name}
                             loading="lazy"
-                            className="w-8 h-8 rounded-full object-cover border border-slate-200"
+                            className="w-8 h-8 rounded-full object-cover border border-slate-200 group-hover:border-blue-400 transition"
                             onError={(e) => {
                               e.target.style.display = "none";
                             }}
                           />
                         ) : (
-                          <div className="w-8 h-8 rounded-full bg-slate-200 text-slate-700 font-black text-[11px] flex items-center justify-center border border-slate-300">
+                          <div className="w-8 h-8 rounded-full bg-slate-200 text-slate-700 font-black text-[11px] flex items-center justify-center border border-slate-300 group-hover:bg-blue-100 group-hover:text-blue-700 transition">
                             {getInitials(u.name)}
                           </div>
                         )}
                         <div>
                           <div className="flex items-center gap-1.5">
-                            <p className="font-extrabold text-slate-900">{u.name}</p>
+                            <p className="font-extrabold text-slate-900 group-hover:text-blue-600 transition">{u.name}</p>
                             {u.authProvider === "google" && (
                               <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-50 text-blue-600 border border-blue-200 shrink-0" title="Authenticated via Google SSO">
                                 <svg className="w-2.5 h-2.5" viewBox="0 0 24 24">

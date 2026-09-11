@@ -5,6 +5,7 @@ import {
   updatePatient,
   deletePatient,
   exportPatientsService,
+  getPatientFullDetailsService,
 } from "./patient.service.js";
 import { successResponse } from "../../core/responses/apiResponse.js";
 import { asyncHandler } from "../../utils/asyncHandler.js";
@@ -32,6 +33,11 @@ export const exportCSV = asyncHandler(async (req, res) => {
 export const getById = asyncHandler(async (req, res) => {
   const patient = await getPatientById(req.params.id);
   return successResponse(res, 200, "Patient fetched successfully", patient);
+});
+
+export const getFullDetails = asyncHandler(async (req, res) => {
+  const fullDetails = await getPatientFullDetailsService(req.params.id);
+  return successResponse(res, 200, "Patient full details fetched successfully", fullDetails);
 });
 
 export const update = asyncHandler(async (req, res) => {

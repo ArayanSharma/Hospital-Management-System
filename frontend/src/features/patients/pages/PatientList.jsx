@@ -8,7 +8,7 @@ import PatientForm from "../components/PatientForm.jsx";
 import PatientStatsCards from "../components/PatientStatsCards.jsx";
 import PatientFilterBar from "../components/PatientFilterBar.jsx";
 import PatientTable from "../components/PatientTable.jsx";
-import PatientViewModal from "../components/modals/PatientViewModal.jsx";
+import PatientDetailModal from "../components/modals/PatientDetailModal.jsx";
 import { downloadFileBlob } from "../../../utils/downloadBlob.js";
 
 export default function PatientList() {
@@ -22,6 +22,8 @@ export default function PatientList() {
     error,
     page,
     setPage,
+    limit,
+    setLimit,
     search,
     setSearch,
     status,
@@ -36,7 +38,7 @@ export default function PatientList() {
   // Modal & Export State
   const [modalOpen, setModalOpen] = useState(false);
   const [editingPatient, setEditingPatient] = useState(null);
-  const [viewingPatient, setViewingPatient] = useState(null);
+  const [viewingIndex, setViewingIndex] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [showMoreFilters, setShowMoreFilters] = useState(false);
@@ -114,7 +116,7 @@ export default function PatientList() {
         <div>
           <h1 className="text-xl font-bold text-slate-900 tracking-tight">Patients</h1>
           <p className="text-xs font-medium text-slate-400 mt-0.5">
-            Home &gt; <span className="text-slate-600">Patients</span>
+            Home &gt; <span className="text-slate-600">Patients Workspace</span>
           </p>
         </div>
 
@@ -156,20 +158,33 @@ export default function PatientList() {
         error={error}
         page={page}
         setPage={setPage}
+        limit={limit}
+        setLimit={setLimit}
         refetch={refetch}
         handleExportCSV={handleExportCSV}
         exporting={exporting}
         openEditModal={openEditModal}
-        openViewModal={(p) => setViewingPatient(p)}
+        openViewModal={(p, idx) => setViewingIndex(idx)}
         handleToggleStatus={handleToggleStatus}
         handleDelete={handleDelete}
         navigate={navigate}
       />
 
-      {/* View Patient Details Modal */}
-      <PatientViewModal
-        viewingPatient={viewingPatient}
-        onClose={() => setViewingPatient(null)}
+      {/* Enterprise Patient Details Workspace Modal */}
+      <PatientDetailModal
+        patientId={viewingIndex !== null && patients[viewingIndex] ? patients[viewingIndex]._id : null}
+        isOpen={viewingIndex !== null}
+        onClose={() => setViewingIndex(null)}
+        patientsList={patients}
+        currentIndex={viewingIndex || 0}
+        onSelectPatientIndex={(idx) => setViewingIndex(idx)}
+        totalPatientsCount={pagination?.total}
+        currentPage={page}
+        limitPerPage={limit}
+        onEditPatient={(patient) => {
+          setViewingIndex(null);
+          openEditModal(patient);
+        }}
       />
 
       {/* Patient Add/Edit Form Modal */}

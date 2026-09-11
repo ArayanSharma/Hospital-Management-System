@@ -119,7 +119,7 @@ export default function CustomDropdown({
 
         {isOpen && (
           <div
-            className={`absolute min-w-[130px] bg-white border border-slate-200/90 rounded-xl shadow-xl z-50 p-1 text-xs space-y-0.5 animate-in fade-in zoom-in-95 duration-150 ease-out ${
+            className={`absolute min-w-[130px] max-h-56 overflow-y-auto bg-white border border-slate-200/90 rounded-xl shadow-xl z-50 p-1 text-xs space-y-0.5 animate-in fade-in zoom-in-95 duration-150 ease-out ${
               alignRight ? "right-0" : "left-0"
             } ${
               direction === "up" ? "bottom-full mb-1.5 origin-bottom-left" : "mt-1.5 origin-top-left"
