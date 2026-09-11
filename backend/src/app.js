@@ -13,21 +13,8 @@ const app = express();
 app.disable("x-powered-by");
 
 // 🔒 CORS Configuration Hardening - MUST BE PLACED BEFORE OTHER MIDDLEWARES
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      // Allow any origin in development/production or vercel domains
-      if (!origin || origin.includes("vercel.app") || origin.includes("localhost") || origin.includes("127.0.0.1")) {
-        callback(null, true);
-      } else {
-        callback(null, true); // Fallback allow to avoid browser CORS blocks
-      }
-    },
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "X-Correlation-ID"],
-  })
-);
+app.use(cors());
+app.options("*", cors());
 
 // 🛡️ Security Hardening with Helmet
 app.use(
