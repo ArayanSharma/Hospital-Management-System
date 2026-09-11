@@ -23,9 +23,9 @@ app.use(
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "X-Correlation-ID"],
+    optionsSuccessStatus: 200,
   })
 );
-app.options("*", cors({ origin: true, credentials: true }));
 
 // 🛡️ Security Hardening with Helmet
 app.use(
