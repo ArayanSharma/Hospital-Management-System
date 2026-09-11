@@ -1,6 +1,7 @@
 import http from "http";
 import app from "./app.js";
 import connectDB from "./config/DbConnect.js";
+import { initSystemDatabase } from "./config/initDatabase.js";
 import redisClient from "./config/redis.config.js";
 import { initSocket } from "./config/socket.config.js";
 import dotenv from "dotenv";
@@ -16,6 +17,7 @@ initSocket(server);
 const startServer = async () => {
   try {
     await connectDB();
+    await initSystemDatabase();
     server.listen(PORT, () => {
       console.log(`🚀 Server & Socket.io running on port ${PORT}`);
     });
