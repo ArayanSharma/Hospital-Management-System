@@ -1,4 +1,4 @@
-import express from "express";
+  import express from "express";
 import cookieParser from "cookie-parser";
 import cors from "cors";
 import helmet from "helmet";
@@ -51,7 +51,8 @@ const allowedOrigins = [
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin)) {
+      // Allow requests with no origin (like mobile apps, curl) or localhost or any vercel.app subdomain
+      if (!origin || allowedOrigins.includes(origin) || /\.vercel\.app$/.test(new URL(origin).hostname)) {
         callback(null, true);
       } else {
         callback(new Error(`CORS Error: Origin ${origin} is not allowed.`));
