@@ -16,9 +16,16 @@ app.disable("x-powered-by");
 app.get("/", (req, res) => res.status(200).send("Hospital Management System API Server is Active"));
 app.get("/health", (req, res) => res.status(200).json({ status: "OK", timestamp: new Date() }));
 
-// 🔒 CORS Configuration Hardening - MUST BE PLACED BEFORE OTHER MIDDLEWARES
-app.use(cors());
-app.options("*", cors());
+// 🔒 CORS Configuration - Explicitly allow all origins with credentials
+app.use(
+  cors({
+    origin: true,
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "X-Correlation-ID"],
+  })
+);
+app.options("*", cors({ origin: true, credentials: true }));
 
 // 🛡️ Security Hardening with Helmet
 app.use(
