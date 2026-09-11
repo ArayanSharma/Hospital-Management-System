@@ -6,6 +6,7 @@ import { USER_ROLES, USER_STATUSES, USER_DEPARTMENTS } from "../constants/user.c
 import UserTable from "../components/UserTable.jsx";
 import UserSidebarWidgets from "../components/UserSidebarWidgets.jsx";
 import AddUserModal from "../components/modals/AddUserModal.jsx";
+import ViewUserDetailsModal from "../components/modals/ViewUserDetailsModal.jsx";
 import CustomDropdown from "../../../components/ui/CustomDropdown.jsx";
 import { downloadFileBlob } from "../../../utils/downloadBlob.js";
 
@@ -35,6 +36,8 @@ export default function UserList() {
 
     addUserOpen,
     setAddUserOpen,
+    userDetailsOpen,
+    setUserDetailsOpen,
     selectedUser,
     setSelectedUser,
 
@@ -295,7 +298,10 @@ export default function UserList() {
               pagination={pagination}
               page={page}
               onPageChange={setPage}
-              onViewUser={(u) => alert(`Viewing details for ${u.name}`)}
+              onViewUser={(u) => {
+                setSelectedUser(u);
+                setUserDetailsOpen(true);
+              }}
               onEditUser={(u) => {
                 setSelectedUser(u);
                 setAddUserOpen(true);
@@ -367,12 +373,23 @@ export default function UserList() {
         </div>
       </div>
 
-      {/* Modal Dialog */}
+      {/* Modal Dialogs */}
       <AddUserModal
         isOpen={addUserOpen}
         onClose={() => setAddUserOpen(false)}
         onSubmit={handleAddUserSubmit}
         editingUser={selectedUser}
+      />
+
+      <ViewUserDetailsModal
+        isOpen={userDetailsOpen}
+        onClose={() => setUserDetailsOpen(false)}
+        user={selectedUser}
+        onEdit={(u) => {
+          setSelectedUser(u);
+          setAddUserOpen(true);
+        }}
+        onUpdateStatus={handleUpdateStatus}
       />
 
       <div className="pt-6 border-t border-slate-200/80 text-center text-xs text-slate-400 font-medium">

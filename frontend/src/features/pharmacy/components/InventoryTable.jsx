@@ -346,9 +346,9 @@ export default function InventoryTable({
   };
 
   return (
-    <div className="bg-white border border-slate-200/80 rounded-2xl shadow-xs overflow-hidden flex flex-col justify-between">
-      <div className="overflow-x-auto">
-        <table className="w-full text-left border-collapse">
+    <div className="bg-white border border-slate-200/80 rounded-2xl shadow-xs overflow-hidden flex flex-col justify-between max-w-full">
+      <div className="overflow-x-auto custom-scrollbar max-w-full">
+        <table className="w-full text-left border-collapse min-w-[700px] sm:min-w-full">
           <thead>
             <tr className="border-b border-slate-200/80 bg-slate-50/80 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
               <th className="py-3 px-4">Medicine / Batch Details</th>

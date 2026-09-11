@@ -10,6 +10,7 @@ export const usePatients = () => {
   const [error, setError] = useState("");
 
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
   const [gender, setGender] = useState("");
@@ -23,7 +24,7 @@ export const usePatients = () => {
     try {
       const { data } = await getPatientsApi({
         page,
-        limit: 10,
+        limit,
         search: debouncedSearch || undefined,
         status: status || undefined,
         gender: gender || undefined,
@@ -37,7 +38,7 @@ export const usePatients = () => {
     } finally {
       setLoading(false);
     }
-  }, [page, debouncedSearch, status, gender, bloodGroup]);
+  }, [page, limit, debouncedSearch, status, gender, bloodGroup]);
 
   useEffect(() => {
     fetchPatients();
@@ -45,7 +46,7 @@ export const usePatients = () => {
 
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, status, gender, bloodGroup]);
+  }, [debouncedSearch, status, gender, bloodGroup, limit]);
 
   return {
     patients,
@@ -55,6 +56,8 @@ export const usePatients = () => {
     error,
     page,
     setPage,
+    limit,
+    setLimit,
     search,
     setSearch,
     status,
