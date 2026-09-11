@@ -1,4 +1,4 @@
-  import express from "express";
+import express from "express";
 import cookieParser from "cookie-parser";
 import cors from "cors";
 import helmet from "helmet";
@@ -11,6 +11,10 @@ const app = express();
 
 // Disable 'X-Powered-By: Express' header to prevent technology stack disclosure
 app.disable("x-powered-by");
+
+// Root Health Check for Render Service Monitoring
+app.get("/", (req, res) => res.status(200).send("Hospital Management System API Server is Active"));
+app.get("/health", (req, res) => res.status(200).json({ status: "OK", timestamp: new Date() }));
 
 // 🔒 CORS Configuration Hardening - MUST BE PLACED BEFORE OTHER MIDDLEWARES
 app.use(cors());
