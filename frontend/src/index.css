@@ -49,6 +49,14 @@ html.dark * {
   border-color: #1E293B;
 }
 
+/* Neutralize Light-Colored Shadows in Dark Mode to Prevent Silver/White Light Leaks */
+html.dark [class*="shadow-slate-"],
+html.dark [class*="shadow-gray-"],
+html.dark [class*="shadow-zinc-"],
+html.dark [class*="shadow-neutral-"] {
+  --tw-shadow-color: rgba(0, 0, 0, 0.5) !important;
+}
+
 /* Main Surface Cards & Panels */
 html.dark .bg-white {
   background-color: #111827 !important;

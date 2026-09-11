@@ -73,12 +73,12 @@ export default function Login() {
 
           {/* Right Form Column */}
           <div className="lg:col-span-7">
-            <div className="bg-white rounded-3xl p-6 sm:p-9 shadow-xl shadow-slate-200/60 border border-slate-100">
+            <div className="bg-white dark:bg-[#111827] rounded-3xl p-6 sm:p-9 shadow-xl shadow-slate-200/60 dark:shadow-2xl dark:shadow-black/60 border border-slate-100 dark:border-slate-800/80">
               <div className="mb-6">
-                <h3 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight">
+                <h3 className="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white tracking-tight">
                   Login to Your Account
                 </h3>
-                <p className="text-xs sm:text-sm text-slate-500 mt-1">
+                <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
                   Enter your credentials to continue
                 </p>
               </div>
