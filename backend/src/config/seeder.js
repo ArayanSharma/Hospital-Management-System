@@ -1178,11 +1178,11 @@ const sample50Users = [
 
   // 33-36 ADMINS (4 ADMINS)
   {
-    name: "Rohan Mehta",
-    email: "rohan.mehta@citycare.com",
-    username: "rohan.mehta",
-    password: "CityCare@123",
-    roleName: "ADMIN",
+    name: "Rohan Mehta (Super Admin)",
+    email: "admin@gmail.com",
+    username: "superadmin",
+    password: "admin123",
+    roleName: "SUPER_ADMIN",
     department: "Administration",
     designation: "Hospital Administrator",
     employeeId: "ADM-1019",
