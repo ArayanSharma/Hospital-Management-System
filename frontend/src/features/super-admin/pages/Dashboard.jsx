@@ -19,6 +19,9 @@ import {
   X,
   Check,
   RotateCcw,
+  LogIn,
+  LogOut,
+  Activity,
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -338,19 +341,69 @@ export default function Dashboard() {
   const dbExpiring = stats?.inventory?.expiring || [];
 
   // 9. Recent Activity Feed from DB Audit Logs
-  const recentFeed = (activity || []).slice(0, 5).map((act, i) => ({
-    id: act.id || i,
-    icon: [Stethoscope, Calendar, FlaskConical, Receipt, AlertTriangle][i % 5],
-    iconBg: [
-      "bg-slate-100 text-slate-700",
-      "bg-blue-50 text-blue-600",
-      "bg-purple-50 text-purple-600",
-      "bg-emerald-50 text-emerald-600",
-      "bg-amber-50 text-amber-600",
-    ][i % 5],
-    text: act.description || `${act.userName} ${act.action} ${act.resource}`,
-    time: act.timestamp ? new Date(act.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "Just now",
-  }));
+  const getActivityMeta = (act) => {
+    const action = String(act?.action || "").toLowerCase();
+    const resource = String(act?.resource || "").toLowerCase();
+    const desc = String(act?.description || "").toLowerCase();
+
+    if (action.includes("login") || desc.includes("login")) {
+      return { icon: LogIn, iconBg: "bg-blue-50 text-blue-600 border border-blue-100" };
+    }
+    if (action.includes("logout") || desc.includes("logout")) {
+      return { icon: LogOut, iconBg: "bg-amber-50 text-amber-600 border border-amber-100" };
+    }
+    if (resource.includes("patient") || desc.includes("patient")) {
+      return { icon: UserCheck, iconBg: "bg-emerald-50 text-emerald-600 border border-emerald-100" };
+    }
+    if (resource.includes("appointment") || desc.includes("appointment")) {
+      return { icon: Calendar, iconBg: "bg-amber-50 text-amber-600 border border-amber-100" };
+    }
+    if (resource.includes("pharmacy") || resource.includes("medicine") || desc.includes("medicine")) {
+      return { icon: Pill, iconBg: "bg-rose-50 text-rose-600 border border-rose-100" };
+    }
+    if (resource.includes("lab") || desc.includes("lab")) {
+      return { icon: FlaskConical, iconBg: "bg-purple-50 text-purple-600 border border-purple-100" };
+    }
+    if (resource.includes("bill") || resource.includes("invoice") || resource.includes("payment")) {
+      return { icon: Receipt, iconBg: "bg-emerald-50 text-emerald-600 border border-emerald-100" };
+    }
+    if (resource.includes("ipd") || resource.includes("ward") || resource.includes("bed") || resource.includes("admission")) {
+      return { icon: Bed, iconBg: "bg-cyan-50 text-cyan-600 border border-cyan-100" };
+    }
+    if (action.includes("delete") || action.includes("breach") || action.includes("alert")) {
+      return { icon: AlertTriangle, iconBg: "bg-rose-50 text-rose-600 border border-rose-100" };
+    }
+    return { icon: Activity, iconBg: "bg-slate-100 text-slate-700 border border-slate-200" };
+  };
+
+  const formatActivityText = (act) => {
+    if (act.description && !act.description.includes("login a user") && !act.description.includes("logout a user")) {
+      return act.description;
+    }
+    const name = act.userName || "User";
+    const action = String(act.action || "").toLowerCase();
+    const resource = String(act.resource || "").replace(/_/g, " ").toLowerCase();
+
+    if (action === "login") return `${name} logged in`;
+    if (action === "google_login") return `${name} logged in via Google`;
+    if (action === "logout") return `${name} logged out`;
+    if (action === "create") return `${name} created a new ${resource}`;
+    if (action === "update") return `${name} updated ${resource}`;
+    if (action === "delete") return `${name} deleted ${resource}`;
+
+    return `${name} ${action.replace(/_/g, " ")} ${resource}`;
+  };
+
+  const recentFeed = (activity || []).slice(0, 6).map((act, i) => {
+    const meta = getActivityMeta(act);
+    return {
+      id: act.id || i,
+      icon: meta.icon,
+      iconBg: meta.iconBg,
+      text: formatActivityText(act),
+      time: act.timestamp ? new Date(act.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "Just now",
+    };
+  });
 
   return (
     <div className="space-y-6 pb-12">
@@ -851,37 +904,48 @@ export default function Dashboard() {
         </div>
 
         {/* Card 4: Recent Activity Feed */}
-        <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-2xs flex flex-col justify-between">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-bold text-slate-900 tracking-tight">
-              Recent Activity Feed
-            </h3>
+        <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-2xs flex flex-col h-full">
+          <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-100">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+                <Activity className="w-4 h-4" />
+              </div>
+              <h3 className="text-sm font-bold text-slate-900 tracking-tight">
+                Recent Activity Feed
+              </h3>
+            </div>
             <button
               type="button"
               onClick={() => navigate("/audit-logs")}
-              className="text-xs font-bold text-blue-600 hover:text-blue-700 cursor-pointer"
+              className="text-xs font-bold text-blue-600 hover:text-blue-700 cursor-pointer hover:underline"
             >
               View All
             </button>
           </div>
-          <div className="space-y-3">
-            {recentFeed.map((item) => (
-              <div key={item.id} className="flex items-start gap-2.5 text-xs">
-                <div
-                  className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${item.iconBg}`}
-                >
-                  <item.icon className="w-3.5 h-3.5" />
+          <div className="space-y-3 flex-1 overflow-y-auto max-h-[310px] pr-1 scrollbar-thin">
+            {recentFeed.length > 0 ? (
+              recentFeed.map((item) => (
+                <div key={item.id} className="flex items-start gap-2.5 text-xs group">
+                  <div
+                    className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 mt-0.5 shadow-2xs transition-transform group-hover:scale-105 ${item.iconBg}`}
+                  >
+                    <item.icon className="w-3.5 h-3.5" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-slate-800 font-medium leading-snug line-clamp-2">
+                      {item.text}
+                    </p>
+                    <span className="text-[10px] text-slate-400 font-normal">
+                      {item.time}
+                    </span>
+                  </div>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-slate-800 font-medium leading-snug line-clamp-2">
-                    {item.text}
-                  </p>
-                  <span className="text-[10px] text-slate-400 font-normal">
-                    {item.time}
-                  </span>
-                </div>
+              ))
+            ) : (
+              <div className="py-8 text-center text-slate-400 text-xs italic">
+                No recent activity logs recorded yet.
               </div>
-            ))}
+            )}
           </div>
         </div>
       </div>

@@ -244,7 +244,7 @@ export const getRecentActivity = async (limit = 20) => {
         userName: log.userId?.name || "System User",
         action: log.action,
         resource: log.resource,
-        description: `${log.userId?.name || "System"} ${formatAction(log.action)} a ${formatResource(log.resource)}`,
+        description: formatActivityDescription(log.userId?.name, log.action, log.resource),
         timestamp: log.createdAt,
       }));
     },
@@ -254,9 +254,17 @@ export const getRecentActivity = async (limit = 20) => {
   return feed;
 };
 
-const formatAction = (action) => {
-  const map = { CREATE: "created", UPDATE: "updated", DELETE: "deleted" };
-  return map[action] || action.toLowerCase();
-};
+const formatActivityDescription = (userName, action, resource) => {
+  const name = userName || "System";
+  const normAction = String(action || "").toLowerCase();
+  const normResource = String(resource || "").replace(/_/g, " ").toLowerCase();
 
-const formatResource = (resource) => resource.replace(/_/g, " ");
+  if (normAction === "login") return `${name} logged in`;
+  if (normAction === "google_login") return `${name} logged in via Google`;
+  if (normAction === "logout") return `${name} logged out`;
+  if (normAction === "create") return `${name} created a new ${normResource}`;
+  if (normAction === "update") return `${name} updated ${normResource}`;
+  if (normAction === "delete") return `${name} deleted ${normResource}`;
+
+  return `${name} ${normAction.replace(/_/g, " ")} ${normResource}`;
+};
