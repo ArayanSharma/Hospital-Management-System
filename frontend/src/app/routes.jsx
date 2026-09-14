@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { createBrowserRouter, Navigate } from "react-router-dom";
 import ProtectedRoute from "./ProtectedRoute.jsx";
+import PublicRoute from "./PublicRoute.jsx";
 import DashboardLayout from "../layouts/DashboardLayout.jsx";
 import Loading from "../components/common/Loading.jsx";
 import RouteErrorBoundary from "../components/common/RouteErrorBoundary.jsx";
@@ -60,22 +61,26 @@ const SuspenseWrapper = ({ children }) => (
 
 export const router = createBrowserRouter([
   {
-    path: "/login",
+    element: <PublicRoute />,
     errorElement: <RouteErrorBoundary />,
-    element: (
-      <SuspenseWrapper>
-        <Login />
-      </SuspenseWrapper>
-    ),
-  },
-  {
-    path: "/register",
-    errorElement: <RouteErrorBoundary />,
-    element: (
-      <SuspenseWrapper>
-        <Register />
-      </SuspenseWrapper>
-    ),
+    children: [
+      {
+        path: "/login",
+        element: (
+          <SuspenseWrapper>
+            <Login />
+          </SuspenseWrapper>
+        ),
+      },
+      {
+        path: "/register",
+        element: (
+          <SuspenseWrapper>
+            <Register />
+          </SuspenseWrapper>
+        ),
+      },
+    ],
   },
   {
     element: <ProtectedRoute />,

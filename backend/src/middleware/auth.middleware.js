@@ -18,7 +18,12 @@ export const authenticate = async (req, res, next) => {
       throw new AppError("Token has been revoked. Please login again.", 401, ErrorCodes.AUTH_UNAUTHORIZED);
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_ACCESS_SECRET || "default_access_secret");
+    const secret = process.env.JWT_ACCESS_SECRET;
+    if (!secret) {
+      throw new AppError("Server auth configuration error", 500, ErrorCodes.SERVER_ERROR);
+    }
+
+    const decoded = jwt.verify(token, secret);
 
     req.token = token;
     req.user = decoded;
