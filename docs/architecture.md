@@ -252,3 +252,4 @@ Every backend business domain maps directly to a corresponding frontend feature 
 | **26** | `notifications` | `notifications` | Required |
 | **27** | `reports` | `reports` | `audit_log:read` |
 | **28** | `settings` | `settings` | `superadmin:write` |
+|
